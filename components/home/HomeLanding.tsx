@@ -1,103 +1,140 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
-import { ArrowRight, BrainCircuit, Check, Gamepad2, Heart, Home, MapPin, Play, Scale, Sparkles, Star, Timer, Trophy, UserRound, Users, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BrainCircuit, Check, Gamepad2, Gift, Heart, Home, Map, Play, Scale, Settings, Sparkles, Star, Timer, Trophy, UserRound, Users, X } from "lucide-react";
 import { categories, getCategory, playContents } from "@/data/play-content";
-import type { CategoryIcon, PlayContent } from "@/types/play-content";
+import type { CategoryIcon } from "@/types/play-content";
 import styles from "./HomeLanding.module.css";
 
 const categoryIcons: Record<CategoryIcon, typeof BrainCircuit> = { mind: BrainCircuit, heart: Heart, balance: Scale, quiz: Trophy, game: Gamepad2 };
+const zoneNames: Record<string, string> = {
+  psychology: "마음 관측소",
+  romance: "두근두근 정원",
+  balance: "갈림길 다리",
+  quiz: "척척 도서관",
+  minigame: "조이스틱 공방",
+};
 
 function formatParticipants(value: number) {
   return value >= 10_000 ? `${(value / 10_000).toFixed(1)}만` : value.toLocaleString("ko-KR");
 }
 
-function Artwork({ content }: { content: PlayContent }) {
-  const artworkStyle = { "--art-gradient": content.thumbnail_gradient, "--art-accent": content.thumbnail_accent } as CSSProperties;
-  return <div className={styles.artwork} style={artworkStyle} aria-hidden="true"><span className={styles.artSky} /><span className={`${styles.motif} ${styles[`motif_${content.thumbnail_motif}`]}`} /><span className={styles.artPath} /><span className={styles.artFlower}>✿</span></div>;
-}
-
 export function HomeLanding() {
-  const [activeCategory, setActiveCategory] = useState("all");
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const featured = playContents[0];
-  const visibleContents = useMemo(() => activeCategory === "all" ? playContents.slice(0, 6) : playContents.filter((item) => item.category_id === activeCategory), [activeCategory]);
 
-  const chooseCategory = (categoryId: string) => {
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.scrollLeft = (map.scrollWidth - map.clientWidth) / 2;
+  }, []);
+
+  const activeContents = useMemo(
+    () => activeCategory ? playContents.filter((item) => item.category_id === activeCategory) : [],
+    [activeCategory],
+  );
+  const activeCategoryData = activeCategory ? getCategory(activeCategory) : null;
+
+  const openZone = (categoryId: string) => {
     setActiveCategory(categoryId);
-    window.setTimeout(() => document.querySelector("#plays")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    setPanelOpen(true);
   };
 
   const launch = (title: string) => {
-    setNotice(`${title}은(는) 지금 만들고 있어요. 조금만 기다려 주세요!`);
-    window.setTimeout(() => setNotice(null), 3200);
+    setNotice(`${title}은(는) 지금 준비 중이에요!`);
+    window.setTimeout(() => setNotice(null), 3000);
   };
 
   return (
-    <main className={styles.page} id="top">
-      <section className={styles.world} aria-labelledby="hero-title">
-        <div className={styles.checker} aria-hidden="true" />
-        <header className={styles.header}>
-          <a className={styles.brand} href="#top" aria-label="PLAY ZIP 홈"><strong>play</strong><span>zip!</span></a>
-          <nav className={styles.topNav} aria-label="카테고리 바로가기">{categories.map((category) => <button key={category.id} onClick={() => chooseCategory(category.id)} type="button">{category.name}</button>)}</nav>
-          <button className={styles.myButton} onClick={() => setNotice("내 기록 기능은 다음 업데이트에서 만나요!")} type="button"><UserRound size={18} /><span>MY</span></button>
-        </header>
+    <main className={styles.lobby}>
+      <div className={styles.mapViewport} ref={mapRef}>
+        <div className={styles.mapCanvas}>
+          <span className={`${styles.cloud} ${styles.cloudOne}`} aria-hidden="true" />
+          <span className={`${styles.cloud} ${styles.cloudTwo}`} aria-hidden="true" />
 
-        <div className={styles.heroCopy}>
-          <span className={styles.heroKicker}><Sparkles size={15} /> 오늘의 놀이터가 열렸어요</span>
-          <h1 id="hero-title">어서 와!<br /><em>오늘은 어디서 놀까?</em></h1>
-          <p>마음이 가는 길을 골라봐.<br />짧고 재미있는 놀이가 기다리고 있어!</p>
-          <button className={styles.heroButton} onClick={() => launch(featured.title)} type="button"><span><Play size={17} fill="currentColor" /></span>바로 놀러 가기<ArrowRight size={18} /></button>
+          <div className={styles.zoneLayer} aria-label="플레이집 마을 지도">
+            {categories.map((category) => {
+              const Icon = categoryIcons[category.icon];
+              return (
+                <button
+                  className={`${styles.zone} ${styles[`zone_${category.id}`]} ${activeCategory === category.id ? styles.zoneActive : ""}`}
+                  key={category.id}
+                  onClick={() => openZone(category.id)}
+                  type="button"
+                  aria-label={`${category.name}, ${zoneNames[category.id]} 열기`}
+                >
+                  <span className={styles.zonePulse} />
+                  <span className={styles.zoneIcon}><Icon /></span>
+                  <span className={styles.zoneLabel}><small>{zoneNames[category.id]}</small><strong>{category.name}</strong></span>
+                </button>
+              );
+            })}
+          </div>
         </div>
+      </div>
 
-        <div className={styles.worldGuide}><MapPin size={16} fill="currentColor" /><span><small>지금 여기는</small><strong>플레이집 중앙광장</strong></span></div>
-
-        <div className={styles.categoryDock} aria-label="놀이터 선택">
-          {categories.map((category, index) => {
-            const Icon = categoryIcons[category.icon];
-            return <button className={activeCategory === category.id ? styles.categoryActive : ""} key={category.id} onClick={() => chooseCategory(category.id)} type="button"><span className={styles.categoryIcon}><Icon size={25} strokeWidth={2.2} /></span><span><small>ZONE 0{index + 1}</small><strong>{category.name}</strong></span></button>;
-          })}
+      <header className={styles.hud}>
+        <a className={styles.brand} href="#" aria-label="PLAY ZIP 홈"><strong>play</strong><span>zip!</span></a>
+        <div className={styles.playerCard}>
+          <span className={styles.avatar}><UserRound /></span>
+          <span className={styles.playerInfo}><small>PLAYER 01</small><strong>마을 새내기</strong><i><b /></i></span>
+          <em>LV.1</em>
         </div>
-      </section>
-
-      <section className={styles.playground}>
-        <div className={styles.paperEdge} aria-hidden="true" />
-        <div className={styles.shell}>
-          <section className={styles.welcomeStrip} aria-label="오늘의 플레이">
-            <div className={styles.mascotSeal}><Star size={24} fill="currentColor" /></div>
-            <div><span>TODAY&apos;S PICK</span><h2>{featured.title}</h2><p>{featured.summary}</p></div>
-            <div className={styles.pickMeta}><span><Users size={15} /> {formatParticipants(featured.participant_count)}명</span><span><Timer size={15} /> {featured.duration_minutes}분</span></div>
-            <button onClick={() => launch(featured.title)} type="button">시작하기 <ArrowRight size={17} /></button>
-          </section>
-
-          <section className={styles.questPath} aria-label="오늘의 스탬프">
-            <div className={styles.questTitle}><span>오늘의 산책</span><strong>세 곳을 방문하면 선물이 와요</strong></div>
-            <div className={styles.questLine}><i /><span className={styles.done}><Check /></span><b /><span className={styles.done}><Check /></span><b /><span><Star /></span></div>
-            <div className={styles.reward}><Trophy size={20} /><span><small>완성 보상</small><strong>+40 XP</strong></span><i>DEMO</i></div>
-          </section>
-
-          <section className={styles.playSection} id="plays" aria-labelledby="play-title">
-            <div className={styles.playHeader}>
-              <div><span className={styles.handLabel}>동네 소식</span><h2 id="play-title">{activeCategory === "all" ? "요즘 친구들이 자주 가는 곳" : `${getCategory(activeCategory)?.name} 놀이터`}</h2><p>하나를 골라 가볍게 시작해 봐요.</p></div>
-              <div className={styles.filters}><button className={activeCategory === "all" ? styles.filterActive : ""} onClick={() => setActiveCategory("all")} type="button">전체</button>{categories.map((category) => <button className={activeCategory === category.id ? styles.filterActive : ""} key={category.id} onClick={() => setActiveCategory(category.id)} type="button">{category.name}</button>)}</div>
-            </div>
-
-            <div className={styles.playGrid}>
-              {visibleContents.map((content, index) => (
-                <article className={styles.playCard} key={content.id}>
-                  <div className={styles.tape} aria-hidden="true" />
-                  <div className={styles.cardVisual}><Artwork content={content} /><span className={styles.cardNumber}>{String(index + 1).padStart(2, "0")}</span></div>
-                  <div className={styles.cardBody}><span className={styles.cardCategory}>{getCategory(content.category_id)?.name}</span><h3>{content.title}</h3><p>{content.summary}</p><div className={styles.cardFooter}><span><Users size={14} /> {formatParticipants(content.participant_count)}명</span><span><Timer size={14} /> {content.duration_minutes}분</span><button onClick={() => launch(content.title)} type="button" aria-label={`${content.title} 시작`}><Play size={15} fill="currentColor" /></button></div></div>
-                </article>
-              ))}
-            </div>
-          </section>
+        <div className={styles.hudRight}>
+          <div className={styles.currency}><Star fill="currentColor" /><strong>120</strong></div>
+          <button onClick={() => setNotice("설정 메뉴는 다음 업데이트에서 열려요!")} type="button" aria-label="설정"><Settings /></button>
         </div>
-      </section>
+      </header>
 
-      <footer className={styles.footer}><div className={styles.brand}><strong>play</strong><span>zip!</span></div><p>심심한 순간, 마을에서 만나요.</p><span>© 2026 PLAY ZIP</span></footer>
-      <nav className={styles.bottomNav} aria-label="하단 메뉴"><button className={styles.navActive} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} type="button"><Home /><span>마을</span></button><button onClick={() => document.querySelector("#plays")?.scrollIntoView({ behavior: "smooth" })} type="button"><Gamepad2 /><span>놀기</span></button><button onClick={() => setNotice("내 기록 기능은 다음 업데이트에서 만나요!")} type="button"><UserRound /><span>MY</span></button></nav>
-      {notice && <div className={styles.notice} role="status"><Star size={18} fill="currentColor" /><span>{notice}</span><button onClick={() => setNotice(null)} type="button" aria-label="안내 닫기"><X size={17} /></button></div>}
+      <div className={styles.questChip}>
+        <span><Gift /></span>
+        <div><small>오늘의 미션</small><strong>마을 3곳 둘러보기</strong></div>
+        <div className={styles.questDots}><i className={styles.complete}><Check /></i><i className={styles.complete}><Check /></i><i><Star /></i></div>
+      </div>
+
+      <div className={`${styles.npcCallout} ${panelOpen ? styles.npcHidden : ""}`}>
+        <div className={styles.npcFace}><span>●</span><span>●</span><b>⌣</b></div>
+        <div className={styles.speech}>
+          <small>안내 친구 · 모리</small>
+          <strong>어서 와! 반짝이는 건물을 눌러봐.</strong>
+          <p>심리테스트부터 미니게임까지, 하고 싶은 놀이를 골라 시작하면 돼!</p>
+          <button onClick={() => openZone("psychology")} type="button"><Sparkles /> 오늘의 추천 보기</button>
+        </div>
+      </div>
+
+      {panelOpen && activeCategoryData && (
+        <aside className={styles.zonePanel} aria-label={`${activeCategoryData.name} 콘텐츠`}>
+          <div className={styles.panelHandle} />
+          <header className={styles.panelHeader}>
+            <span className={styles.panelIcon}>{(() => { const Icon = categoryIcons[activeCategoryData.icon]; return <Icon />; })()}</span>
+            <div><small>{zoneNames[activeCategoryData.id]}</small><h1>{activeCategoryData.name}</h1><p>{activeCategoryData.description}</p></div>
+            <button className={styles.closeButton} onClick={() => setPanelOpen(false)} type="button" aria-label="창 닫기"><X /></button>
+          </header>
+          <div className={styles.gameList}>
+            {activeContents.map((content, index) => (
+              <button className={styles.gameItem} key={content.id} onClick={() => launch(content.title)} type="button">
+                <span className={styles.gameThumb} style={{ background: content.thumbnail_gradient }}><i style={{ background: content.thumbnail_accent }} /><b>{String(index + 1).padStart(2, "0")}</b></span>
+                <span className={styles.gameCopy}><small>{activeCategoryData.name}</small><strong>{content.title}</strong><span><i><Users /> {formatParticipants(content.participant_count)}명</i><i><Timer /> {content.duration_minutes}분</i></span></span>
+                <span className={styles.playIcon}><Play fill="currentColor" /></span>
+              </button>
+            ))}
+          </div>
+          <p className={styles.panelTip}><Star fill="currentColor" /> 플레이하면 오늘의 미션 도장이 찍혀요.</p>
+        </aside>
+      )}
+
+      <div className={styles.dragHint}><Map /> 좌우로 움직여 마을을 둘러보세요</div>
+
+      <nav className={styles.gameDock} aria-label="게임 메뉴">
+        <button className={styles.dockActive} onClick={() => setPanelOpen(false)} type="button"><Home /><span>마을</span></button>
+        <button onClick={() => openZone("minigame")} type="button"><Gamepad2 /><span>게임</span></button>
+        <button onClick={() => setNotice("오늘의 미션은 2/3까지 완료했어요!")} type="button"><Trophy /><span>미션</span><i>2</i></button>
+        <button onClick={() => setNotice("내 기록 기능은 다음 업데이트에서 열려요!")} type="button"><UserRound /><span>MY</span></button>
+      </nav>
+
+      {notice && <div className={styles.notice} role="status"><Star fill="currentColor" /><span>{notice}</span><button onClick={() => setNotice(null)} type="button" aria-label="안내 닫기"><X /></button></div>}
     </main>
   );
 }
