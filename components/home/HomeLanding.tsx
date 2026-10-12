@@ -14,6 +14,13 @@ const roomObjects: Record<string, { place: string; hint: string; action: string 
   quiz: { place: "척척 책상", hint: "오늘의 문제를 펼쳐봐.", action: "비밀 문제가 펼쳐지고 있어요!" },
   minigame: { place: "게임 오락기", hint: "버튼을 눌러 한 판 시작!", action: "게임 화면에 전원이 들어왔어요!" },
 };
+const objectAssets: Record<string, string> = {
+  psychology: "/play-zip/object-mirror-v3.png",
+  romance: "/play-zip/object-phone-v3.png",
+  balance: "/play-zip/object-scale-v3.png",
+  quiz: "/play-zip/object-quiz-v3.png",
+  minigame: "/play-zip/object-arcade-v3.png",
+};
 const characters = [
   { name: "핑키", category: "romance", message: "전화기가 아까부터 울리고 있어. 같이 받아볼래?" },
   { name: "몽글", category: "quiz", message: "책상 위에 재미있는 문제가 잔뜩 펼쳐져 있어!" },
@@ -86,7 +93,7 @@ export function HomeLanding() {
               const object = roomObjects[category.id];
               return (
                 <button className={`${styles.roomObject} ${styles[`object_${category.id}`]} ${activeAction === category.id ? styles.objectActing : ""}`} key={category.id} onClick={() => triggerObject(category.id)} type="button" aria-label={`${category.name}, ${object.place} 열기`}>
-                  <span className={`${styles.objectSprite} ${styles[`objectSprite_${category.id}`]}`} />
+                  <img className={styles.objectSprite} src={objectAssets[category.id]} alt="" />
                   <span className={styles.objectMagic} aria-hidden="true"><i /><i /><i /><b /></span>
                   <span className={styles.objectTooltip}>{object.place}<strong>{category.name}</strong></span>
                 </button>
