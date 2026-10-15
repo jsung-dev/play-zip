@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Check, MapPin, PackageCheck, RotateCcw, Shopping
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
 import { DELIVERY_BRAND_CHOICES, DELIVERY_QUIZ_QUESTIONS, PURCHASE_AD, type DeliveryChoiceId } from "@/data/delivery-campaign";
 import { BrandImage } from "./DeliveryArt";
+import { PlatformReturnLink } from "./PlatformReturnLink";
 import styles from "./DeliveryGame.module.css";
 
 const brandStyle = (brand: DeliveryBrand) => ({
@@ -116,6 +117,7 @@ export function DeliveryPurchaseAd({ brand, onRestart }: { brand: DeliveryBrand;
       <small className={styles.purchaseNotice}>{preview ? "공식 브랜드 광고가 아닌 테스트용 디자인입니다." : PURCHASE_AD.notice}</small>
       {preview && <button type="button" className={styles.textButton} onClick={() => { setPreview(false); ref.current?.focus(); }}><ArrowLeft aria-hidden="true" /> 광고로 돌아가기</button>}
       <button type="button" className={styles.restartCampaign} onClick={onRestart}><RotateCcw aria-hidden="true" />다시 배달하기</button>
+      <PlatformReturnLink />
     </article>
   </div>;
 }

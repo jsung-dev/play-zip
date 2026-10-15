@@ -7,6 +7,7 @@ import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandSelector, DeliveryPurchaseAd } from "./DeliveryCampaign";
+import { PlatformReturnLink } from "./PlatformReturnLink";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
@@ -470,6 +471,7 @@ export function DeliveryGame() {
               </dl>
               <p className={styles.startGuide}>세 집에 들러 배달해요.<br />브랜드 퀴즈를 풀고, 마지막 집에서 구매 광고를 만나요.</p>
               <button className={styles.primaryButton} type="button" disabled={!selectedBrand} onClick={startGame}>배달 출발! <span>→</span></button>
+              <PlatformReturnLink />
               <small className={styles.testNotice}>1,000m의 작은 여행 · 테스트용 디자인<br />공식 브랜드 광고가 아니며 실제 구매는 되지 않습니다.</small>
             </article>
           </div>
@@ -487,6 +489,7 @@ export function DeliveryGame() {
               <button className={styles.textButton} type="button" onClick={returnToStart}>
                 <RotateCcw aria-hidden="true" /> 처음으로
               </button>
+              <PlatformReturnLink confirmLeave />
             </article>
           </div>
         )}

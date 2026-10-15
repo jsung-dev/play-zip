@@ -43,6 +43,32 @@
   outline-offset: 3px;
 }
 
+.platformReturn {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid #dbe6dc;
+  border-radius: 13px;
+  background: #eff5ec;
+  color: #426b53;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.platformReturn svg { width: 16px; height: 16px; }
+.platformReturn:hover { background: #e5efdf; }
+.platformReturn:active { background: #dce9d6; }
+.platformReturn:focus-visible { outline: 3px solid #588c72; outline-offset: 3px; }
+
 .hud {
   position: relative;
   z-index: 30;
