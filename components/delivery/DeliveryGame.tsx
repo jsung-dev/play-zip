@@ -6,7 +6,7 @@ import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/da
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
-import { DeliveryBrandQuiz, DeliveryBrandSelector, DeliveryPurchaseAd } from "./DeliveryCampaign";
+import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
 import { PlatformReturnLink } from "./PlatformReturnLink";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
@@ -459,23 +459,7 @@ export function DeliveryGame() {
           <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />
         </div>
 
-        {status === "ready" && (
-          <div className={styles.overlay}>
-            <article className={styles.startCard}>
-              <span className={styles.eyebrow}>작은 동네, 기분 좋은 배달</span>
-              <h1><small>몽글몽글</small> 자전거 배달</h1>
-              <DeliveryBrandSelector selected={selectedBrand} onSelect={setSelectedBrand} />
-              <dl className={styles.missionCard}>
-                <div><dt>경유 배달</dt><dd>동네 세 집</dd></div>
-                <div><dt>마지막 목적지</dt><dd>{DELIVERY_GAME_CONFIG.destinationName}</dd></div>
-              </dl>
-              <p className={styles.startGuide}>세 집에 들러 배달해요.<br />브랜드 퀴즈를 풀고, 마지막 집에서 구매 광고를 만나요.</p>
-              <button className={styles.primaryButton} type="button" disabled={!selectedBrand} onClick={startGame}>배달 출발! <span>→</span></button>
-              <PlatformReturnLink />
-              <small className={styles.testNotice}>1,000m의 작은 여행 · 테스트용 디자인<br />공식 브랜드 광고가 아니며 실제 구매는 되지 않습니다.</small>
-            </article>
-          </div>
-        )}
+        {status === "ready" && <DeliveryBrandStart selected={selectedBrand} onSelect={setSelectedBrand} onStart={startGame} />}
 
         {paused && canPause && (
           <div className={`${styles.overlay} ${styles.pauseOverlay}`}>

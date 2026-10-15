@@ -1,0 +1,191 @@
+/* Only the start, quiz and completion dialogs use these shared tokens. */
+.overlay {
+  --ui-paper: #fff;
+  --ui-ink: #142e2a;
+  --ui-body: #52665f;
+  --ui-green: #007f5f;
+  --ui-mint: #e6fbf2;
+  --ui-pink: #ffe9ef;
+  --ui-berry: #8f2449;
+  --ui-border: #d3e3dc;
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  overflow: hidden;
+  background: rgb(20 46 42 / 12%);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.campaignCard {
+  box-sizing: border-box;
+  width: min(100%, 390px);
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: #b9d5c9 transparent;
+  padding: 22px 18px;
+  border: 1px solid var(--ui-border);
+  border-radius: 24px;
+  background: var(--ui-paper);
+  box-shadow: 0 14px 44px rgb(20 46 42 / 15%);
+  color: var(--ui-ink);
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  isolation: isolate;
+}
+
+.campaignCard:focus { outline: none; }
+.campaignCard h1, .campaignCard h2, .campaignCard p, .campaignCard dl { margin: 0; }
+.campaignCard h1, .campaignCard h2 { font-weight: 850; letter-spacing: -.045em; text-wrap: balance; }
+.campaignCard h2 { font-size: 28px; line-height: 1.3; }
+.campaignCard svg { flex-shrink: 0; width: 22px; height: 22px; stroke-width: 2.2; }
+.campaignCard button, .campaignCard a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.campaignCard button:focus-visible, .campaignCard a:focus-visible, .brandChoice:has(input:focus-visible) {
+  outline: 3px solid var(--ui-green);
+  outline-offset: 3px;
+}
+.campaignCard img { display: block; object-fit: contain; }
+/* Keep failed-image text readable too; the shared asset fallback stays intact. */
+.campaignCard [role="img"] b { font-size: 15px; }
+.campaignCard [role="img"] small { font-size: 13px; }
+
+.eyebrow { color: var(--ui-green); font-size: 14px; font-weight: 750; }
+.campaignCard .startTitle { margin: 8px 0 18px; font-size: 30px; line-height: 1.2; }
+.startTitle span { display: block; margin-bottom: 4px; color: var(--ui-berry); font-size: 26px; }
+.brandSelector { min-width: 0; margin: 0; padding: 0; border: 0; }
+.brandSelector legend { width: 100%; margin-bottom: 14px; padding: 0; color: var(--ui-body); font-size: 16px; font-weight: 600; }
+.brandChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.brandChoice {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 4px 12px;
+  border: 2px solid #e1e9e5;
+  border-radius: 16px;
+  background: var(--ui-paper);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.brandChoice[data-selected="true"] { border-color: var(--ui-green); background: var(--ui-mint); }
+.brandChoice input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.choiceCheck { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid #a8bdb3; border-radius: 50%; }
+.brandChoice[data-selected="true"] .choiceCheck { border-color: var(--ui-green); background: var(--ui-green); color: #fff; }
+.choiceCheck svg { width: 14px; height: 14px; stroke-width: 3; }
+.choiceProduct { width: 100%; height: 108px; margin-bottom: 4px; }
+.brandChoice strong { font-size: 16px; font-weight: 800; letter-spacing: -.04em; line-height: 1.5; }
+.brandChoice small { color: var(--ui-body); font-size: 13px; line-height: 1.5; }
+
+.campaignCard .missionCard { display: grid; grid-template-columns: .8fr 1.2fr; gap: 10px; margin-top: 18px; padding: 14px 10px; border-radius: 16px; background: var(--ui-mint); text-align: left; }
+.missionCard > div { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; align-items: center; column-gap: 6px; }
+.missionCard > div + div { padding-left: 10px; border-left: 1px solid #b9dfcf; }
+.missionCard svg { color: var(--ui-green); grid-row: span 2; }
+.missionCard dt { color: var(--ui-body); font-size: 13px; }
+.missionCard dd { margin: 2px 0 0; font-size: 15px; font-weight: 750; line-height: 1.45; }
+.campaignCard .startGuide { margin: 14px 0 16px; color: var(--ui-body); font-size: 15px; }
+.actions { display: grid; gap: 10px; width: 100%; }
+.campaignCard .primaryButton, .campaignCard .secondaryButton, .actions [data-platform-return], .campaignCard .textButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-paper);
+  color: var(--ui-green);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-decoration: none;
+  cursor: pointer;
+}
+.campaignCard .primaryButton { min-height: 56px; border-color: var(--ui-green); background: var(--ui-green); color: #fff; font-size: 18px; }
+.campaignCard .primaryButton:disabled { border-color: #d1ded7; background: #e6ebe8; color: var(--ui-body); cursor: not-allowed; opacity: 1; box-shadow: none; }
+.actions [data-platform-return] svg { width: 22px; height: 22px; }
+.campaignCard .secondaryButton { border-color: #a6cdbd; }
+.purchaseCard .actions [data-platform-return] { background: var(--ui-mint); border-color: var(--ui-mint); }
+.campaignCard .textButton { min-height: 44px; border-color: transparent; font-size: 15px; }
+.notice { display: block; color: var(--ui-body); font-size: 13px; font-weight: 400; line-height: 1.5; }
+.startCard > .notice { margin-top: 16px; }
+
+.quizHeading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.quizHeading > span { color: var(--ui-green); font-size: 26px; font-weight: 850; letter-spacing: -.04em; }
+.quizHeading > strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.quizProgress { display: flex; gap: 5px; height: 7px; margin-bottom: 18px; }
+.quizProgress span { flex: 1; border-radius: 99px; background: #e0ebe5; }
+.quizProgress [data-reached="true"] { background: var(--ui-green); }
+.campaignCard .quizAddress { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; border-radius: 14px; background: var(--ui-mint); font-size: 15px; font-weight: 650; }
+.quizAddress svg { color: var(--ui-green); width: 18px; height: 18px; }
+.quizProduct { display: grid; place-items: center; width: 146px; height: 130px; margin: 16px auto; border-radius: 50%; background: color-mix(in srgb, var(--product-tint) 18%, white); }
+.quizProduct > img, .quizProduct > [role="img"] { width: 100px; height: 120px; }
+.campaignCard .campaignHint { margin: 12px 0 18px; color: var(--ui-body); font-size: 15px; }
+.quizAnswers { display: grid; gap: 10px; }
+.quizAnswers button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 12px; border: 1px solid #c3d5cc; border-radius: 16px; background: var(--ui-paper); color: var(--ui-ink); text-align: left; font-size: 17px; }
+.quizAnswers strong { font-size: inherit; font-weight: 750; }
+.quizAnswers svg { margin-left: auto; width: 20px; height: 20px; color: var(--ui-body); }
+.answerNumber { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--ui-mint); color: var(--ui-green); font-size: 14px; font-weight: 750; }
+.quizAnswers button[data-wrong="true"] { border-color: #b73e57; background: #fff3f5; }
+.quizFeedback > p { display: flex; align-items: flex-start; gap: 8px; padding-top: 12px; color: #9d2c42; font-size: 14px; text-align: left; }
+.quizFeedback svg { width: 20px; height: 20px; margin-top: 2px; }
+.campaignCard .pauseNote { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; padding: 12px 10px; border-radius: 16px; background: var(--ui-mint); color: var(--ui-body); text-align: left; font-size: 13px; }
+.pauseNote svg { color: var(--ui-green); }
+
+.deliveryReceipt { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.deliveryReceipt > span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--ui-mint); color: var(--ui-green); }
+.deliveryReceipt svg { width: 29px; height: 29px; }
+.campaignCard .purchaseDestination { margin-top: 8px; color: var(--ui-body); font-size: 16px; font-weight: 600; }
+.completionStats { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 12px 0 18px; }
+.completionStats > span { display: flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 99px; background: var(--ui-mint); color: var(--ui-green); font-size: 13px; font-weight: 650; }
+.completionStats svg { width: 16px; height: 16px; }
+.purchaseCreative { padding: 14px 14px 16px; margin-bottom: 16px; border: 1px solid #f4bfd0; border-radius: 18px; background: var(--ui-pink); color: var(--ui-berry); }
+.adBadge { display: block; margin-bottom: 6px; text-align: left; font-size: 13px; font-weight: 700; }
+.purchaseLogo { width: 180px; height: 54px; margin: 0 auto 8px; }
+.purchaseCreative h2 { font-size: 26px; line-height: 1.35; white-space: pre-line; }
+.purchaseProduct { display: grid; place-items: center; margin: 12px auto 8px; }
+.purchaseProduct img, .purchaseProduct [role="img"] { width: 116px; height: 128px; }
+.purchaseCreative > strong { font-size: 18px; font-weight: 800; }
+.purchaseCreative > p { margin-top: 4px; color: var(--ui-body); font-size: 15px; }
+.purchasePreview { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 16px; background: var(--ui-mint); text-align: left; font-size: 15px; }
+.purchasePreview > svg { color: var(--ui-green); }
+.purchasePreview p { margin-top: 6px; color: var(--ui-body); }
+
+@media (hover: hover) {
+  .campaignCard .primaryButton:not(:disabled):hover { background: #006c51; }
+  .brandChoice:hover, .quizAnswers button:not([data-wrong="true"]):hover, .actions [data-platform-return]:hover, .campaignCard .secondaryButton:hover { background: var(--ui-mint); }
+}
+
+@media (max-width: 359px) {
+  .campaignCard { padding: 20px 14px; }
+  .brandChoices { gap: 5px; }
+  .missionCard > div { grid-template-columns: minmax(0, 1fr); }
+  .missionCard svg { display: none; }
+  .campaignCard h2 { font-size: 26px; }
+  .completionStats > span { padding-inline: 7px; }
+}
+
+/* On short screens trim illustration/spacing, never type or touch targets. */
+@media (max-height: 720px) {
+  .campaignCard { padding-block: 18px; }
+  .campaignCard .startTitle { margin-bottom: 14px; }
+  .choiceProduct { height: 88px; }
+  .quizProduct { width: 126px; height: 102px; margin-block: 12px; }
+  .quizProduct > img, .quizProduct > [role="img"] { height: 94px; }
+  .purchaseProduct img, .purchaseProduct [role="img"] { height: 108px; }
+}
