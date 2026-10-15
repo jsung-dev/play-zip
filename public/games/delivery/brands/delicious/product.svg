@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 325">
+  <g stroke="#615379" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M62 72 91 30h83l19 42v226H62Z" fill="#faf5e9"/>
+    <path d="m62 72 29-42v42Zm29-42h83l19 42H91Z" fill="#e1d9ec"/>
+    <path d="M62 91h131v112c-48 17-88-17-131 0Z" fill="#b7a8d4" stroke="none"/>
+    <path d="M91 30v-9h80v9" fill="#faf5e9"/>
+    <circle cx="128" cy="145" r="28" fill="#f6d58a" stroke="none"/>
+    <path d="M108 167h40v12a20 20 0 0 1-40 0Z" fill="#fffdf6" stroke="none"/>
+  </g>
+  <g font-family="Malgun Gothic, sans-serif" text-anchor="middle" fill="#615379">
+    <text x="128" y="236" font-size="21" font-weight="700">맛있는우유</text>
+    <text x="128" y="260" font-size="13">우유 한 잔</text>
+    <text x="128" y="282" font-size="9" letter-spacing="1.2">TEST DESIGN</text>
+  </g>
+</svg>

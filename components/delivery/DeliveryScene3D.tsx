@@ -1,0 +1,306 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
+import { getRouteFrame, getDrivewayFrame, getDrivewayLength, isAtDrivewayDelivery, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { BrandImage } from "./DeliveryArt";
+import { buildDeliveryWorld } from "./three/scene-builders";
+import { TOWN_COLORS } from "./three/scene-art";
+import { portraitCameraFov } from "./three/scene-layout";
+import styles from "./DeliveryGame.module.css";
+
+type SceneState = {
+  position: number;
+  speed: number;
+  paused: boolean;
+  playing: boolean;
+  arriving: boolean;
+  sessionKey: number;
+  laneX: number;
+  collisionId: string | null;
+  detour: DetourChoice;
+  stopIndex: number;
+  stopDwell: number;
+  deliveryPulse: number;
+  deliverySuccessRemaining: number;
+  driveway: DrivewayState | null;
+};
+
+export function DeliveryScene3D({
+  position,
+  speed,
+  paused,
+  playing,
+  arriving,
+  sessionKey,
+  laneX,
+  collisionId,
+  detour,
+  stopIndex,
+  stopDwell,
+  deliveryPulse,
+  deliverySuccessRemaining,
+  driveway,
+  deliveryBrand,
+}: SceneState & { deliveryBrand: DeliveryBrand }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway });
+  const [webglFailed, setWebglFailed] = useState(false);
+  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
+      });
+    } catch {
+      setWebglFailed(true);
+      return;
+    }
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+
+    const scene = new THREE.Scene();
+    const skyCanvas = document.createElement("canvas");
+    skyCanvas.width = 2; skyCanvas.height = 256;
+    const skyContext = skyCanvas.getContext("2d")!;
+    const skyGradient = skyContext.createLinearGradient(0, 0, 0, 256);
+    skyGradient.addColorStop(0, "#39b7ef"); skyGradient.addColorStop(.6, "#87d5ee"); skyGradient.addColorStop(1, "#dbebe4");
+    skyContext.fillStyle = skyGradient; skyContext.fillRect(0, 0, 2, 256);
+    const skyTexture = new THREE.CanvasTexture(skyCanvas); skyTexture.colorSpace = THREE.SRGBColorSpace;
+    scene.background = skyTexture;
+    scene.fog = new THREE.Fog(TOWN_COLORS.haze, 88, 205);
+    const camera = new THREE.PerspectiveCamera(DELIVERY_GAME_CONFIG.cameraFovDegrees, 1, 0.1, 270);
+    camera.position.set(0, DELIVERY_GAME_CONFIG.cameraHeight, DELIVERY_GAME_CONFIG.cameraFollowDistance);
+
+    const hemisphere = new THREE.HemisphereLight("#f1faff", "#a6b6ad", 1.15);
+    const sun = new THREE.DirectionalLight("#fff5e4", 2.25);
+    sun.position.set(-36, 65, 28);
+    scene.add(hemisphere, sun);
+
+    const world = buildDeliveryWorld(scene, deliveryBrand);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let animationFrame = 0;
+    let lastTime = performance.now();
+    let wheelPhase = 0;
+    let previousLaneX = stateRef.current.laneX;
+    let activeCollisionId: string | null = null;
+    let collisionElapsedMs = 420;
+    let activeMovingBus: (typeof world.movingBuses)[number] | null = null;
+    let movingBusDistance = 0;
+    let renderedSession = stateRef.current.sessionKey;
+    const shownMovingBuses = new Set<string>();
+
+    const resetMovingBuses = () => {
+      shownMovingBuses.clear();
+      activeMovingBus = null;
+      for (const bus of world.movingBuses) {
+        bus.group.visible = false;
+        bus.group.position.z = 0;
+      }
+    };
+
+    const resize = () => {
+      const bounds = canvas.getBoundingClientRect();
+      const width = Math.max(1, Math.round(bounds.width));
+      const height = Math.max(1, Math.round(bounds.height));
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      // Preserve the roadside reading window on narrow phones as well.
+      camera.fov = portraitCameraFov(camera.aspect);
+      camera.updateProjectionMatrix();
+    };
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(canvas);
+    resize();
+
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      setWebglFailed(true);
+    };
+    canvas.addEventListener("webglcontextlost", handleContextLost);
+
+    const animate = (timestamp: number) => {
+      const current = stateRef.current;
+      const deltaSeconds = Math.min((timestamp - lastTime) / 1_000, 0.05);
+      lastTime = timestamp;
+
+      if (current.sessionKey !== renderedSession) {
+        renderedSession = current.sessionKey;
+        resetMovingBuses();
+      }
+
+      const mainFrame = getRouteFrame(current.position, current.detour);
+      const routeFrame = current.driveway ? getDrivewayFrame(current.driveway.stopIndex, current.driveway.progress, current.driveway) : mainFrame;
+      world.horizon.position.set(routeFrame.position.x, 0, routeFrame.position.z);
+      const bikePosition = routeFrame.position.clone().addScaledVector(routeFrame.lateral, current.driveway ? 0 : current.laneX);
+      world.bicycle.group.position.set(bikePosition.x, 0.08, bikePosition.z);
+      world.bicycle.group.rotation.y = routeFrame.yaw;
+      const laneVelocity = (current.laneX - previousLaneX) / Math.max(deltaSeconds, 0.001);
+      previousLaneX = current.laneX;
+      if (current.collisionId !== activeCollisionId) {
+        activeCollisionId = current.collisionId;
+        collisionElapsedMs = 0;
+      }
+      if (activeCollisionId && current.playing && !current.paused) collisionElapsedMs += deltaSeconds * 1_000;
+      const impactProgress = activeCollisionId ? Math.min(1, collisionElapsedMs / 420) : 1;
+      const impactBump = activeCollisionId ? Math.sin(impactProgress * Math.PI) * 0.1 : 0;
+      world.bicycle.group.rotation.z = Math.max(-0.15, Math.min(0.15, -laneVelocity * 0.023));
+      world.bicycle.group.rotation.x = impactBump;
+      wheelPhase -= (current.speed * deltaSeconds) / 0.43;
+      for (const wheel of world.bicycle.wheels) wheel.rotation.x = wheelPhase;
+      world.bicycle.pedal.rotation.x = wheelPhase * 1.35;
+      const legSwing = Math.sin(wheelPhase * 1.35) * Math.min(0.34, Math.abs(current.speed) / 28);
+      world.bicycle.leftLeg.rotation.x = legSwing;
+      world.bicycle.rightLeg.rotation.x = -legSwing;
+
+      const drivewayMix = current.driveway ? THREE.MathUtils.smoothstep(current.driveway.progress, 0, 7) : 0;
+      const cameraRail = routeFrame.position.clone();
+      if (current.driveway) cameraRail.addScaledVector(mainFrame.lateral, -current.driveway.entryLaneX * (1 - drivewayMix));
+      const cameraTarget = cameraRail.clone()
+        .addScaledVector(routeFrame.lateral, .8 + current.laneX * 0.12)
+        .addScaledVector(routeFrame.tangent, -DELIVERY_GAME_CONFIG.cameraFollowDistance);
+      const forkApproach = THREE.MathUtils.clamp((current.position - (ROAD_CLOSURE.junctionDistance - 100)) / 55, 0, 1);
+      const forkDeparture = 1 - THREE.MathUtils.clamp((current.position - (ROAD_CLOSURE.junctionDistance + 55)) / 70, 0, 1);
+      const forkView = Math.min(forkApproach, forkDeparture);
+      cameraTarget.y = DELIVERY_GAME_CONFIG.cameraHeight + forkView * 1.4;
+      const followBlend = reduceMotion ? 1 : 1 - Math.exp(-9 * deltaSeconds);
+      camera.position.lerp(cameraTarget, followBlend);
+      const lookTarget = cameraRail.clone().addScaledVector(routeFrame.tangent, 16 - forkView * 2 - drivewayMix * 7);
+      lookTarget.y = 1.15;
+      camera.lookAt(lookTarget);
+      if (scene.fog instanceof THREE.Fog) scene.fog.far = 205 + forkView * 15;
+
+      for (const object of world.worldObjects) {
+        const objectDistance = Number(object.userData.routeDistance ?? 0);
+        const relativeDistance = objectDistance - current.position;
+        object.visible = relativeDistance > -38 && relativeDistance < 180;
+        const obstacleId = String(object.userData.obstacleId ?? "");
+        if (obstacleId) {
+          const opacity = obstacleId === current.collisionId ? 0.3 : 1;
+          object.traverse((part) => {
+            if (!(part instanceof THREE.Mesh)) return;
+            const materials = Array.isArray(part.material) ? part.material : [part.material];
+            for (const material of materials) {
+              if ("opacity" in material) {
+                material.userData.baseOpacity ??= material.opacity;
+                material.opacity = material.userData.baseOpacity * opacity;
+              }
+            }
+          });
+        }
+      }
+      world.destination.visible = current.position > 790;
+
+      for (const [index, stop] of world.deliveryStops.entries()) {
+        const complete = index < current.stopIndex;
+        const active = isAtDrivewayDelivery(current.driveway, index) && index === current.stopIndex;
+        const progress = index === current.stopIndex ? Math.min(1, current.stopDwell / DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds) : 0;
+        stop.padMaterial.color.set(complete ? "#9bc9ad" : active ? "#f4d17d" : "#ead99e");
+        stop.padMaterial.opacity = complete ? .42 : active ? .5 : .32;
+        stop.edgeMaterial.color.set(complete ? "#c6ebc9" : "#fae4ab");
+        stop.waitingSign.visible = !complete;
+        stop.completedSign.visible = complete;
+        stop.progressRing.visible = progress > 0;
+        stop.progressRing.geometry.setDrawRange(0, Math.floor(progress * 64) * 6);
+        stop.parcel.visible = progress > .08 && !reduceMotion;
+        if (stop.parcel.visible) {
+          const stopFrame = getDrivewayFrame(index, getDrivewayLength(index));
+          const destination = stopFrame.position.clone().addScaledVector(stopFrame.tangent, 4.5);
+          const deliveryProgress = THREE.MathUtils.smoothstep(progress, .08, 1);
+          stop.parcel.position.copy(bikePosition).lerp(destination, deliveryProgress);
+          stop.parcel.position.y = 1.65 + Math.sin(deliveryProgress * Math.PI) * 1.3;
+        }
+      }
+
+      const nearRoadClosure = current.driveway !== null || (current.position >= ROAD_CLOSURE.junctionDistance - 15 && current.position <= ROAD_CLOSURE.mergeEnd + 12);
+      if (nearRoadClosure && activeMovingBus) {
+        activeMovingBus.group.visible = false;
+        shownMovingBuses.add(activeMovingBus.placement.id);
+        activeMovingBus = null;
+      }
+
+      if (activeMovingBus && current.playing && !current.paused && !nearRoadClosure) {
+        movingBusDistance -= activeMovingBus.placement.speed * deltaSeconds;
+        const busFrame = getRouteFrame(Math.max(0, Math.min(DELIVERY_GAME_CONFIG.totalDistance, movingBusDistance)));
+        const busPosition = busFrame.position.clone().addScaledVector(busFrame.lateral, (activeMovingBus.placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset);
+        activeMovingBus.group.position.set(busPosition.x, 0, busPosition.z);
+        activeMovingBus.group.rotation.y = busFrame.yaw;
+        if (movingBusDistance < current.position - 45 || movingBusDistance < 0) {
+          activeMovingBus.group.visible = false;
+          activeMovingBus = null;
+        }
+      }
+
+      if (!activeMovingBus && !nearRoadClosure && current.playing && !current.paused) {
+        const nextBus = world.movingBuses.find(({ placement }) => (
+          current.position >= placement.distance && !shownMovingBuses.has(placement.id)
+        ));
+        if (nextBus) {
+          shownMovingBuses.add(nextBus.placement.id);
+          nextBus.group.visible = true;
+          movingBusDistance = Math.min(DELIVERY_GAME_CONFIG.totalDistance, current.position + 68);
+          activeMovingBus = nextBus;
+        }
+      }
+
+      renderer.render(scene, camera);
+      animationFrame = window.requestAnimationFrame(animate);
+    };
+
+    animationFrame = window.requestAnimationFrame(animate);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver.disconnect();
+      canvas.removeEventListener("webglcontextlost", handleContextLost);
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      const textures = new Set<THREE.Texture>();
+      world.root.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        geometries.add(object.geometry);
+        const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of objectMaterials) {
+          materials.add(material);
+          for (const value of Object.values(material)) {
+            if (value instanceof THREE.Texture) textures.add(value);
+          }
+        }
+      });
+      for (const texture of textures) texture.dispose();
+      for (const material of materials) material.dispose();
+      for (const geometry of geometries) geometry.dispose();
+      skyTexture.dispose();
+      renderer.dispose();
+    };
+  }, [deliveryBrand]);
+
+  return (
+    <section className={styles.scene3d} data-paused={paused ? "true" : "false"} aria-label="3D 배달 동네">
+      <canvas ref={canvasRef} className={styles.sceneCanvas} aria-label="자전거 뒤에서 바라보는 3D 배달 도로" />
+      <div className={styles.sceneVignette} aria-hidden="true" />
+      {webglFailed && (
+        <div className={styles.webglFallback} role="alert">
+          <strong>3D 화면을 표시하지 못했어요</strong>
+          <span>WebGL을 지원하는 최신 브라우저에서 다시 열어주세요.</span>
+        </div>
+      )}
+      {arriving && (
+        <div className={styles.deliveryMoment3d} role="status" aria-live="polite">
+          <BrandImage brand={deliveryBrand} kind="product" alt={`${deliveryBrand.productName} 전달`} />
+        </div>
+      )}
+    </section>
+  );
+}

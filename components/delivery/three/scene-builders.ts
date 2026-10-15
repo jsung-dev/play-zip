@@ -1,0 +1,706 @@
+import * as THREE from "three";
+import {
+  BUS_PLACEMENTS,
+  DELIVERY_BRANDS,
+  DELIVERY_GAME_CONFIG,
+  OBSTACLE_PLACEMENTS,
+  SCENERY_ITEMS,
+  type BusPlacement,
+  type DeliveryBrand,
+  type ObstaclePlacement,
+} from "@/data/delivery-game";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDrivewayFrame, getDrivewayLength, type DetourChoice } from "@/data/delivery-map";
+import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
+import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
+import { BUS_AD_PANELS } from "@/data/delivery-outdoor-ads";
+import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-material";
+import { createOutdoorAdvertisement } from "./outdoor-ad-model";
+import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
+
+export type BikeRig = {
+  group: THREE.Group;
+  wheels: THREE.Group[];
+  pedal: THREE.Group;
+  leftLeg: THREE.Group;
+  rightLeg: THREE.Group;
+};
+
+export type MovingBusRig = {
+  placement: BusPlacement;
+  group: THREE.Group;
+};
+
+export type ObstacleRig = {
+  id: string;
+  distance: number;
+  x: number;
+  halfWidth: number;
+  group: THREE.Group;
+};
+
+export type DeliveryWorld = {
+  root: THREE.Group;
+  bicycle: BikeRig;
+  worldObjects: THREE.Object3D[];
+  movingBuses: MovingBusRig[];
+  obstacles: ObstacleRig[];
+  deliveryStops: DeliveryStopRig[];
+  destination: THREE.Group;
+  horizon: THREE.Group;
+};
+
+export type DeliveryStopRig = {
+  distance: number;
+  side: number;
+  padMaterial: THREE.MeshBasicMaterial;
+  edgeMaterial: THREE.MeshBasicMaterial;
+  progressRing: THREE.Mesh;
+  parcel: THREE.Group;
+  waitingSign: THREE.Mesh;
+  completedSign: THREE.Mesh;
+};
+
+function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.arcTo(x + width, y, x + width, y + height, safeRadius);
+  context.arcTo(x + width, y + height, x, y + height, safeRadius);
+  context.arcTo(x, y + height, x, y, safeRadius);
+  context.arcTo(x, y, x + width, y, safeRadius);
+  context.closePath();
+}
+
+function makeTextTexture({
+  title,
+  subtitle,
+  background,
+  foreground,
+  width = 512,
+  height = 256,
+}: {
+  title: string;
+  subtitle?: string;
+  background: string;
+  foreground: string;
+  width?: number;
+  height?: number;
+}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return new THREE.CanvasTexture(canvas);
+
+  context.fillStyle = background;
+  roundedRect(context, 4, 4, width - 8, height - 8, 22);
+  context.fill();
+  context.lineWidth = 3;
+  context.strokeStyle = foreground;
+  context.stroke();
+  context.fillStyle = foreground;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  let titleSize = Math.round(height * 0.32);
+  context.font = `800 ${titleSize}px "Malgun Gothic", sans-serif`;
+  while (context.measureText(title).width > width - 42 && titleSize > 16) {
+    titleSize -= 2;
+    context.font = `800 ${titleSize}px "Malgun Gothic", sans-serif`;
+  }
+  context.fillText(title, width / 2, subtitle ? height * 0.42 : height / 2);
+  if (subtitle) {
+    context.font = `600 ${Math.round(height * 0.145)}px "Malgun Gothic", sans-serif`;
+    context.fillText(subtitle, width / 2, height * 0.72);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function makeBrandPanelTexture(brand: DeliveryBrand) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 360;
+  const context = canvas.getContext("2d");
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  if (!context) return texture;
+
+  const drawBase = () => {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = brand.secondaryColor;
+    roundedRect(context, 4, 4, canvas.width - 8, canvas.height - 8, 24);
+    context.fill();
+    context.lineWidth = 3;
+    context.strokeStyle = brand.inkColor;
+    context.stroke();
+    context.fillStyle = brand.primaryColor;
+    context.beginPath();
+    context.arc(139, 179, 105, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = brand.inkColor;
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    context.font = '800 86px "Malgun Gothic", sans-serif';
+    context.fillText(brand.name, 252, 137, 365);
+    context.font = '700 40px "Malgun Gothic", sans-serif';
+    context.fillText(brand.productName, 270, 208, 335);
+    context.font = '500 26px "Malgun Gothic", sans-serif';
+    context.fillText(brand.slogan, 270, 264, 335);
+    texture.needsUpdate = true;
+  };
+
+  drawBase();
+  const image = new Image();
+  image.onload = () => {
+    drawBase();
+    const scale = Math.min(178 / image.naturalWidth, 274 / image.naturalHeight);
+    const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+    context.drawImage(image, 139 - width / 2, 180 - height / 2, width, height);
+    texture.needsUpdate = true;
+  };
+  image.src = brand.productImage;
+  return texture;
+}
+
+function texturedMaterial(imagePath: string, brand: DeliveryBrand, subtitle: string, aspectRatio: number) {
+  const canvasWidth = 768;
+  const fallback = makeTextTexture({
+    title: brand.name,
+    subtitle,
+    background: brand.secondaryColor,
+    foreground: brand.inkColor,
+    width: canvasWidth,
+    height: Math.round(canvasWidth / aspectRatio),
+  });
+  const material = new THREE.MeshBasicMaterial({ map: fallback, side: THREE.DoubleSide, toneMapped: false });
+  const image = new Image();
+  image.onload = () => {
+    const canvas = fallback.image as HTMLCanvasElement;
+    const context = canvas.getContext("2d");
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    if (!context || !imageWidth || !imageHeight) return;
+    const scale = Math.min(canvas.width / imageWidth, canvas.height / imageHeight);
+    const width = imageWidth * scale;
+    const height = imageHeight * scale;
+    context.fillStyle = brand.secondaryColor;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+    fallback.needsUpdate = true;
+  };
+  // The text drawing stays visible if a custom image is missing or fails to load.
+  image.onerror = () => {};
+  image.src = imagePath;
+  return material;
+}
+
+function markDistance<T extends THREE.Object3D>(object: T, distance: number) {
+  object.userData.routeDistance = distance;
+  return object;
+}
+
+// The taller, uncluttered viewport reveals the ground behind the starting bike.
+// Extend scenery only; gameplay still clamps the player's position to zero.
+function roadSceneryFrame(distance: number, branch: DetourChoice = "main") {
+  const frame = getRouteFrame(distance, branch);
+  if (distance < 0) frame.position.addScaledVector(frame.tangent, distance);
+  return frame;
+}
+
+function createRoadRibbon(width: number, material: THREE.Material, branch: DetourChoice = "main", y = 0, start: number = -45, end: number = DELIVERY_GAME_CONFIG.totalDistance, offset = 0) {
+  const segments = Math.max(12, Math.ceil((end - start) / 3));
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  for (let index = 0; index <= segments; index++) {
+    const distance = start + (end - start) * index / segments;
+    const frame = roadSceneryFrame(distance, branch);
+    for (const side of [-1, 1]) {
+      const point = frame.position.clone().addScaledVector(frame.lateral, offset + side * width / 2);
+      positions.push(point.x, y, point.z); uvs.push((side + 1) * width / 8, distance / 4);
+    }
+    if (index < segments) { const n = index * 2; indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices); geometry.computeVertexNormals();
+  return new THREE.Mesh(geometry, material);
+}
+
+function createRoad(art: SceneArt) {
+  const group = new THREE.Group();
+  const textureCanvas = document.createElement("canvas");
+  textureCanvas.width = textureCanvas.height = 128;
+  const context = textureCanvas.getContext("2d")!;
+  context.fillStyle = "#f1f2ef"; context.fillRect(0, 0, 128, 128);
+  let seed = 471;
+  for (let n = 0; n < 2200; n++) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const x = seed % 128; const y = (seed >>> 8) % 128;
+    context.fillStyle = n % 2 ? "rgba(56,70,65,.035)" : "rgba(255,255,255,.2)";
+    context.fillRect(x, y, 1, 1);
+  }
+  const grain = new THREE.CanvasTexture(textureCanvas);
+  grain.wrapS = grain.wrapT = THREE.RepeatWrapping;
+  grain.colorSpace = THREE.SRGBColorSpace; grain.anisotropy = 4;
+  const road = new THREE.MeshLambertMaterial({ color: TOWN_COLORS.road, map: grain });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), art.material(TOWN_COLORS.lawn));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -.14; group.add(ground);
+  group.add(createRoadRibbon(DELIVERY_GAME_CONFIG.roadWidth, road));
+  const pavedSections = [[-45, ROAD_CLOSURE.junctionDistance - 20], [ROAD_CLOSURE.mergeEnd + 18, DELIVERY_GAME_CONFIG.totalDistance]];
+  for (const [start, end] of pavedSections) {
+    for (const side of [-1, 1]) {
+      group.add(createRoadRibbon(3.4, art.material("#b0b7ab"), "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset));
+      group.add(createRoadRibbon(2.3, art.material(TOWN_COLORS.pavement), "main", .025, start, end, side * 8.95));
+      group.add(createRoadRibbon(.19, art.material(TOWN_COLORS.curb), "main", .052, start, end, side * 7.8));
+      group.add(createRoadRibbon(.12, art.material("#e5e4d4"), "main", .04, start, end, side * (DELIVERY_GAME_CONFIG.roadWidth / 2 - .1)));
+    }
+  }
+  const forkStart = ROAD_CLOSURE.junctionDistance - 18, forkEnd = ROAD_CLOSURE.mergeEnd + 18;
+  for (const branch of ["left", "right"] as const) {
+    group.add(createRoadRibbon(9.3, art.material(TOWN_COLORS.pavement), branch, -.015, forkStart, forkEnd));
+    group.add(createRoadRibbon(8.2, new THREE.MeshLambertMaterial({ color: branch === "left" ? "#849e98" : "#919caa", map: grain }), branch, branch === "left" ? .027 : .029, forkStart, forkEnd));
+  }
+  const dashes = new THREE.InstancedMesh(new THREE.BoxGeometry(.13, .018, 3.4), art.material("#fff8e6"), Math.ceil((DELIVERY_GAME_CONFIG.totalDistance + 40) / 10) * 2);
+  const dummy = new THREE.Object3D(); let count = 0;
+  for (let distance = -32; distance < DELIVERY_GAME_CONFIG.totalDistance; distance += 10) {
+    const frame = roadSceneryFrame(distance);
+    for (const offset of [-DELIVERY_GAME_CONFIG.laneSpacing / 2, DELIVERY_GAME_CONFIG.laneSpacing / 2]) {
+      const point = frame.position.clone().addScaledVector(frame.lateral, offset);
+      dummy.position.set(point.x, .047, point.z); dummy.rotation.y = frame.yaw; dummy.updateMatrix();
+      dashes.setMatrixAt(count++, dummy.matrix);
+    }
+  }
+  dashes.count = count; dashes.instanceMatrix.needsUpdate = true; group.add(dashes);
+  return group;
+}
+
+function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourChoice = "main") {
+  const frame = getRouteFrame(distance, branch);
+  const lateralOffset = object.position.x;
+  object.position.set(frame.position.x + frame.lateral.x * lateralOffset, object.position.y, frame.position.z + frame.lateral.z * lateralOffset);
+  object.rotation.y += frame.yaw;
+}
+
+function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt, brand: DeliveryBrand) {
+  const index = DELIVERY_STOPS.findIndex((item) => item.id === stop.id);
+  const length = getDrivewayLength(index);
+  const frame = getDrivewayFrame(index, length);
+  const house = art.building({ id: stop.id, distance: stop.distance, side: stop.side, type: "house", variant: index });
+  house.position.copy(frame.position).addScaledVector(frame.tangent, 7.8);
+  house.rotation.y = frame.yaw;
+  const marker = markDistance(new THREE.Group(), stop.distance);
+  const width = DELIVERY_GAME_CONFIG.drivewayWidth;
+  const padMaterial = new THREE.MeshBasicMaterial({ color: "#ead99e", transparent: true, opacity: .32, depthWrite: false, side: THREE.DoubleSide });
+  const edgeMaterial = new THREE.MeshBasicMaterial({ color: "#fae4ab", side: THREE.DoubleSide, toneMapped: false });
+  const ribbon = (ribbonWidth: number, material: THREE.Material, start = 0, end = length, offset = 0, y = .065) => {
+    const positions: number[] = [], indices: number[] = [];
+    for (let n = 0; n <= 40; n++) {
+      const distance = start + (end - start) * n / 40;
+      const segment = getDrivewayFrame(index, distance);
+      if (distance > length) segment.position.addScaledVector(segment.tangent, distance - length);
+      for (const side of [-1, 1]) {
+        const point = segment.position.clone().addScaledVector(segment.lateral, offset + side * ribbonWidth / 2);
+        positions.push(point.x, y, point.z);
+      }
+      if (n < 40) { const i = n * 2; indices.push(i, i + 1, i + 2, i + 1, i + 3, i + 2); }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices); geometry.computeVertexNormals();
+    return new THREE.Mesh(geometry, material);
+  };
+  marker.add(ribbon(width + .5, art.material("#f1ead9"), 0, length + 3));
+  marker.add(ribbon(width, art.material("#b9c6b4"), 0, length + 3, 0, .076));
+  marker.add(ribbon(width, padMaterial, length - DELIVERY_GAME_CONFIG.drivewayDeliveryDepth, length + 3, 0, .09));
+  for (const offset of [-width / 2, width / 2]) marker.add(ribbon(.12, edgeMaterial, 0, length + 3, offset, .095));
+
+  // Fixed painted route arrows make the entrance visible before any UI cue.
+  for (const progress of [3, 10, 17]) {
+    const arrowFrame = getDrivewayFrame(index, progress);
+    const arrow = new THREE.Group();
+    const arrowMaterial = art.material("#fff9df");
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(.18, .025, 1.5), arrowMaterial);
+    arrow.add(stem);
+    for (const side of [-1, 1]) {
+      const head = new THREE.Mesh(new THREE.BoxGeometry(.16, .025, .8), arrowMaterial);
+      head.position.set(side * .24, 0, -.58); head.rotation.y = side * -.65; arrow.add(head);
+    }
+    arrow.position.copy(arrowFrame.position); arrow.position.y = .105; arrow.rotation.y = arrowFrame.yaw;
+    marker.add(arrow);
+  }
+  const entrance = new THREE.Group();
+  const entranceSign = new THREE.Mesh(new THREE.PlaneGeometry(4, 1.4), new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: stop.side === "left" ? "← 집 앞 배달" : "집 앞 배달 →", subtitle: stop.address, background: "#f4eed8", foreground: "#4d6a54" }), side: THREE.DoubleSide, toneMapped: false,
+  }));
+  art.put(entrance, art.cylinder(.065, .08, 3.4, TOWN_COLORS.metal), 0, 1.7, 0);
+  art.put(entrance, entranceSign, 0, 3.5, .06);
+  entrance.position.x = (stop.side === "left" ? -1 : 1) * 7.8;
+  placeOnRoute(entrance, stop.distance - 4); marker.add(entrance);
+  const furniture = new THREE.Group();
+  const side = stop.side === "left" ? -1 : 1;
+  art.put(furniture, art.cylinder(.065, .065, 3.6, TOWN_COLORS.metal), 0, 1.8, -5.0);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 1.4), new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: `0${index + 1}  배달 구역`, subtitle: stop.address, background: "#fff5d8", foreground: "#56644f" }), toneMapped: false, side: THREE.DoubleSide,
+  }));
+  art.put(furniture, sign, 0, 3.6, -4.9);
+  const completedSign = new THREE.Mesh(sign.geometry, new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: "✓ 배달 완료", subtitle: stop.address, background: "#e1f1dd", foreground: "#426e57" }), toneMapped: false, side: THREE.DoubleSide,
+  }));
+  art.put(furniture, completedSign, 0, 3.6, -4.9);
+  completedSign.visible = false;
+
+  const groundLabel = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.8), new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: `배달 0${index + 1}`, background: "#f5e8bd", foreground: "#766847", width: 512, height: 220 }), transparent: true, toneMapped: false,
+  }));
+  groundLabel.rotation.x = -Math.PI / 2;
+  art.put(furniture, groundLabel, 0, .108, 1.9);
+  const progressRing = new THREE.Mesh(new THREE.RingGeometry(1.48, 1.66, 64, 1, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#fff9d8", side: THREE.DoubleSide, toneMapped: false }));
+  progressRing.rotation.x = -Math.PI / 2;
+  art.put(furniture, progressRing, 0, .11, .3);
+  progressRing.visible = false;
+  furniture.position.copy(frame.position); furniture.rotation.y = frame.yaw;
+  marker.add(furniture);
+  for (const x of [-width / 2 - .5, width / 2 + .5]) {
+    art.put(furniture, art.box(.8, .48, 1.3, "#cfbea2", .07), x, .24, -2);
+    const bush = art.sphere(.55, "#8ca77f"); bush.scale.z = 1.5;
+    art.put(furniture, bush, x, .7, -2);
+  }
+
+  const parcel = new THREE.Group();
+  art.put(parcel, art.box(.6, .8, .46, brand.secondaryColor, .05), 0, 0, 0);
+  art.put(parcel, new THREE.Mesh(new THREE.PlaneGeometry(.57, .8), texturedMaterial(brand.productImage, brand, brand.productName, .57 / .8)), 0, 0, .24);
+  parcel.visible = false;
+  parcel.rotation.y = frame.yaw;
+  marker.add(parcel);
+  marker.userData.stopId = stop.id;
+  const rig: DeliveryStopRig = { distance: stop.distance, side, padMaterial, edgeMaterial, progressRing, parcel, waitingSign: sign, completedSign };
+  return { house, marker, rig };
+}
+
+function createRoadClosure() {
+  const group = new THREE.Group();
+  const frame = getRouteFrame(ROAD_CLOSURE.distance);
+  const barrier = new THREE.Mesh(new THREE.BoxGeometry(DELIVERY_GAME_CONFIG.roadWidth, 1.25, 0.45), new THREE.MeshLambertMaterial({ color: "#f0c35d" }));
+  barrier.position.y = 0.78;
+  group.add(barrier);
+  for (let index = -4; index <= 4; index += 1) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.3, 0.48), new THREE.MeshLambertMaterial({ color: index % 2 ? "#fff1d2" : "#df8067" }));
+    stripe.position.set(index * 1.15, 0.78, 0.25);
+    stripe.rotation.z = -0.36;
+    group.add(stripe);
+  }
+  const notice = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.15), new THREE.MeshBasicMaterial({ map: makeTextTexture({ title: "앞길 공사 중", subtitle: "갈림길로 돌아가 우회하세요", background: "#fff0d1", foreground: "#8b5645" }), toneMapped: false }));
+  notice.position.set(0, 2.4, 0.28);
+  group.add(notice);
+  group.position.copy(frame.position);
+  group.position.y = 0;
+  group.rotation.y = frame.yaw;
+  markDistance(group, ROAD_CLOSURE.distance);
+  group.userData.roadClosure = true;
+  return group;
+}
+
+function createAdvanceDetourSign() {
+  const distance = ROAD_CLOSURE.junctionDistance - 55;
+  const group = markDistance(new THREE.Group(), distance);
+  const frameMaterial = new THREE.MeshLambertMaterial({ color: "#6f7768" });
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(5.25, 2.3, 0.16), frameMaterial);
+  backing.position.y = 3.2;
+  const graphic = new THREE.Mesh(
+    new THREE.PlaneGeometry(5.08, 2.13),
+    new THREE.MeshBasicMaterial({
+      map: makeTextTexture({ title: "앞길 공사 · 갈림길", subtitle: "왼쪽 또는 오른쪽 차선으로", background: "#fff0cf", foreground: "#694f42", width: 768, height: 320 }),
+      toneMapped: false,
+    }),
+  );
+  graphic.position.set(0, 3.2, 0.09);
+  group.add(backing, graphic);
+  for (const x of [-1.65, 1.65]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.05, 0.14), frameMaterial);
+    leg.position.set(x, 1.1, -0.06);
+    group.add(leg);
+  }
+  group.position.set(-8.7, 0.1, -distance);
+  return group;
+}
+
+function createDetourArrow(branch: Exclude<DetourChoice, "main">, distance: number) {
+  const frame = getRouteFrame(distance, branch);
+  const arrowShape = new THREE.Shape();
+  arrowShape.moveTo(0, 5.2);
+  arrowShape.lineTo(1.2, 2.8);
+  arrowShape.lineTo(0.48, 2.8);
+  arrowShape.lineTo(0.48, 0);
+  arrowShape.lineTo(-0.48, 0);
+  arrowShape.lineTo(-0.48, 2.8);
+  arrowShape.lineTo(-1.2, 2.8);
+  arrowShape.closePath();
+  const shapeGeometry = new THREE.ShapeGeometry(arrowShape);
+  const flatPositions: number[] = [];
+  const source = shapeGeometry.getAttribute("position");
+  for (let index = 0; index < source.count; index += 1) {
+    const side = source.getX(index);
+    const forward = source.getY(index);
+    const point = frame.position.clone()
+      .addScaledVector(frame.lateral, side)
+      .addScaledVector(frame.tangent, forward);
+    flatPositions.push(point.x, 0.055, point.z);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(flatPositions, 3));
+  geometry.setIndex(shapeGeometry.getIndex());
+  geometry.computeVertexNormals();
+  shapeGeometry.dispose();
+  const arrow = markDistance(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: "#fff5d2", side: THREE.DoubleSide })), distance);
+  arrow.userData.detour = branch;
+  return arrow;
+}
+
+function createForkDirectionSign(branch: Exclude<DetourChoice, "main">) {
+  const distance = ROAD_CLOSURE.junctionDistance + 7;
+  const group = markDistance(new THREE.Group(), distance);
+  const left = branch === "left";
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3.4, 0.18), new THREE.MeshLambertMaterial({ color: "#70877d" }));
+  post.position.y = 1.7;
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(5.8, 2.2, 0.16), new THREE.MeshLambertMaterial({ color: left ? "#6d9d83" : "#887ca7" }));
+  backing.position.y = 3.65;
+  const graphic = new THREE.Mesh(new THREE.PlaneGeometry(5.62, 2.03), new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: left ? "← 왼쪽 길" : "오른쪽 길 →", subtitle: "공사 구간 우회", background: left ? "#e6f4e3" : "#eee7f7", foreground: left ? "#42634f" : "#5b4e71", width: 768, height: 300 }),
+    toneMapped: false,
+  }));
+  graphic.position.set(0, 3.65, 0.09);
+  group.add(post, backing, graphic);
+  group.position.set(left ? -7.6 : 7.6, 0, 0);
+  return group;
+}
+
+
+function createBus(placement: BusPlacement, art: SceneArt, resources: OutdoorAdResources) {
+  const brand = DELIVERY_BRANDS[placement.brandId], group = new THREE.Group();
+  art.shadow(group, 4.1, 7.8, .2, .1);
+  art.put(group, art.box(2.6, 2.05, 6.0, brand.primaryColor, .19), 0, 1.48, 0);
+  art.put(group, art.box(2.5, .24, 5.8, "#fff7e7", .1), 0, 2.58, 0);
+  art.put(group, art.box(2.4, .14, 5.6, TOWN_COLORS.metal, .045), 0, .59, 0);
+  for (const side of [-1, 1]) {
+    for (const z of [-1.9, -.6, .7, 2.0]) art.put(group, art.box(.045, .68, 1.08, "#517878", .04), side * 1.312, 2.08, z);
+    for (const z of [-1.9, 1.9]) {
+      const tire = art.cylinder(.46, .46, .22, "#354d49"); tire.rotation.z = Math.PI / 2; art.put(group, tire, side * 1.33, .5, z);
+      const hub = art.cylinder(.23, .23, .235, "#e4e3d2"); hub.rotation.z = Math.PI / 2; art.put(group, hub, side * 1.35, .5, z);
+    }
+    for (const z of [-3.015, 3.015]) art.put(group, art.box(.38, .17, .04, z < 0 ? "#fff3cd" : "#db816b", .03), side * .82, .9, z);
+  }
+  for (const z of [-3.01, 3.01]) {
+    art.put(group, art.box(2.1, .77, .025, "#6a9a98", .07), 0, 2.05, z);
+    art.put(group, art.box(.55, .18, .035, "#f8eed7", .025), 0, .85, z * 1.004);
+  }
+  art.merge(group);
+  for (const slot of BUS_AD_PANELS.filter(ad => ad.busId === placement.id)) {
+    const panel = resources.panel(slot, slot.width);
+    panel.position.set(...slot.position);
+    panel.rotation.set(...slot.rotationDegrees.map(deg => THREE.MathUtils.degToRad(deg)) as [number, number, number]);
+    group.add(panel);
+  }
+  group.position.x = (placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset;
+  return group;
+}
+
+function createObstacle(placement: ObstaclePlacement): ObstacleRig {
+  const group = markDistance(new THREE.Group(), placement.distance);
+  group.position.x = (placement.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
+  group.position.z = -placement.distance;
+  group.userData.obstacleId = placement.id;
+  const body = new THREE.MeshLambertMaterial({ color: "#ef714f", transparent: true, opacity: 1 });
+  const light = new THREE.MeshLambertMaterial({ color: "#fff1cb", transparent: true, opacity: 1 });
+  const dark = new THREE.MeshLambertMaterial({ color: "#455a54", transparent: true, opacity: 1 });
+  const shadow = new THREE.MeshBasicMaterial({ color: "#344944", transparent: true, opacity: 0.2 });
+  const shadowMesh = new THREE.Mesh(new THREE.CircleGeometry(1.55, 18), shadow);
+  shadowMesh.rotation.x = -Math.PI / 2;
+  shadowMesh.position.y = 0.025;
+  group.add(shadowMesh);
+
+  if (placement.kind === "cones") {
+    for (const x of [-0.76, 0, 0.76]) {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.12, 8), dark);
+      base.position.set(x, 0.08, 0);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.86, 8), body);
+      cone.position.set(x, 0.54, 0);
+      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.26, 0.13, 8), light);
+      stripe.position.set(x, 0.48, 0);
+      group.add(base, cone, stripe);
+    }
+  } else if (placement.kind === "barrier") {
+    const board = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.83, 0.22), body);
+    board.position.set(0, 0.95, 0);
+    group.add(board);
+    for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.82, 0.24), light);
+      stripe.position.set(x, 0.95, 0.02);
+      stripe.rotation.z = -0.55;
+      group.add(stripe);
+    }
+    for (const x of [-0.83, 0.83]) {
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.85, 0.2), dark);
+      foot.position.set(x, 0.45, 0);
+      group.add(foot);
+    }
+  } else {
+    const carton = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.92, 0.94), new THREE.MeshLambertMaterial({ color: "#c98c59", transparent: true, opacity: 1 }));
+    carton.position.set(0, 0.49, 0);
+    carton.rotation.y = 0.18;
+    const tape = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.94, 0.96), light);
+    tape.position.set(0, 0.49, 0);
+    group.add(carton, tape);
+  }
+
+  return { id: placement.id, distance: placement.distance, x: group.position.x, halfWidth: 1.2, group };
+}
+
+
+function createDestination(brand: DeliveryBrand, art: SceneArt) {
+  const group = markDistance(new THREE.Group(), DELIVERY_GAME_CONFIG.totalDistance);
+  art.shadow(group, 25, 14);
+  art.put(group, art.box(18, .3, 9, TOWN_COLORS.pavement, .1), 0, .15, 1.2);
+  art.put(group, art.box(17, 11, 5.4, "#f1e8d5", .12), 0, 5.65, 0);
+  art.put(group, art.box(4.1, 11.15, 5.6, "#c7dcd2", .08), 0, 5.68, .02);
+  art.put(group, art.box(17.6, .37, 5.9, "#70948b", .08), 0, 11.32, 0);
+  for (let row = 0; row < 5; row++) {
+    for (const x of [-6.7, -4.45, 4.45, 6.7]) art.windowOn(group, x, 1.75 + row * 1.85, 2.74, 1.12, 1.1);
+    if (row > 1) art.windowOn(group, 0, 1.75 + row * 1.85, 2.85, 1.55, 1.1);
+  }
+  art.put(group, art.box(3.4, 2.9, .16, "#5c8680", .06), 0, 1.6, 2.95);
+  art.put(group, art.box(2.7, 2.3, .045, "#91bdb6"), 0, 1.64, 3.05);
+  art.put(group, art.box(.09, 2.4, .045, "#fbf4df"), 0, 1.64, 3.1);
+  art.put(group, art.box(5.0, .22, 2.0, "#73968a", .05), 0, 3.2, 3.15);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.1), new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: "햇살 아파트 101동", background: "#fbf6e6", foreground: "#42645a", width: 1024, height: 160 }), toneMapped: false,
+  }));
+  art.put(group, sign, 0, 4.3, 2.97);
+  for (const side of [-1, 1]) {
+    art.put(group, art.box(3.3, .65, 1.4, "#c9b89a", .09), side * 6.7, .65, 3.6);
+    for (const x of [-.9, 0, .9]) { const bush = art.sphere(.8, "#83a383"); bush.scale.y = .8; art.put(group, bush, side * 6.7 + x, 1.35, 3.6); }
+  }
+  const arrivalZone = new THREE.Mesh(new THREE.PlaneGeometry(9.3, 9), new THREE.MeshBasicMaterial({ color: "#f7dfa1", transparent: true, opacity: .5, depthWrite: false, side: THREE.DoubleSide }));
+  arrivalZone.rotation.x = -Math.PI / 2; art.put(group, arrivalZone, 0, .06, 7.5);
+  art.merge(group);
+  return group;
+}
+
+export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
+  const root = new THREE.Group();
+  scene.add(root);
+  const worldObjects: THREE.Object3D[] = [];
+  const movingBuses: MovingBusRig[] = [];
+  const obstacles: ObstacleRig[] = [];
+  const deliveryStops: DeliveryStopRig[] = [];
+  const art = createSceneArt();
+  const advertisements = resolveAdvertisements();
+  const outdoorResources = createOutdoorAdResources();
+  const adViews = advertisementSightlines(advertisements);
+  root.add(createRoad(art));
+  const horizon = art.horizon();
+  root.add(horizon);
+
+  // Templates share geometry/materials. Batch nearby static facades by material
+  // once, then let the existing distance culling hide whole small street blocks.
+  const streetChunks = new Map<number, THREE.Group>();
+  for (const item of buildStreetLayout(advertisements)) {
+    const chunkId = Math.floor(item.distance / STREET_BUILDINGS.chunkLength);
+    let chunk = streetChunks.get(chunkId);
+    if (!chunk) {
+      chunk = markDistance(new THREE.Group(), (chunkId + .5) * STREET_BUILDINGS.chunkLength);
+      chunk.name = `commercial-street-${chunkId}`;
+      streetChunks.set(chunkId, chunk);
+    }
+    const model = art.building(item, true), transform = streetTransform(item);
+    model.position.copy(transform.position); model.rotation.y = transform.yaw;
+    chunk.add(model);
+  }
+  for (const chunk of streetChunks.values()) { art.merge(chunk); root.add(chunk); worldObjects.push(chunk); }
+
+  for (const item of SCENERY_ITEMS) {
+    if (item.type === "house" || item.type === "shop") continue;
+    if (!sceneryHasClearance(item, advertisements)) continue;
+    let object: THREE.Object3D;
+    if (item.type === "tree") object = art.tree(item);
+    else if (item.type === "lamp") object = art.lamp(item);
+    else if (item.type === "bus-stop") object = art.shelter(item);
+    else object = art.building(item);
+    placeOnRoute(object, item.distance);
+    const bounds = new THREE.Box3().setFromObject(object);
+    if (adViews.some(({ from, to }) => {
+      const hit = new THREE.Ray(from, to.clone().sub(from).normalize()).intersectBox(bounds, new THREE.Vector3());
+      return hit && from.distanceTo(hit) < from.distanceTo(to);
+    })) continue;
+    root.add(object);
+    worldObjects.push(object);
+  }
+
+  for (const placement of advertisements) {
+    const ad = createOutdoorAdvertisement(placement, art, outdoorResources);
+    root.add(ad);
+    worldObjects.push(ad);
+  }
+
+  for (const placement of BUS_PLACEMENTS) {
+    const bus = createBus(placement, art, outdoorResources);
+    if (placement.mode === "parked") {
+      bus.position.x = (placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset;
+      bus.position.y = 0;
+      placeOnRoute(bus, placement.distance);
+      markDistance(bus, placement.distance);
+      worldObjects.push(bus);
+    } else {
+      bus.visible = false;
+      movingBuses.push({ placement, group: bus });
+    }
+    root.add(bus);
+  }
+
+  for (const placement of OBSTACLE_PLACEMENTS) {
+    const obstacle = createObstacle(placement);
+    placeOnRoute(obstacle.group, placement.distance);
+    obstacles.push(obstacle);
+    worldObjects.push(obstacle.group);
+    root.add(obstacle.group);
+  }
+
+  for (const stop of DELIVERY_STOPS) {
+    const { house, marker, rig } = createDeliveryStop(stop, art, brand);
+    deliveryStops.push(rig);
+    root.add(house, marker);
+    worldObjects.push(house, marker);
+  }
+
+  const closure = createRoadClosure();
+  root.add(closure);
+  worldObjects.push(closure);
+  const advanceSign = createAdvanceDetourSign();
+  placeOnRoute(advanceSign, ROAD_CLOSURE.junctionDistance - 55);
+  root.add(advanceSign);
+  worldObjects.push(advanceSign);
+  for (const branch of ["left", "right"] as const) {
+    const sign = createForkDirectionSign(branch);
+    placeOnRoute(sign, ROAD_CLOSURE.junctionDistance + 7);
+    root.add(sign);
+    worldObjects.push(sign);
+    for (const offset of [18, 47]) {
+      const arrow = createDetourArrow(branch, ROAD_CLOSURE.junctionDistance + offset);
+      root.add(arrow);
+      worldObjects.push(arrow);
+    }
+  }
+
+  const destination = createDestination(brand, art);
+  const destinationFrame = getRouteFrame(DELIVERY_GAME_CONFIG.totalDistance);
+  destination.position.copy(destinationFrame.position).addScaledVector(destinationFrame.tangent, 7);
+  destination.rotation.y = destinationFrame.yaw;
+  root.add(destination);
+  const bicycle = art.bicycle(brand, makeBrandPanelTexture(brand), texturedMaterial(brand.productImage, brand, brand.productName, .32 / .53));
+  root.add(bicycle.group);
+
+  return { root, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
+}

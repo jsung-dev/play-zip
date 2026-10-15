@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <rect width="800" height="400" rx="28" fill="#faf5e9"/>
+  <rect x="18" y="18" width="764" height="364" rx="20" fill="none" stroke="#b7a8d4" stroke-width="8"/>
+  <circle cx="647" cy="155" r="65" fill="#f6d58a"/><path d="M580 188h134v25a67 67 0 0 1-134 0Z" fill="#b7a8d4"/>
+  <g font-family="Malgun Gothic, sans-serif" fill="#615379"><text x="55" y="168" font-size="76" font-weight="700">맛있는우유</text><text x="55" y="238" font-size="29">우리 집에 도착한 작은 행복</text><text x="55" y="325" font-size="18">공식 광고가 아닌 테스트 디자인</text></g>
+</svg>

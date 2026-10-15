@@ -2,3 +2,5 @@
 .remotion
 .local-logs
 .preview
+.env*
+test-artifacts/

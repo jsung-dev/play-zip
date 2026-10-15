@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 325">
+  <g stroke="#345d78" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M62 72 91 30h83l19 42v226H62Z" fill="#f5f8f3"/>
+    <path d="m62 72 29-42v42Zm29-42h83l19 42H91Z" fill="#d2e5ee"/>
+    <path d="M62 91h131v107c-44-21-87 24-131 0Z" fill="#92bed9" stroke="none"/>
+    <path d="M91 30v-9h80v9" fill="#f5f8f3"/>
+    <path d="M128 109c-8 15-25 32-25 45a25 25 0 0 0 50 0c0-13-17-30-25-45Z" fill="#fffdf5" stroke="none"/>
+  </g>
+  <g font-family="Malgun Gothic, sans-serif" text-anchor="middle" fill="#345d78">
+    <text x="128" y="236" font-size="23" font-weight="700">서울우유</text>
+    <text x="128" y="260" font-size="13">데일리 우유</text>
+    <text x="128" y="282" font-size="9" letter-spacing="1.2">TEST DESIGN</text>
+  </g>
+</svg>
