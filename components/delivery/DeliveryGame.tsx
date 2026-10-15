@@ -367,6 +367,9 @@ export function DeliveryGame() {
   };
 
   const nextStop = DELIVERY_STOPS[frame.stopIndex];
+  const totalDeliveries = DELIVERY_STOPS.length + 1;
+  // Count completed handoffs, including the final destination after its animation.
+  const completedDeliveries = Math.min(totalDeliveries, frame.stopIndex + (status === "completed" ? 1 : 0));
   const canPause = status === "playing" || status === "arriving";
   const navigation = getDeliveryNavigation(frame, status === "arriving");
   const NavigationIcon = { forward: ArrowUp, left: ArrowLeft, right: ArrowRight, reverse: ArrowDown, fork: GitFork, stop: Pause, delivery: PackageCheck, complete: Check }[navigation.direction];
@@ -433,9 +436,9 @@ export function DeliveryGame() {
             )}
           </div>
           <div className={navStyles.progress}>
-            <span>{nextStop ? `배달 ${frame.stopIndex + 1} / ${DELIVERY_STOPS.length}` : `경유 ${DELIVERY_STOPS.length} / ${DELIVERY_STOPS.length}`}</span>
-            <div className={navStyles.segments} role="progressbar" aria-label="경유 배달 완료 수" aria-valuemin={0} aria-valuemax={DELIVERY_STOPS.length} aria-valuenow={frame.stopIndex}>
-              {DELIVERY_STOPS.map((stop, index) => <i key={stop.id} data-state={index < frame.stopIndex ? "complete" : index === frame.stopIndex ? "current" : "pending"} />)}
+            <span>배달 {completedDeliveries} / {totalDeliveries}</span>
+            <div className={navStyles.segments} role="progressbar" aria-label="배달 완료 수" aria-valuemin={0} aria-valuemax={totalDeliveries} aria-valuenow={completedDeliveries}>
+              {Array.from({ length: totalDeliveries }, (_, index) => <i key={index} data-state={index < completedDeliveries ? "complete" : "pending"} />)}
             </div>
           </div>
           </div>

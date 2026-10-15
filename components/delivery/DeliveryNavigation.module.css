@@ -16,7 +16,6 @@
 .progress { display: flex; align-items: center; gap: 16px; margin-top: 9px; padding-top: 8px; border-top: 1px solid #d3e3dc; font-size: 13px; font-weight: 750; }
 .segments { display: flex; flex: 1; gap: 6px; max-width: 170px; }
 .segments i { flex: 1; height: 7px; border-radius: 99px; background: #ddf3e9; }
-.segments i[data-state="current"] { background: #00c58e; }
 .segments i[data-state="complete"] { background: #007f5f; }
 .pauseCard .pauseSymbol { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 50%; background: #e6fbf2; color: #007f5f; }
 .pauseCard .pauseHint { margin-top: 10px; color: #52665f; font-size: 16px; }

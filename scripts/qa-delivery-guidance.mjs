@@ -1,6 +1,7 @@
 // Focused UI regression. Route fixtures reach unchanged quiz/arrival logic;
 // they are browser-only and do not add shipped debug controls or endpoints.
-// Run: node --import tsx scripts/qa-delivery-campaign.mjs
+// Run: node --import tsx scripts/qa-delivery-guidance.mjs
+// GUIDANCE_QA_COUNTER=1 checks only completed deliveries (0 through 4).
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -116,7 +117,30 @@ try {
  };
  await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
  await load();await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');await until(async()=>(await state()).status==='playing','start');
- if(process.env.GUIDANCE_QA_VISUAL==='1') {
+ if(process.env.GUIDANCE_QA_COUNTER==='1') {
+  const counter=()=>run(()=>{
+   const bar=document.querySelector('[data-navigation-hud] [role="progressbar"]');
+   return {label:bar.previousElementSibling.textContent,total:+bar.getAttribute('aria-valuemax'),value:+bar.getAttribute('aria-valuenow'),segments:bar.children.length,filled:bar.querySelectorAll('[data-state="complete"]').length,current:bar.querySelectorAll('[data-state="current"]').length};
+  });
+  const checkCount=async(value)=>{
+   const actual=await counter();
+   assert.deepEqual(actual,{label:`배달 ${value} / 4`,total:4,value,segments:4,filled:value,current:0});
+   results.push({status:(await state()).status,...actual});
+  };
+  await checkCount(0);
+  for(const [w,h] of [[335,568],[390,844],[430,932]])await checkHud(w,h);
+  await size(390,844);await screenshot('counter-start-390');
+  for(let n=1;n<=DELIVERY_STOPS.length;n++) {
+   await fixture({position:0,speed:0,stopIndex:n,quizPassedCount:n,driveway:null});
+   await until(async()=>(await state()).stop===n,'completed stop '+n);await checkCount(n);
+  }
+  await fixture({position:DELIVERY_GAME_CONFIG.totalDistance,speed:0,driveway:null});
+  await until(async()=>(await state()).status==='arriving','final handoff');await checkCount(3);
+  await until(async()=>(await state()).status==='completed','final completion');await checkCount(4);
+  await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');
+  await until(async()=>(await state()).status==='ready','restart');await checkCount(0);
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,counterStates:results,runtimeErrors:errors},null,2));
+ } else if(process.env.GUIDANCE_QA_VISUAL==='1') {
   // A touch that begins in the new HUD must not start the floating joystick.
   await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:170,y:94,id:1}]});
   await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:170,y:180,id:1}]});await delay(250);
@@ -175,7 +199,7 @@ try {
  console.log(JSON.stringify({passed:true,results:results.length,out},null,2));
  }
 } finally {
- await writeFile(join(out,process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
+ await writeFile(join(out,process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
  try{if(ws?.readyState===1)ws.send(JSON.stringify({id:++id,method:'Browser.close'}));}catch{}
  await delay(400);browser.kill();ws?.close();for(const p of pending.values())clearTimeout(p.timer);
  if(resolve(profile).startsWith(resolve(tmpdir())+sep)&&basename(profile).startsWith('delivery-guidance-qa-'))await rm(profile,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});
