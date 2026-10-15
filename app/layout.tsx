@@ -10,22 +10,22 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: {
-    default: "ODD PLAY | 심리테스트와 미니게임",
-    template: "%s | ODD PLAY",
+    default: "PLAY ZIP Games | 배달게임 개발실",
+    template: "%s | PLAY ZIP Games",
   },
-  description: "심리테스트, 연애, 밸런스 게임, 퀴즈와 미니게임을 한곳에서 즐겨보세요.",
+  description: "플랫폼과 독립적으로 개발하는 모바일 3D 배달게임입니다.",
   openGraph: {
-    title: "ODD PLAY | 심리테스트와 미니게임",
-    description: "짧지만 확실한 재미를 골라 즐기는 플레이 컬렉션.",
+    title: "PLAY ZIP Games | 배달게임 개발실",
+    description: "모바일 3D 자전거 배달게임 개발실.",
     type: "website",
     locale: "ko_KR",
-    siteName: "ODD PLAY",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "ODD PLAY" }],
+    siteName: "PLAY ZIP Games",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "PLAY ZIP Games" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ODD PLAY | 심리테스트와 미니게임",
-    description: "짧지만 확실한 재미를 골라 즐기는 플레이 컬렉션.",
+    title: "PLAY ZIP Games | 배달게임 개발실",
+    description: "모바일 3D 자전거 배달게임 개발실.",
     images: ["/opengraph-image"],
   },
 };

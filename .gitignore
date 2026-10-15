@@ -17,4 +17,12 @@ test-artifacts/video-ad/
 katalk-fact-checker/
 
 .env*
+!.env.example
 .remotion/
+
+# Generated QA results and local-only recovery artifacts.
+test-artifacts/
+.preview/
+.local-backups/
+*.bundle
+supabase/.temp/

@@ -4,3 +4,8 @@
 .preview
 .env*
 test-artifacts/
+.git/
+katalk-fact-checker/
+.local-backups/
+supabase/
+*.bundle
