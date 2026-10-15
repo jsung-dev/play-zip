@@ -52,12 +52,8 @@ export type DeliveryWorld = {
 export type DeliveryStopRig = {
   distance: number;
   side: number;
-  padMaterial: THREE.MeshBasicMaterial;
-  edgeMaterial: THREE.MeshBasicMaterial;
-  progressRing: THREE.Mesh;
+  house: THREE.Group;
   parcel: THREE.Group;
-  waitingSign: THREE.Mesh;
-  completedSign: THREE.Mesh;
 };
 
 function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -292,9 +288,10 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
   const house = art.building({ id: stop.id, distance: stop.distance, side: stop.side, type: "house", variant: index });
   house.position.copy(frame.position).addScaledVector(frame.tangent, 7.8);
   house.rotation.y = frame.yaw;
+  house.name = `delivery-house-${stop.id}`;
+  house.userData.deliveryStopId = stop.id;
   const marker = markDistance(new THREE.Group(), stop.distance);
   const width = DELIVERY_GAME_CONFIG.drivewayWidth;
-  const padMaterial = new THREE.MeshBasicMaterial({ color: "#ead99e", transparent: true, opacity: .32, depthWrite: false, side: THREE.DoubleSide });
   const edgeMaterial = new THREE.MeshBasicMaterial({ color: "#fae4ab", side: THREE.DoubleSide, toneMapped: false });
   const ribbon = (ribbonWidth: number, material: THREE.Material, start = 0, end = length, offset = 0, y = .065) => {
     const positions: number[] = [], indices: number[] = [];
@@ -315,53 +312,11 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
   };
   marker.add(ribbon(width + .5, art.material("#f1ead9"), 0, length + 3));
   marker.add(ribbon(width, art.material("#b9c6b4"), 0, length + 3, 0, .076));
-  marker.add(ribbon(width, padMaterial, length - DELIVERY_GAME_CONFIG.drivewayDeliveryDepth, length + 3, 0, .09));
   for (const offset of [-width / 2, width / 2]) marker.add(ribbon(.12, edgeMaterial, 0, length + 3, offset, .095));
 
-  // Fixed painted route arrows make the entrance visible before any UI cue.
-  for (const progress of [3, 10, 17]) {
-    const arrowFrame = getDrivewayFrame(index, progress);
-    const arrow = new THREE.Group();
-    const arrowMaterial = art.material("#fff9df");
-    const stem = new THREE.Mesh(new THREE.BoxGeometry(.18, .025, 1.5), arrowMaterial);
-    arrow.add(stem);
-    for (const side of [-1, 1]) {
-      const head = new THREE.Mesh(new THREE.BoxGeometry(.16, .025, .8), arrowMaterial);
-      head.position.set(side * .24, 0, -.58); head.rotation.y = side * -.65; arrow.add(head);
-    }
-    arrow.position.copy(arrowFrame.position); arrow.position.y = .105; arrow.rotation.y = arrowFrame.yaw;
-    marker.add(arrow);
-  }
-  const entrance = new THREE.Group();
-  const entranceSign = new THREE.Mesh(new THREE.PlaneGeometry(4, 1.4), new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: stop.side === "left" ? "← 집 앞 배달" : "집 앞 배달 →", subtitle: stop.address, background: "#f4eed8", foreground: "#4d6a54" }), side: THREE.DoubleSide, toneMapped: false,
-  }));
-  art.put(entrance, art.cylinder(.065, .08, 3.4, TOWN_COLORS.metal), 0, 1.7, 0);
-  art.put(entrance, entranceSign, 0, 3.5, .06);
-  entrance.position.x = (stop.side === "left" ? -1 : 1) * 7.8;
-  placeOnRoute(entrance, stop.distance - 4); marker.add(entrance);
+  // Current-target guidance is rendered separately from permanent road geometry.
   const furniture = new THREE.Group();
   const side = stop.side === "left" ? -1 : 1;
-  art.put(furniture, art.cylinder(.065, .065, 3.6, TOWN_COLORS.metal), 0, 1.8, -5.0);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 1.4), new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: `0${index + 1}  배달 구역`, subtitle: stop.address, background: "#fff5d8", foreground: "#56644f" }), toneMapped: false, side: THREE.DoubleSide,
-  }));
-  art.put(furniture, sign, 0, 3.6, -4.9);
-  const completedSign = new THREE.Mesh(sign.geometry, new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: "✓ 배달 완료", subtitle: stop.address, background: "#e1f1dd", foreground: "#426e57" }), toneMapped: false, side: THREE.DoubleSide,
-  }));
-  art.put(furniture, completedSign, 0, 3.6, -4.9);
-  completedSign.visible = false;
-
-  const groundLabel = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.8), new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: `배달 0${index + 1}`, background: "#f5e8bd", foreground: "#766847", width: 512, height: 220 }), transparent: true, toneMapped: false,
-  }));
-  groundLabel.rotation.x = -Math.PI / 2;
-  art.put(furniture, groundLabel, 0, .108, 1.9);
-  const progressRing = new THREE.Mesh(new THREE.RingGeometry(1.48, 1.66, 64, 1, Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#fff9d8", side: THREE.DoubleSide, toneMapped: false }));
-  progressRing.rotation.x = -Math.PI / 2;
-  art.put(furniture, progressRing, 0, .11, .3);
-  progressRing.visible = false;
   furniture.position.copy(frame.position); furniture.rotation.y = frame.yaw;
   marker.add(furniture);
   for (const x of [-width / 2 - .5, width / 2 + .5]) {
@@ -377,7 +332,7 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
   parcel.rotation.y = frame.yaw;
   marker.add(parcel);
   marker.userData.stopId = stop.id;
-  const rig: DeliveryStopRig = { distance: stop.distance, side, padMaterial, edgeMaterial, progressRing, parcel, waitingSign: sign, completedSign };
+  const rig: DeliveryStopRig = { distance: stop.distance, side, house, parcel };
   return { house, marker, rig };
 }
 
@@ -562,6 +517,7 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
 
 function createDestination(brand: DeliveryBrand, art: SceneArt) {
   const group = markDistance(new THREE.Group(), DELIVERY_GAME_CONFIG.totalDistance);
+  group.userData.entranceLocal = [0, 1.64, 3.1];
   art.shadow(group, 25, 14);
   art.put(group, art.box(18, .3, 9, TOWN_COLORS.pavement, .1), 0, .15, 1.2);
   art.put(group, art.box(17, 11, 5.4, "#f1e8d5", .12), 0, 5.65, 0);

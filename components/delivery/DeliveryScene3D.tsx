@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
-import { getRouteFrame, getDrivewayFrame, getDrivewayLength, isAtDrivewayDelivery, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { getRouteFrame, getDrivewayFrame, getDrivewayLength, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
 import { TOWN_COLORS } from "./three/scene-art";
 import { portraitCameraFov } from "./three/scene-layout";
+import { createRouteGuidance } from "./three/route-guidance";
 import styles from "./DeliveryGame.module.css";
 
 type SceneState = {
@@ -25,6 +26,8 @@ type SceneState = {
   deliveryPulse: number;
   deliverySuccessRemaining: number;
   driveway: DrivewayState | null;
+  guidanceReplay: number;
+  closureReached: boolean;
 };
 
 export function DeliveryScene3D({
@@ -42,12 +45,14 @@ export function DeliveryScene3D({
   deliveryPulse,
   deliverySuccessRemaining,
   driveway,
+  guidanceReplay,
+  closureReached,
   deliveryBrand,
 }: SceneState & { deliveryBrand: DeliveryBrand }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway });
+  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached });
   const [webglFailed, setWebglFailed] = useState(false);
-  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway };
+  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -90,6 +95,8 @@ export function DeliveryScene3D({
     scene.add(hemisphere, sun);
 
     const world = buildDeliveryWorld(scene, deliveryBrand);
+    const guidance = createRouteGuidance(world);
+    let replaySeen = guidanceReplay, highlightRemaining = 0;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let animationFrame = 0;
     let lastTime = performance.now();
@@ -139,7 +146,11 @@ export function DeliveryScene3D({
       if (current.sessionKey !== renderedSession) {
         renderedSession = current.sessionKey;
         resetMovingBuses();
+        highlightRemaining = 0;
+        replaySeen = current.guidanceReplay;
       }
+      if (current.guidanceReplay !== replaySeen) { replaySeen = current.guidanceReplay; highlightRemaining = 4; }
+      if (current.playing && !current.paused) highlightRemaining = Math.max(0, highlightRemaining - deltaSeconds);
 
       const mainFrame = getRouteFrame(current.position, current.detour);
       const routeFrame = current.driveway ? getDrivewayFrame(current.driveway.stopIndex, current.driveway.progress, current.driveway) : mainFrame;
@@ -203,17 +214,16 @@ export function DeliveryScene3D({
       }
       world.destination.visible = current.position > 790;
 
+      camera.updateMatrixWorld();
+      const guide = guidance.update(current, camera, canvas.clientHeight, highlightRemaining > 0, timestamp, current.playing || current.arriving);
+      // Semantic state for accessibility/QA; never an on-screen debug panel.
+      for (const [key, value] of Object.entries(guide)) {
+        const attribute = `guidance${key[0].toUpperCase()}${key.slice(1)}`;
+        if (canvas.dataset[attribute] !== String(value)) canvas.dataset[attribute] = String(value);
+      }
+
       for (const [index, stop] of world.deliveryStops.entries()) {
-        const complete = index < current.stopIndex;
-        const active = isAtDrivewayDelivery(current.driveway, index) && index === current.stopIndex;
         const progress = index === current.stopIndex ? Math.min(1, current.stopDwell / DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds) : 0;
-        stop.padMaterial.color.set(complete ? "#9bc9ad" : active ? "#f4d17d" : "#ead99e");
-        stop.padMaterial.opacity = complete ? .42 : active ? .5 : .32;
-        stop.edgeMaterial.color.set(complete ? "#c6ebc9" : "#fae4ab");
-        stop.waitingSign.visible = !complete;
-        stop.completedSign.visible = complete;
-        stop.progressRing.visible = progress > 0;
-        stop.progressRing.geometry.setDrawRange(0, Math.floor(progress * 64) * 6);
         stop.parcel.visible = progress > .08 && !reduceMotion;
         if (stop.parcel.visible) {
           const stopFrame = getDrivewayFrame(index, getDrivewayLength(index));
@@ -268,8 +278,8 @@ export function DeliveryScene3D({
       const materials = new Set<THREE.Material>();
       const textures = new Set<THREE.Texture>();
       world.root.traverse((object) => {
-        if (!(object instanceof THREE.Mesh)) return;
-        geometries.add(object.geometry);
+        if (!(object instanceof THREE.Mesh) && !(object instanceof THREE.Sprite)) return;
+        if (object instanceof THREE.Mesh) geometries.add(object.geometry);
         const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
         for (const material of objectMaterials) {
           materials.add(material);
@@ -281,6 +291,7 @@ export function DeliveryScene3D({
       for (const texture of textures) texture.dispose();
       for (const material of materials) material.dispose();
       for (const geometry of geometries) geometry.dispose();
+      guidance.dispose();
       skyTexture.dispose();
       renderer.dispose();
     };

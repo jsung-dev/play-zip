@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
-import { PlatformReturnLink } from "./PlatformReturnLink";
+import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
 import styles from "./DeliveryGame.module.css";
+import navStyles from "./DeliveryNavigation.module.css";
 
 type GameStatus = "ready" | "playing" | "quiz" | "arriving" | "completed";
 
@@ -63,6 +64,7 @@ export function DeliveryGame() {
   const [status, setStatus] = useState<GameStatus>("ready");
   const [paused, setPaused] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
+  const [guidanceReplay, setGuidanceReplay] = useState(0);
 
   const syncDriveInput = useCallback(() => {
     const next = {
@@ -91,6 +93,7 @@ export function DeliveryGame() {
     lastFrameRef.current = null;
     setFrame({ ...fresh });
     setPaused(false);
+    setGuidanceReplay(0);
     clearInputs();
   }, [clearInputs]);
 
@@ -364,12 +367,9 @@ export function DeliveryGame() {
   };
 
   const nextStop = DELIVERY_STOPS[frame.stopIndex];
-  const progress = Math.min(100, (frame.position / DELIVERY_GAME_CONFIG.totalDistance) * 100);
   const canPause = status === "playing" || status === "arriving";
   const navigation = getDeliveryNavigation(frame, status === "arriving");
   const NavigationIcon = { forward: ArrowUp, left: ArrowLeft, right: ArrowRight, reverse: ArrowDown, fork: GitFork, stop: Pause, delivery: PackageCheck, complete: Check }[navigation.direction];
-  const deliveryProgress = Math.min(100, frame.stopDwell / DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds * 100);
-  const showDeliveryProgress = navigation.phase === "delivering" && status === "playing";
 
   return (
     <main className={styles.pageShell}>
@@ -394,19 +394,20 @@ export function DeliveryGame() {
         data-driveway-progress={(frame.driveway?.progress ?? 0).toFixed(3)}
         data-driveway-length={frame.driveway ? getDrivewayLength(frame.driveway.stopIndex).toFixed(3) : 0}
       >
-        <header className={styles.navigationHud} data-navigation-hud aria-label="배달 길안내">
-          <div className={styles.navigationRow} data-delivery-phase={navigation.phase} data-navigation-direction={navigation.direction}>
-            <div className={styles.navigationIcon} aria-hidden="true"><NavigationIcon /></div>
-            <div className={styles.navigationCopy}>
+        <header className={navStyles.hud} data-navigation-hud aria-label="배달 길안내">
+          <div className={navStyles.card}>
+          <div className={navStyles.row} data-delivery-phase={navigation.phase} data-navigation-direction={navigation.direction}>
+            <div className={navStyles.icon} aria-hidden="true"><NavigationIcon /></div>
+            <div className={navStyles.copy}>
               <strong data-navigation-instruction>{navigation.instruction}</strong>
               <span data-navigation-destination>{navigation.destination}</span>
             </div>
-            <div className={styles.navigationDistance}>
-              {navigation.phase !== "complete" && <strong aria-label={`${navigation.destination}까지 ${navigation.remaining}미터`}>{navigation.remaining.toLocaleString("ko-KR")}<small>m</small></strong>}
+            <div className={navStyles.distance} title="현재 경로를 따라 배달 구역까지 남은 거리">
+              <strong data-navigation-remaining aria-label={`${navigation.destination} 배달 구역까지 ${navigation.remaining}미터`}>{navigation.remaining.toLocaleString("ko-KR")}<small>m</small></strong>
             </div>
             {canPause && (
               <button
-                className={styles.navigationPause}
+                className={navStyles.pause}
                 type="button"
                 onPointerDown={() => { pauseTouchHandledRef.current = false; }}
                 onPointerUp={(event) => {
@@ -431,8 +432,12 @@ export function DeliveryGame() {
               </button>
             )}
           </div>
-          <div className={styles.navigationProgress} role="progressbar" aria-label={showDeliveryProgress ? "상품 전달 진행" : "전체 경로 진행"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(showDeliveryProgress ? deliveryProgress : progress)}>
-            <i style={{ width: `${showDeliveryProgress ? deliveryProgress : progress}%` }} />
+          <div className={navStyles.progress}>
+            <span>{nextStop ? `배달 ${frame.stopIndex + 1} / ${DELIVERY_STOPS.length}` : `경유 ${DELIVERY_STOPS.length} / ${DELIVERY_STOPS.length}`}</span>
+            <div className={navStyles.segments} role="progressbar" aria-label="경유 배달 완료 수" aria-valuemin={0} aria-valuemax={DELIVERY_STOPS.length} aria-valuenow={frame.stopIndex}>
+              {DELIVERY_STOPS.map((stop, index) => <i key={stop.id} data-state={index < frame.stopIndex ? "complete" : index === frame.stopIndex ? "current" : "pending"} />)}
+            </div>
+          </div>
           </div>
           <span className={styles.screenReaderOnly} role="status" aria-live="polite" aria-atomic="true">{navigation.instruction}. {navigation.destination}</span>
         </header>
@@ -454,6 +459,8 @@ export function DeliveryGame() {
             deliveryPulse={frame.deliveryPulse}
             deliverySuccessRemaining={frame.deliverySuccessRemaining}
             driveway={frame.driveway}
+            guidanceReplay={guidanceReplay}
+            closureReached={frame.closureReached}
           />
 
           <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />
@@ -461,22 +468,7 @@ export function DeliveryGame() {
 
         {status === "ready" && <DeliveryBrandStart selected={selectedBrand} onSelect={setSelectedBrand} onStart={startGame} />}
 
-        {paused && canPause && (
-          <div className={`${styles.overlay} ${styles.pauseOverlay}`}>
-            <article className={styles.pauseCard} role="dialog" aria-modal="true" aria-label="게임 일시정지">
-              <span><Pause aria-hidden="true" /></span>
-              <h2>잠시 멈췄어요</h2>
-              <p>자전거와 거리의 모든 움직임이 멈춘 상태예요.</p>
-              <button className={styles.primaryButton} type="button" onClick={() => setPaused(false)}>
-                <Play aria-hidden="true" /> 계속 배달하기
-              </button>
-              <button className={styles.textButton} type="button" onClick={returnToStart}>
-                <RotateCcw aria-hidden="true" /> 처음으로
-              </button>
-              <PlatformReturnLink confirmLeave />
-            </article>
-          </div>
-        )}
+        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
         {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} onRestart={returnToStart} />}

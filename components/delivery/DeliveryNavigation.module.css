@@ -1,0 +1,33 @@
+/* Preserve the existing 75px canvas inset: the new compact card floats over it.
+   Camera bounds, FOV and the joystick surface are unchanged. */
+.hud { position: relative; z-index: 40; height: calc(65px + max(10px, env(safe-area-inset-top))); background: #39b7ef; pointer-events: none; }
+.card { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 10px; right: 10px; padding: 10px 12px; border: 1px solid #d3e3dc; border-radius: 20px; background: #fff; box-shadow: 0 3px 12px #142e2a0d; color: #142e2a; pointer-events: auto; }
+.row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 56px 44px; align-items: center; gap: 8px; min-height: 44px; }
+.icon { color: #00c58e; display: grid; place-items: center; }
+.icon svg { width: 27px; height: 27px; stroke-width: 3; }
+.copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.copy strong { font-size: 20px; font-weight: 850; line-height: 1.25; letter-spacing: -.055em; word-break: keep-all; }
+.copy > span { color: #52665f; font-size: 14px; line-height: 1.4; word-break: keep-all; }
+.distance { text-align: right; color: #142e2a; white-space: nowrap; }
+.distance strong { font-size: 27px; line-height: 1; font-weight: 800; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+.distance small { font-size: 13px; margin-left: 2px; }
+.pause { display: grid; width: 44px; height: 44px; padding: 0; place-items: center; border: 1px solid #b7e4d3; border-radius: 14px; background: #e6fbf2; }
+.pause svg { width: 21px; height: 21px; color: #142e2a; }
+.progress { display: flex; align-items: center; gap: 16px; margin-top: 9px; padding-top: 8px; border-top: 1px solid #d3e3dc; font-size: 13px; font-weight: 750; }
+.segments { display: flex; flex: 1; gap: 6px; max-width: 170px; }
+.segments i { flex: 1; height: 7px; border-radius: 99px; background: #ddf3e9; }
+.segments i[data-state="current"] { background: #00c58e; }
+.segments i[data-state="complete"] { background: #007f5f; }
+.pauseCard .pauseSymbol { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 50%; background: #e6fbf2; color: #007f5f; }
+.pauseCard .pauseHint { margin-top: 10px; color: #52665f; font-size: 16px; }
+.pauseDestination { display: flex; align-items: center; gap: 12px; margin: 22px 0; padding: 16px; border-radius: 16px; background: #e6fbf2; text-align: left; }
+.pauseDestination svg { color: #007f5f; }
+.pauseDestination span { display: block; color: #52665f; font-size: 13px; }
+.pauseDestination strong { display: block; color: #142e2a; font-size: 17px; margin-top: 3px; }
+@media (max-width: 359px) {
+  .card { left: 8px; right: 8px; padding-inline: 9px; }
+  .row { grid-template-columns: 24px minmax(0, 1fr) 49px 44px; gap: 6px; }
+  .copy strong { font-size: 18px; }
+  .copy > span { font-size: 13px; }
+  .distance strong { font-size: 25px; }
+}

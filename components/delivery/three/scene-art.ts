@@ -138,6 +138,7 @@ export function createSceneArt() {
     const group = new THREE.Group();
     const v = item.variant % 5, shop = item.type === "shop";
     const { width: w, height: h, depth: d, floors } = buildingProfile(item, street);
+    group.userData.roofMarkerLocal = [w * .3, h + (!shop && v % 2 === 0 ? 2.02 : 1.14), 0];
     // Keep every door/window opening at its original size. Add storeys instead.
     const floorPitch = street ? (h - .3) / floors : 2;
     const wall = TOWN_COLORS.walls[v], trim = TOWN_COLORS.roofs[v];
@@ -190,6 +191,9 @@ export function createSceneArt() {
         for (const x of [-w * .3, 0, w * .3]) windowOn(facade, x, 4.7 + (row - 1) * (h - 5.8), d / 2 + .03);
       }
     } else {
+      // Semantic anchor at the actual door surface, retained by template clones.
+      // Navigation reads this after the house's scale/rotation/world placement.
+      group.userData.entranceLocal = [0, 1.3, d / 2 + .17];
       put(facade, box(1.15, 2.2, .16, trim, .06), 0, 1.3, d / 2 + .07);
       put(facade, box(.71, 1.07, .025, "#3da9ba"), 0, 1.64, d / 2 + .17);
       put(facade, sphere(.065, "#efd499"), .34, 1.14, d / 2 + .22);

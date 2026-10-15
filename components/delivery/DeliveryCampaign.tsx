@@ -15,7 +15,7 @@ const brandStyle = (brand: DeliveryBrand) => ({
 
 const stopCountLabel = DELIVERY_STOPS.length === 3 ? "세 집" : `${DELIVERY_STOPS.length}집`;
 
-function useDialogFocus() {
+export function useDialogFocus() {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
