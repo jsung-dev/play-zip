@@ -9,8 +9,9 @@ import {
   type DeliveryBrand,
   type ObstaclePlacement,
 } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtraLaneX, turnLaneSide, turnLaneAhead, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtraLaneX, turnLaneSide, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
+import { applyRoadSurfaceUV, createRoadSurfaceMaterial, ROAD_SURFACE } from "./road-surface";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
 import { BUS_AD_PANELS } from "@/data/delivery-outdoor-ads";
 import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-material";
@@ -209,56 +210,40 @@ function roadSceneryFrame(distance: number, branch: DetourChoice = "main") {
 
 function createRoadRibbon(width: number, material: THREE.Material, branch: DetourChoice = "main", y = 0, start: number = -45, end: number = DELIVERY_GAME_CONFIG.totalDistance, offset = 0) {
   const segments = Math.max(12, Math.ceil((end - start) / 3));
-  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const positions: number[] = [], indices: number[] = [];
   for (let index = 0; index <= segments; index++) {
     const distance = start + (end - start) * index / segments;
     const frame = roadSceneryFrame(distance, branch);
     for (const side of [-1, 1]) {
       const point = frame.position.clone().addScaledVector(frame.lateral, offset + side * width / 2);
-      positions.push(point.x, y, point.z); uvs.push((side + 1) * width / 8, distance / 4);
+      positions.push(point.x, y, point.z);
     }
     if (index < segments) { const n = index * 2; indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2); }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices); geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, material);
+  return new THREE.Mesh(applyRoadSurfaceUV(geometry), material);
 }
 
-function createRoad(art: SceneArt) {
+export function createRoad(art: SceneArt, road: THREE.Material) {
   const group = new THREE.Group();
-  const textureCanvas = document.createElement("canvas");
-  textureCanvas.width = textureCanvas.height = 128;
-  const context = textureCanvas.getContext("2d")!;
-  context.fillStyle = "#f1f2ef"; context.fillRect(0, 0, 128, 128);
-  let seed = 471;
-  for (let n = 0; n < 2200; n++) {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    const x = seed % 128; const y = (seed >>> 8) % 128;
-    context.fillStyle = n % 2 ? "rgba(56,70,65,.035)" : "rgba(255,255,255,.2)";
-    context.fillRect(x, y, 1, 1);
-  }
-  const grain = new THREE.CanvasTexture(textureCanvas);
-  grain.wrapS = grain.wrapT = THREE.RepeatWrapping;
-  grain.colorSpace = THREE.SRGBColorSpace; grain.anisotropy = 4;
-  const road = new THREE.MeshLambertMaterial({ color: TOWN_COLORS.road, map: grain });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), art.material(TOWN_COLORS.lawn));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -.14; group.add(ground);
   group.add(createRoadRibbon(DELIVERY_GAME_CONFIG.roadWidth, road));
   const pavedSections = [[-45, ROAD_CLOSURE.junctionDistance - 20], [ROAD_CLOSURE.mergeEnd + 18, DELIVERY_GAME_CONFIG.totalDistance]];
   for (const [start, end] of pavedSections) {
     for (const side of [-1, 1]) {
-      group.add(createRoadRibbon(3.4, art.material("#b0b7ab"), "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset));
-      group.add(createRoadRibbon(2.3, art.material(TOWN_COLORS.pavement), "main", .025, start, end, side * 8.95));
+      group.add(createRoadRibbon(3.4, road, "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset));
+      group.add(createRoadRibbon(2.3, art.material(ROAD_SURFACE.sidewalk), "main", .025, start, end, side * 8.95));
       group.add(createRoadRibbon(.19, art.material(TOWN_COLORS.curb), "main", .052, start, end, side * 7.8));
       group.add(createRoadRibbon(.12, art.material("#e5e4d4"), "main", .04, start, end, side * (DELIVERY_GAME_CONFIG.roadWidth / 2 - .1)));
     }
   }
   const forkStart = ROAD_CLOSURE.junctionDistance - 18, forkEnd = ROAD_CLOSURE.mergeEnd + 18;
   for (const branch of ["left", "right"] as const) {
-    group.add(createRoadRibbon(9.3, art.material(TOWN_COLORS.pavement), branch, -.015, forkStart, forkEnd));
-    group.add(createRoadRibbon(8.2, new THREE.MeshLambertMaterial({ color: branch === "left" ? "#849e98" : "#919caa", map: grain }), branch, branch === "left" ? .027 : .029, forkStart, forkEnd));
+    group.add(createRoadRibbon(9.3, art.material(ROAD_SURFACE.sidewalk), branch, -.015, forkStart, forkEnd));
+    group.add(createRoadRibbon(8.2, road, branch, branch === "left" ? .027 : .029, forkStart, forkEnd));
   }
   const dashes = new THREE.InstancedMesh(new THREE.BoxGeometry(.13, .018, 3.4), art.material("#fff8e6"), Math.ceil((DELIVERY_GAME_CONFIG.totalDistance + 40) / 10) * 2);
   const dummy = new THREE.Object3D(); let count = 0;
@@ -273,7 +258,6 @@ function createRoad(art: SceneArt) {
   dashes.count = count; dashes.instanceMatrix.needsUpdate = true; group.add(dashes);
   // Reuse the roadside shoulder only at each junction. Main road and its two
   // lane dividers stay untouched. Shared materials/geometry keep this light.
-  const turnSurface = new THREE.MeshLambertMaterial({color: "#9eafa4", map: grain, side: THREE.DoubleSide});
   const stripeMaterial = art.material("#fff8e6");
   const stripeGeometry = new THREE.BoxGeometry(.12, .018, 2.6);
   for (const connection of TURN_LANE_CONNECTIONS) {
@@ -293,7 +277,7 @@ function createRoad(art: SceneArt) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions,3));
     geometry.setIndex(indices); geometry.computeVertexNormals();
-    const surface = new THREE.Mesh(geometry,turnSurface); surface.name = `turn-lane-${connection.stopIndex}-${connection.entryEnd}`; group.add(surface);
+    const surface = new THREE.Mesh(applyRoadSurfaceUV(geometry),road); surface.name = `turn-lane-${connection.stopIndex}-${connection.entryEnd}`; group.add(surface);
     for (let ahead = 6; ahead <= TURN_LANE.approach; ahead += 7) {
       const distance = connection.distance - connection.direction * ahead, frame = getRouteFrame(distance);
       const stripe = new THREE.Mesh(stripeGeometry,stripeMaterial);
@@ -311,7 +295,7 @@ function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourCh
   object.rotation.y += frame.yaw;
 }
 
-function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt, brand: DeliveryBrand) {
+export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt, brand: DeliveryBrand, road: THREE.Material) {
   const index = DELIVERY_STOPS.findIndex((item) => item.id === stop.id);
   const length = getDrivewayLength(index);
   const zone = getDrivewayDeliveryInterval(index);
@@ -325,6 +309,27 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
   const marker = markDistance(new THREE.Group(), stop.distance);
   const width = DELIVERY_GAME_CONFIG.drivewayWidth;
   const edgeMaterial = new THREE.MeshBasicMaterial({ color: "#fae4ab", side: THREE.DoubleSide, toneMapped: false });
+  // Do not leave the decorative ivory/yellow rim across the main-road join.
+  // Recolor only overlapping triangles; retain every vertex and all road paths.
+  const mainRoadSamples = Array.from({length: Math.ceil(getDrivewayExitDistance(index) - stop.distance + 16) + 1}, (_, n) => getRouteFrame(stop.distance - 8 + n).position);
+  const blendJoinedEdge = (mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material>) => {
+    const geometry = mesh.geometry, position = geometry.getAttribute("position"), triangles = geometry.index!;
+    geometry.clearGroups();
+    let previousMaterial = -1, start = 0;
+    for (let n = 0; n < triangles.count; n += 3) {
+      const onRoad = [0,1,2].some(corner => {
+        const vertex = triangles.getX(n + corner), x = position.getX(vertex), z = position.getZ(vertex);
+        return mainRoadSamples.some(point => (point.x-x)**2 + (point.z-z)**2 <= 7.8**2);
+      });
+      const nextMaterial = onRoad ? 0 : 1;
+      if (nextMaterial !== previousMaterial) {
+        if (previousMaterial >= 0) geometry.addGroup(start, n-start, previousMaterial);
+        start = n; previousMaterial = nextMaterial;
+      }
+    }
+    geometry.addGroup(start, triangles.count-start, previousMaterial);
+    return new THREE.Mesh(geometry, [road, mesh.material]);
+  };
   const ribbon = (ribbonWidth: number, material: THREE.Material, start = 0, end = length, offset = 0, y = .065) => {
     const positions: number[] = [], indices: number[] = [];
     for (let n = 0; n <= 40; n++) {
@@ -343,12 +348,12 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geometry.setIndex(indices); geometry.computeVertexNormals();
-    return new THREE.Mesh(geometry, material);
+    return new THREE.Mesh(applyRoadSurfaceUV(geometry), material);
   };
-  marker.add(ribbon(width + .5, art.material("#f1ead9")));
-  marker.add(ribbon(width, art.material("#b9c6b4"), 0, length, 0, .076));
+  marker.add(blendJoinedEdge(ribbon(width + .5, art.material(ROAD_SURFACE.sidewalk))));
+  marker.add(ribbon(width, road, 0, length, 0, .076));
   // Fade the borders into the main road instead of drawing a barrier at either join.
-  for (const offset of [-width / 2, width / 2]) marker.add(ribbon(.12, edgeMaterial, 3, length - 3, offset, .095));
+  for (const offset of [-width / 2, width / 2]) marker.add(blendJoinedEdge(ribbon(.12, edgeMaterial, 3, length - 3, offset, .095)));
 
   // Current-target guidance is rendered separately from permanent road geometry.
   const furniture = new THREE.Group();
@@ -590,10 +595,11 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const obstacles: ObstacleRig[] = [];
   const deliveryStops: DeliveryStopRig[] = [];
   const art = createSceneArt();
+  const road = createRoadSurfaceMaterial();
   const advertisements = resolveAdvertisements();
   const outdoorResources = createOutdoorAdResources();
   const adViews = advertisementSightlines(advertisements);
-  root.add(createRoad(art));
+  root.add(createRoad(art, road));
   const horizon = art.horizon();
   root.add(horizon);
 
@@ -662,7 +668,7 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   }
 
   for (const stop of DELIVERY_STOPS) {
-    const { house, marker, rig } = createDeliveryStop(stop, art, brand);
+    const { house, marker, rig } = createDeliveryStop(stop, art, brand, road);
     deliveryStops.push(rig);
     root.add(house, marker);
     worldObjects.push(house, marker);

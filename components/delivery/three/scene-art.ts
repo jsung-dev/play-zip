@@ -4,9 +4,10 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { DELIVERY_GAME_CONFIG, type DeliveryBrand, type SceneryItem } from "@/data/delivery-game";
 import { BUILDING_SCALE } from "./scene-layout";
 import { buildingProfile } from "./street-layout";
+import { ROAD_SURFACE } from "./road-surface";
 
 export const TOWN_COLORS = {
-  sky: "#50bff0", haze: "#d9eceb", lawn: "#b8d998", road: "#70858f",
+  sky: "#50bff0", haze: "#d9eceb", lawn: "#b8d998", road: ROAD_SURFACE.color,
   pavement: "#ecdfc9", curb: "#fff7e6", ink: "#365857", metal: "#3d635e",
   walls: ["#fae8bc", "#c8e7d4", "#d8c3e9", "#f2c9af", "#edf0cf"],
   roofs: ["#d88b6b", "#479e80", "#9b7abd", "#d8a16c", "#579f9a"],

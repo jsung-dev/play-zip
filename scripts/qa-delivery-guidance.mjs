@@ -118,7 +118,32 @@ try {
  };
  await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
  await load();await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');await until(async()=>(await state()).status==='playing','start');
- if(process.env.GUIDANCE_QA_LANE_VISUAL==='1') {
+ if(process.env.GUIDANCE_QA_ROAD==='1') {
+  const label=process.env.ROAD_QA_LABEL||'after';
+  const frames=[
+    ['main',{position:80,laneTarget:1,laneX:0,laneFromX:0}],
+    ['entry-left',{position:184,laneTarget:-1,laneX:-5,laneFromX:-5}],
+    ['alley-join',{position:190,driveway:{stopIndex:0,progress:2,entryPosition:190,entryLaneX:-5}}],
+    ['alley-inner',{position:190,driveway:{stopIndex:0,progress:12,entryPosition:190,entryLaneX:-5}}],
+    ['alley-exit',{position:190,driveway:{stopIndex:0,progress:getDrivewayLength(0)-3,entryPosition:190,entryLaneX:-5}}],
+    ['entry-right',{position:384,laneTarget:3,laneX:5,laneFromX:5}],
+    ['fork',{position:480,laneTarget:0,laneX:-2.5,laneFromX:-2.5,detour:'left'}],
+    ['bypass',{position:580,laneTarget:0,laneX:-2.5,laneFromX:-2.5,detour:'left'}],
+    ['merge',{position:680,laneTarget:0,laneX:-2.5,laneFromX:-2.5,detour:'left'}],
+  ];
+  for(const [name,values] of frames){
+    if(process.env.ROAD_QA_JOINS_ONLY==='1'&&!['entry-left','alley-join','alley-exit','entry-right'].includes(name))continue;
+    await fixture({speed:0,driveway:null,travelDirection:1,laneStartedAt:0,detour:'main',deliverySuccessRemaining:0,...values});
+    await delay(1000);await capture(`road-${label}-${name}`);
+  }
+  if(process.env.ROAD_QA_JOINS_ONLY!=='1'){
+  await fixture({position:181,speed:0,driveway:null,travelDirection:1,laneTarget:-1,laneX:-5,laneFromX:-5,laneStartedAt:0});
+  await driveUntil(s=>s.alley===0&&s.progress>3,'road material smoke: enter alley');
+  assert.equal((await details()).alley,0);assert.equal((await details()).brand,'seoul');
+  }
+  assert.deepEqual(errors,[]);results.push({passed:true,checks:'road junction visuals and unchanged forward entry',runtimeErrors:errors});
+  console.log(JSON.stringify({passed:true,label,checks:'road surface visual QA',out}));
+ } else if(process.env.GUIDANCE_QA_LANE_VISUAL==='1') {
   for(const [w,h] of [[335,568],[390,844],[430,932]]){
     await size(w,h);
     for(const [i,x,lane] of [[0,-5,-1],[1,5,3]]){
@@ -411,7 +436,7 @@ try {
  console.log(JSON.stringify({passed:true,results:results.length,out},null,2));
  }
 } finally {
- await writeFile(join(out,process.env.GUIDANCE_QA_LANE_VISUAL==='1'?'lane-visual-results.json':process.env.GUIDANCE_QA_LANES==='1'?process.env.GUIDANCE_QA_LANES_CONTINUE==='1'?'lane-continued-results.json':'lane-results.json':process.env.GUIDANCE_QA_TURN_VISUAL==='1'?'turn-visual-results.json':process.env.GUIDANCE_QA_TURNS==='1'?'turn-results.json':process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
+ await writeFile(join(out,process.env.GUIDANCE_QA_ROAD==='1'?`road-${process.env.ROAD_QA_LABEL||'after'}-results.json`:process.env.GUIDANCE_QA_LANE_VISUAL==='1'?'lane-visual-results.json':process.env.GUIDANCE_QA_LANES==='1'?process.env.GUIDANCE_QA_LANES_CONTINUE==='1'?'lane-continued-results.json':'lane-results.json':process.env.GUIDANCE_QA_TURN_VISUAL==='1'?'turn-visual-results.json':process.env.GUIDANCE_QA_TURNS==='1'?'turn-results.json':process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
  try{if(ws?.readyState===1)ws.send(JSON.stringify({id:++id,method:'Browser.close'}));}catch{}
  await delay(400);browser.kill();ws?.close();for(const p of pending.values())clearTimeout(p.timer);
  if(resolve(profile).startsWith(resolve(tmpdir())+sep)&&basename(profile).startsWith('delivery-guidance-qa-'))await rm(profile,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});
