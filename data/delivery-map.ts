@@ -8,6 +8,7 @@ export type DrivewayState = {
   progress: number;
   entryPosition: number;
   entryLaneX: number;
+  entryEnd?: "entrance" | "exit";
 };
 
 export type DeliveryStop = {
@@ -127,6 +128,11 @@ export function getDrivewayLength(stopIndex: number) {
   return getDrivewayCurve(stopIndex).getLength();
 }
 
+export function getDrivewayPavedWidth(stopIndex: number, progress: number) {
+  const toJoin = Math.max(0, Math.min(progress, getDrivewayLength(stopIndex) - progress));
+  return DELIVERY_GAME_CONFIG.drivewayWidth + 3.2 * (1 - smoothStep(toJoin / 6));
+}
+
 export function getDrivewayDeliveryInterval(stopIndex: number) {
   getDrivewayCurve(stopIndex);
   const center = deliveryCenters.get(stopIndex)!;
@@ -143,7 +149,7 @@ export function getDeliveryHouseTransform(stopIndex: number) {
   return { position: frame.position.clone().addScaledVector(frame.lateral, side * DRIVEWAY_ROUTE.houseOffset), yaw: frame.yaw - side * Math.PI / 2 };
 }
 
-export function getDrivewayFrame(stopIndex: number, progress: number, entry?: Pick<DrivewayState, "entryPosition" | "entryLaneX">) {
+export function getDrivewayFrame(stopIndex: number, progress: number, entry?: Pick<DrivewayState, "entryPosition" | "entryLaneX" | "entryEnd">) {
   const curve = getDrivewayCurve(stopIndex);
   const length = curve.getLength();
   const t = THREE.MathUtils.clamp(progress / length, 0, 1);
@@ -154,7 +160,8 @@ export function getDrivewayFrame(stopIndex: number, progress: number, entry?: Pi
     const entryFrame = getRouteFrame(entry.entryPosition);
     const actualEntry = entryFrame.position.addScaledVector(entryFrame.lateral, entry.entryLaneX);
     // A forgiving entrance window without teleporting to the curve's center.
-    point.addScaledVector(actualEntry.sub(curve.getPoint(0)), 1 - smoothStep(progress / 7));
+    const atExit = entry.entryEnd === "exit";
+    point.addScaledVector(actualEntry.sub(curve.getPoint(atExit ? 1 : 0)), 1 - smoothStep((atExit ? length - progress : progress) / 7));
   }
   return { position: point, tangent, lateral: new THREE.Vector3(-tangent.z, 0, tangent.x), yaw: Math.atan2(-tangent.x, -tangent.z) };
 }

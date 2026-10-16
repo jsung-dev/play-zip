@@ -4,13 +4,13 @@ import { DELIVERY_STOPS, DRIVEWAY_ROUTE, getDrivewayDeliveryInterval, getDrivewa
 
 const fresh = (): DeliveryProgress => ({position: 0, driveway: null, stopIndex: 0, completedStops: [], skippedStops: []});
 for (const [i, stop] of DELIVERY_STOPS.entries()) {
-  const state = {...fresh(), stopIndex: i, position: stop.distance + 7};
+  const state = {...fresh(), stopIndex: i, completedStops:Array.from({length:i},(_,n)=>n), position: stop.distance + 7};
   assert.equal(advanceDeliveryTargets(state).stopIndex, i, "Passing the entrance by a little does not skip the stop");
   const boundary = getDrivewayExitDistance(i) + DRIVEWAY_ROUTE.passMargin;
   assert.equal(advanceDeliveryTargets({...state, position: boundary}).stopIndex, i);
   const skipped = advanceDeliveryTargets({...state, position: boundary + .01});
   assert.equal(skipped.stopIndex, i + 1); assert.deepEqual(skipped.skippedStops, [i]);
-  assert.equal(completedDeliveryCount(state.completedStops, false), 0);
+  assert.equal(completedDeliveryCount(state.completedStops, false), i);
   const zone = getDrivewayDeliveryInterval(i);
   const driveway = {stopIndex:i, entryPosition:stop.distance, entryLaneX:0, progress:zone.end+.1};
   assert.equal(advanceDeliveryTargets({...state, driveway}).stopIndex, i, "Small overshoot permits a correction");
@@ -22,6 +22,6 @@ assert.deepEqual(skippedAll.skippedStops,[0,1,2]); assert.equal(skippedAll.stopI
 assert.equal(completedDeliveryCount([],true),1);
 assert.equal(completedDeliveryCount([1],true),2);
 assert.equal(completedDeliveryCount([0,1,2],true),4);
-assert.deepEqual(advanceDeliveryTargets({...fresh(),...skippedAll,position:0}),skippedAll,"Reversing cannot re-add skipped targets or invent deliveries");
+assert.equal(advanceDeliveryTargets({...fresh(),...skippedAll,position:255,travelDirection:-1}).stopIndex,0,"Returning restores an unfinished recommendation without completing it");
 assert.deepEqual(fresh().completedStops,[]);
-console.log("Skip thresholds, partial/all-skip final counts, monotonic guidance and reset state verified.");
+console.log("Skip thresholds, partial/all-skip final counts, revisitable guidance and reset state verified.");

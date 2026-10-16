@@ -9,6 +9,7 @@ import { buildDeliveryWorld } from "./three/scene-builders";
 import { TOWN_COLORS } from "./three/scene-art";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
+import type { TravelDirection, TurnChoice } from "./delivery-turns";
 import styles from "./DeliveryGame.module.css";
 
 type SceneState = {
@@ -28,6 +29,9 @@ type SceneState = {
   driveway: DrivewayState | null;
   guidanceReplay: number;
   closureReached: boolean;
+  travelDirection: TravelDirection;
+  turnChoice: TurnChoice | null;
+  completedStops: number[];
 };
 
 export function DeliveryScene3D({
@@ -47,12 +51,15 @@ export function DeliveryScene3D({
   driveway,
   guidanceReplay,
   closureReached,
+  travelDirection,
+  turnChoice,
+  completedStops,
   deliveryBrand,
 }: SceneState & { deliveryBrand: DeliveryBrand }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached });
+  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops });
   const [webglFailed, setWebglFailed] = useState(false);
-  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached };
+  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -181,10 +188,14 @@ export function DeliveryScene3D({
       const drivewayMix = Math.min(entryMix, exitMix);
       const cameraRail = routeFrame.position.clone();
       if (current.driveway) {
-        cameraRail.addScaledVector(mainFrame.lateral, -current.driveway.entryLaneX * (1 - entryMix));
-        const exitFrame = getRouteFrame(getDrivewayExitDistance(current.driveway.stopIndex));
+        const enteredAtExit = current.driveway.entryEnd === "exit";
         const side = DELIVERY_STOPS[current.driveway.stopIndex].side === "left" ? -1 : 1;
-        cameraRail.addScaledVector(exitFrame.lateral, -side * DELIVERY_GAME_CONFIG.laneSpacing * (1 - exitMix));
+        const entranceFrame = getRouteFrame(enteredAtExit ? DELIVERY_STOPS[current.driveway.stopIndex].distance : current.driveway.entryPosition);
+        const exitFrame = getRouteFrame(enteredAtExit ? current.driveway.entryPosition : getDrivewayExitDistance(current.driveway.stopIndex));
+        const entranceLane = enteredAtExit ? side * DELIVERY_GAME_CONFIG.laneSpacing : current.driveway.entryLaneX;
+        const exitLane = enteredAtExit ? current.driveway.entryLaneX : side * DELIVERY_GAME_CONFIG.laneSpacing;
+        cameraRail.addScaledVector(entranceFrame.lateral, -entranceLane * (1 - entryMix));
+        cameraRail.addScaledVector(exitFrame.lateral, -exitLane * (1 - exitMix));
       }
       const cameraTarget = cameraRail.clone()
         .addScaledVector(routeFrame.lateral, .8 + current.laneX * 0.12)

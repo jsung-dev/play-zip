@@ -90,7 +90,7 @@ const details=()=>run(()=>{
  const e=document.querySelector('[data-game-status]'),c=document.querySelector('canvas');
  return {status:e.dataset.gameStatus,position:+e.dataset.position,speed:+e.dataset.speed,brand:e.dataset.deliveryBrand,stop:+e.dataset.stopIndex,passed:+e.dataset.quizPassed,alley:+e.dataset.drivewayIndex,progress:+e.dataset.drivewayProgress,length:+e.dataset.drivewayLength,lane:+e.dataset.lane,
  instruction:document.querySelector('[data-navigation-instruction]').textContent,remaining:parseInt(document.querySelector('[data-navigation-remaining]').textContent),guide:{...c.dataset},disabled:document.querySelector('[data-joystick]').disabled,
- completed:e.dataset.completedStops,skipped:e.dataset.skippedStops,collisions:+e.dataset.collisionCount,slowdown:e.dataset.slowdownActive,count:+document.querySelector('[aria-label="배달 완료 수"]').getAttribute('aria-valuenow')};
+ completed:e.dataset.completedStops,skipped:e.dataset.skippedStops,collisions:+e.dataset.collisionCount,slowdown:e.dataset.slowdownActive,count:+document.querySelector('[aria-label="배달 완료 수"]').getAttribute('aria-valuenow'),turn:e.dataset.turnChoice,travel:+e.dataset.travelDirection,entryEnd:e.dataset.drivewayEntry};
 });
 async function driveUntil(condition,label) {await key('ArrowUp');await until(async()=>condition(await details()),label,18000);await key('ArrowUp',false);await delay(550);}
 async function capture(name){await delay(160);await screenshot(name);results.push({name,...await details()});}
@@ -118,7 +118,81 @@ try {
  };
  await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
  await load();await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');await until(async()=>(await state()).status==='playing','start');
- if(process.env.GUIDANCE_QA_COUNTER==='1') {
+ if(process.env.GUIDANCE_QA_TURN_VISUAL==='1') {
+  await fixture({position:184,speed:0,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0});await delay(1000);
+  await capture('turn-junction-before-390');
+  await key('ArrowLeft');await key('ArrowLeft',false);await delay(600);await capture('turn-junction-selected-390');
+  assert.equal((await details()).turn,'0:entrance');assert.equal((await details()).position,184,'Selection does not auto-drive');
+  await key('ArrowRight');await key('ArrowRight',false);assert.equal((await details()).turn,'');
+  await fixture({position:365,speed:0,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0,turnChoice:null});await delay(150);
+  await key('ArrowLeft');await key('ArrowLeft',false);assert.equal((await details()).lane,0,'Opposite side keeps ordinary avoidance without a pending turn');assert.equal((await details()).turn,'');
+  await key('ArrowRight');await key('ArrowRight',false);assert.equal((await details()).turn,'1:entrance');
+  await run(()=>window.dispatchEvent(new Event('blur')));await delay(150);assert.equal((await details()).turn,'');
+  await fixture({position:175,speed:0,laneX:0,laneFromX:0,laneTarget:1,completedStops:[0],quizPassedStops:[0],stopIndex:1});await delay(150);
+  assert.equal((await details()).instruction,'직진');
+  await key('ArrowLeft');await key('ArrowLeft',false);await delay(100);
+  assert.equal(await run(()=>document.querySelector('[data-navigation-destination]').textContent),'포근빌라 202호');
+  assert.deepEqual(errors,[]);results.push({passed:true,oppositeLaneAvoidance:true,focusClearsTurn:true,selectedDestinationAccurate:true,stationaryChoice:true,runtimeErrors:errors});
+  console.log('Close junction captures, lane avoidance, focus cancellation and destination labels passed.');
+ } else if(process.env.GUIDANCE_QA_TURNS==='1') {
+  for(const [w,h] of [[335,568],[390,844],[430,932]])await checkHud(w,h);
+  await size(390,844);
+  // Occupying the alley-side lane is no longer sufficient to enter.
+  await fixture({position:175,speed:0,laneX:-2.5,laneFromX:-2.5,laneTarget:0,laneStartedAt:0});await delay(200);
+  await capture('turn-unselected-390');
+  await driveUntil(s=>s.position>235,'straight through left-side lane');
+  assert.equal((await details()).alley,-1);assert.equal((await details()).count,0);assert.equal((await details()).skipped,'0');
+  await until(async()=>(await details()).speed===0,'stop after missed first house',3000);
+  // Return on the actual road, choose its exit junction, and recover the job.
+  await key('ArrowDown');await delay(200);await key('ArrowLeft');await key('ArrowLeft',false);
+  assert.equal((await details()).turn,'0:exit');await capture('turn-return-selected-390');
+  await until(async()=>(await details()).alley===0,'reverse through exit junction',9000);
+  assert.equal((await details()).entryEnd,'exit');assert.equal((await details()).stop,0);
+  const firstZone=getDrivewayDeliveryInterval(0);
+  await until(async()=>(await details()).progress<firstZone.end+1.3,'return to missed delivery pad',10000);
+  await key('ArrowDown',false);await until(async()=>(await details()).status==='quiz','recovered first quiz',4000);
+  await capture('turn-revisited-quiz-390');
+  await touch('[data-quiz-answer="mongle"]');assert.equal((await details()).status,'quiz');
+  await touch('[data-quiz-answer="seoul"]');await until(async()=>(await details()).count===1,'revisited first handoff',5000);
+  assert.equal((await details()).completed,'0');assert.equal((await details()).skipped,'');
+  await driveUntil(s=>s.alley===-1,'forward exit after revisit');await until(async()=>(await details()).speed===0,'stop outside',3000);
+  results.push({check:'miss and return with real keys',...await details()});
+  // A completed house's road stays open, but cannot replay its quiz or reward.
+  await key('ArrowDown');await delay(180);await key('ArrowLeft');await key('ArrowLeft',false);
+  await until(async()=>(await details()).alley===0,'completed alley still usable',9000);
+  await until(async()=>(await details()).progress<firstZone.end+1.3,'completed pad',10000);await key('ArrowDown',false);
+  await until(async()=>(await details()).speed===0,'stop at completed pad',4000);await delay(1800);
+  assert.equal((await details()).status,'playing');assert.equal((await details()).count,1);
+  results.push({check:'no duplicate completion on repeat visit',...await details()});
+  // At the second intersection, reserve from any lane, cancel, and drive
+  // straight even though the bike remains in the branch-side lane.
+  await fixture({position:360,speed:0,driveway:null,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0,travelDirection:1,turnChoice:null,deliverySuccessRemaining:0});await delay(200);
+  await key('ArrowRight');await key('ArrowRight',false);assert.equal((await details()).turn,'1:entrance');
+  await touch('button[aria-label="게임 일시정지"]');assert.equal((await details()).turn,'');
+  await touch('[data-guidance-replay]');await key('ArrowRight');await key('ArrowRight',false);
+  await key('ArrowLeft');await key('ArrowLeft',false);assert.equal((await details()).turn,'');
+  await driveUntil(s=>s.position>435,'cancelled turn stays on main road');assert.equal((await details()).alley,-1);assert.equal((await details()).count,1);
+  await until(async()=>(await details()).speed===0,'stop after second skip',3000);
+  // Touch chooses the left turn from the opposite lane well before the fork.
+  const third=DELIVERY_STOPS[2],zone=getDrivewayDeliveryInterval(2);
+  await fixture({position:third.distance-35,speed:0,driveway:null,laneX:2.5,laneFromX:2.5,laneTarget:2,laneStartedAt:0,travelDirection:1,turnChoice:null,detour:'left'});await delay(200);
+  await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:260,y:650,id:9}]});
+  await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:165,y:540,id:9}]});
+  await until(async()=>(await details()).turn==='2:entrance','mobile turn reservation',2000);await capture('turn-mobile-selected-390');
+  await until(async()=>{const s=await details();return s.alley===2&&s.progress+s.speed*s.speed/(2*DELIVERY_GAME_CONFIG.decelerationPerSecond)>=(zone.start+zone.end)/2-.8;},'mobile selected branch',12000);
+  await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await until(async()=>(await details()).status==='quiz','mobile manual stop',5000);
+  await touch('[data-quiz-answer="seoul"]');await until(async()=>(await details()).count===2,'third actual handoff',5000);
+  await driveUntil(s=>s.alley===-1,'third forward exit');
+  await fixture({position:990,speed:0,driveway:null,travelDirection:1,detour:'left',turnChoice:null});
+  await driveUntil(s=>s.status==='arriving'||s.status==='completed','final handoff');await until(async()=>(await details()).status==='completed','final ad');
+  assert.equal((await details()).count,3);assert.equal((await details()).completed,'0,2');assert.equal((await details()).skipped,'1');
+  await capture('turn-partial-result-390');
+  await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');
+  assert.equal((await details()).count,0);assert.equal((await details()).turn,'');assert.equal((await details()).skipped,'');
+  assert.deepEqual(errors,[]);results.push({passed:true,noAutomaticLaneEntry:true,reverseRevisit:true,noDuplicate:true,earlySelection:true,cancellation:true,pauseClearsChoice:true,mobileTouch:true,actualFinalCount:3,restart:true,runtimeErrors:errors});
+  console.log(JSON.stringify({passed:true,checks:'explicit turn/revisit',out},null,2));
+ } else if(process.env.GUIDANCE_QA_COUNTER==='1') {
   const counter=()=>run(()=>{
    const bar=document.querySelector('[data-navigation-hud] [role="progressbar"]');
    return {label:bar.previousElementSibling.textContent,total:+bar.getAttribute('aria-valuemax'),value:+bar.getAttribute('aria-valuenow'),segments:bar.children.length,filled:bar.querySelectorAll('[data-state="complete"]').length,current:bar.querySelectorAll('[data-state="current"]').length};
@@ -255,7 +329,7 @@ try {
  console.log(JSON.stringify({passed:true,results:results.length,out},null,2));
  }
 } finally {
- await writeFile(join(out,process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
+ await writeFile(join(out,process.env.GUIDANCE_QA_TURN_VISUAL==='1'?'turn-visual-results.json':process.env.GUIDANCE_QA_TURNS==='1'?'turn-results.json':process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
  try{if(ws?.readyState===1)ws.send(JSON.stringify({id:++id,method:'Browser.close'}));}catch{}
  await delay(400);browser.kill();ws?.close();for(const p of pending.values())clearTimeout(p.timer);
  if(resolve(profile).startsWith(resolve(tmpdir())+sep)&&basename(profile).startsWith('delivery-guidance-qa-'))await rm(profile,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DELIVERY_GAME_CONFIG } from "../data/delivery-game";
 import * as THREE from "three";
-import { DELIVERY_STOPS, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayDeliveryInterval, getDrivewayExitDistance, getDeliveryHouseTransform, isAtDrivewayDelivery } from "../data/delivery-map";
+import { DELIVERY_STOPS, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDrivewayExitDistance, getDeliveryHouseTransform, isAtDrivewayDelivery } from "../data/delivery-map";
 import { buildingProfile, rectangle, pointPolygonDistance, adFootprint } from "../components/delivery/three/street-layout";
 import { resolveAdvertisements } from "../components/delivery/three/scene-layout";
 
@@ -30,8 +30,8 @@ for (const [index, stop] of DELIVERY_STOPS.entries()) {
     // Reverse uses the exact same frame, not a flipped camera direction.
     assert(getDrivewayFrame(index, p).tangent.dot(getDrivewayFrame(index, p - .25).tangent) > .98);
     const point = getDrivewayFrame(index, p).position, point2 = new THREE.Vector2(point.x, point.z);
-    assert(pointPolygonDistance(point2, footprint) > DELIVERY_GAME_CONFIG.drivewayWidth / 2 + .4, `Delivery house blocks through-route ${index}/${p}`);
-    for (const ad of resolveAdvertisements()) assert(pointPolygonDistance(point2, adFootprint(ad)) > DELIVERY_GAME_CONFIG.drivewayWidth / 2 + .3, `Ad blocks alley ${index}/${ad.id}`);
+    assert(pointPolygonDistance(point2, footprint) > getDrivewayPavedWidth(index,p) / 2 + .4, `Delivery house blocks through-route ${index}/${p}`);
+    for (const ad of resolveAdvertisements()) assert(pointPolygonDistance(point2, adFootprint(ad)) > getDrivewayPavedWidth(index,p) / 2 + .3, `Ad blocks alley ${index}/${ad.id}`);
   }
   assert(!isAtDrivewayDelivery(null, index), "Main-road stopping counted as delivery");
   assert(!isAtDrivewayDelivery({ stopIndex: index, progress: 0, ...entry }, index));

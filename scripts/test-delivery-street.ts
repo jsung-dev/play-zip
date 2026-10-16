@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as THREE from "three";
 import { writeFileSync } from "node:fs";
 import { SCENERY_ITEMS, DELIVERY_GAME_CONFIG, type SceneryItem } from "../data/delivery-game";
-import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "../data/delivery-map";
+import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "../data/delivery-map";
 import { createSceneArt } from "../components/delivery/three/scene-art";
 import { resolveAdvertisements, sceneryHasClearance } from "../components/delivery/three/scene-layout";
 import { buildStreetLayout, buildingProfile, polygonsOverlap, pointPolygonDistance, streetTransform, rectangle, advertisementSightlines, buildingBlocksRay, adFootprint } from "../components/delivery/three/street-layout";
@@ -54,7 +54,7 @@ for (let i = 0; i < buildings.length; i++) {
     assert(!polygonsOverlap(b.footprint, house, .9), `Delivery-house clearance: ${b.id}`);
     for (let d = 0; d <= length; d += .25) {
       const point = getDrivewayFrame(i, d).position;
-      assert(pointPolygonDistance(new THREE.Vector2(point.x, point.z), b.footprint) > DELIVERY_GAME_CONFIG.drivewayWidth / 2 + .5, `Driveway clearance: ${b.id}`);
+      assert(pointPolygonDistance(new THREE.Vector2(point.x, point.z), b.footprint) > getDrivewayPavedWidth(i,d) / 2 + .5, `Driveway clearance: ${b.id}`);
     }
   }
 }

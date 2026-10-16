@@ -10,6 +10,7 @@ import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./Del
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
+import { chooseDeliveryTurn, enterSelectedTurn, turnChoiceIsValid, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
 import styles from "./DeliveryGame.module.css";
@@ -37,6 +38,8 @@ type RuntimeState = {
   detour: DetourChoice;
   closureReached: boolean;
   driveway: DrivewayState | null;
+  travelDirection: TravelDirection;
+  turnChoice: TurnChoice | null;
 };
 
 type DriveInput = {
@@ -44,7 +47,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null });
 
 function approach(value: number, target: number, maxDelta: number) {
   if (value < target) return Math.min(target, value + maxDelta);
@@ -83,6 +86,7 @@ export function DeliveryGame() {
   }, [syncDriveInput]);
 
   const clearInputs = useCallback(() => {
+    runtimeRef.current.turnChoice = null;
     joystickRef.current?.reset();
     joystickDriveRef.current = null;
     keyInputsRef.current = { forward: false, reverse: false };
@@ -115,8 +119,9 @@ export function DeliveryGame() {
 
   const completeQuiz = useCallback(() => {
     const runtime = runtimeRef.current;
-    if (status !== "quiz" || runtime.quizPassedStops.includes(runtime.stopIndex)) return;
-    runtime.quizPassedStops = [...runtime.quizPassedStops, runtime.stopIndex];
+    const index = runtime.driveway?.stopIndex;
+    if (status !== "quiz" || index === undefined || runtime.quizPassedStops.includes(index)) return;
+    runtime.quizPassedStops = [...runtime.quizPassedStops, index];
     runtime.speed = 0;
     runtime.stopDwell = 0;
     clearInputs();
@@ -128,6 +133,24 @@ export function DeliveryGame() {
     if (status !== "playing" || paused) return;
     const runtime = runtimeRef.current;
     if (runtime.driveway) return;
+    const input = driveInputRef.current;
+    const travelDirection = input.forward !== input.reverse ? input.reverse ? -1 : 1 : runtime.travelDirection;
+    const choice = chooseDeliveryTurn(runtime.position, travelDirection, direction);
+    if (choice !== undefined) {
+      const cancellingTurn = runtime.turnChoice !== null && choice === null;
+      runtime.travelDirection = travelDirection;
+      runtime.turnChoice = choice;
+      if (choice || !cancellingTurn) {
+        // A turn can be requested from ANY lane. Align smoothly during the
+        // approach, without making lane occupancy itself a turn command.
+        runtime.laneFromX = runtime.laneX;
+        runtime.laneTarget = choice ? direction < 0 ? 0 : 2 : Math.max(0, Math.min(2, runtime.laneTarget + direction));
+        runtime.laneStartedAt = performance.now();
+      }
+      Object.assign(runtime, advanceDeliveryTargets(runtime));
+      setFrame({ ...runtime });
+      return;
+    }
     const nextTarget = Math.max(0, Math.min(2, runtime.laneTarget + direction));
     if (nextTarget === runtime.laneTarget) return;
     runtime.laneFromX = runtime.laneX;
@@ -147,13 +170,13 @@ export function DeliveryGame() {
       // Advance feedback on game time, so pausing/backgrounding cannot skip it.
       runtime.deliverySuccessRemaining = Math.max(0, runtime.deliverySuccessRemaining - deltaSeconds);
       const input = driveInputRef.current;
+      if (input.forward !== input.reverse) runtime.travelDirection = input.reverse ? -1 : 1;
+      if (runtime.turnChoice && !turnChoiceIsValid(runtime.turnChoice, runtime.position, runtime.travelDirection)) runtime.turnChoice = null;
       const laneProgress = Math.min(1, Math.max(0, (timestamp - runtime.laneStartedAt) / (DELIVERY_GAME_CONFIG.laneChangeSeconds * 1_000)));
       const easedLaneProgress = laneProgress * laneProgress * (3 - 2 * laneProgress);
       const previousLaneX = runtime.laneX;
       if (!runtime.driveway) runtime.laneX = runtime.laneFromX + ((runtime.laneTarget - 1) * DELIVERY_GAME_CONFIG.laneSpacing - runtime.laneFromX) * easedLaneProgress;
       const bothPressed = input.forward && input.reverse;
-      const nextStop = DELIVERY_STOPS[runtime.stopIndex];
-      const entranceLane = nextStop?.side === "left" ? 0 : 2;
       const desiredSpeed = bothPressed
         ? 0
         : input.forward
@@ -183,26 +206,30 @@ export function DeliveryGame() {
         if (driveway.progress >= length && runtime.speed >= 0) {
           // The path ends at this exact main-road lane. Carry the small frame
           // remainder across the join without stopping or teleporting.
-          const exitDistance = getDrivewayExitDistance(driveway.stopIndex);
+          const fromExit = driveway.entryEnd === "exit";
+          const exitDistance = fromExit ? driveway.entryPosition : getDrivewayExitDistance(driveway.stopIndex);
           const unitsPerMeter = getRouteFrame(exitDistance + .5).position.distanceTo(getRouteFrame(exitDistance - .5).position);
           runtime.position = exitDistance + (driveway.progress - length) / unitsPerMeter;
           runtime.laneTarget = DELIVERY_STOPS[driveway.stopIndex].side === "left" ? 0 : 2;
-          runtime.laneX = runtime.laneFromX = (runtime.laneTarget - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
+          runtime.laneX = runtime.laneFromX = fromExit ? driveway.entryLaneX : (runtime.laneTarget - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
           runtime.laneStartedAt = timestamp;
           runtime.driveway = null;
         } else if (driveway.progress <= 0 && runtime.speed < 0) {
-          runtime.position = driveway.entryPosition;
-          runtime.laneX = runtime.laneFromX = driveway.entryLaneX;
+          const fromExit = driveway.entryEnd === "exit";
+          const entrance = fromExit ? DELIVERY_STOPS[driveway.stopIndex].distance : driveway.entryPosition;
+          const unitsPerMeter = getRouteFrame(entrance + .5).position.distanceTo(getRouteFrame(entrance - .5).position);
+          runtime.position = entrance + driveway.progress / unitsPerMeter;
           runtime.laneTarget = DELIVERY_STOPS[driveway.stopIndex].side === "left" ? 0 : 2;
+          runtime.laneX = runtime.laneFromX = fromExit ? (runtime.laneTarget - 1) * DELIVERY_GAME_CONFIG.laneSpacing : driveway.entryLaneX;
           runtime.laneStartedAt = timestamp;
           runtime.driveway = null;
         }
       } else {
         runtime.position += runtime.speed * deltaSeconds;
-        if (nextStop && runtime.speed > 0 && runtime.laneTarget === entranceLane
-          && runtime.position >= nextStop.distance && runtime.position <= nextStop.distance + 6
-          && Math.abs(runtime.laneX - (entranceLane - 1) * DELIVERY_GAME_CONFIG.laneSpacing) < .55) {
-          runtime.driveway = { stopIndex: runtime.stopIndex, progress: 0, entryPosition: runtime.position, entryLaneX: runtime.laneX };
+        const entered = enterSelectedTurn(runtime.turnChoice, runtime.position, runtime.speed, runtime.laneX);
+        if (entered) {
+          runtime.driveway = entered;
+          runtime.turnChoice = null;
           runtime.collisionId = null;
         }
       }
@@ -243,9 +270,11 @@ export function DeliveryGame() {
       const previousStopIndex = runtime.stopIndex;
       Object.assign(runtime, advanceDeliveryTargets(runtime));
       if (runtime.stopIndex !== previousStopIndex) runtime.stopDwell = 0;
-      if (nextStop && runtime.position <= DELIVERY_GAME_CONFIG.totalDistance) {
-        const stoppedInZone = isAtDrivewayDelivery(runtime.driveway, runtime.stopIndex) && Math.abs(runtime.speed) < 0.55;
-        if (stoppedInZone && !runtime.quizPassedStops.includes(runtime.stopIndex)) {
+      const deliveryIndex = runtime.driveway?.stopIndex;
+      if (deliveryIndex !== undefined && !runtime.completedStops.includes(deliveryIndex)) {
+        const stoppedInZone = isAtDrivewayDelivery(runtime.driveway, deliveryIndex) && Math.abs(runtime.speed) < 0.55;
+        if (stoppedInZone && !runtime.quizPassedStops.includes(deliveryIndex)) {
+          runtime.stopIndex = deliveryIndex;
           runtime.speed = 0;
           runtime.stopDwell = 0;
           clearInputs();
@@ -255,13 +284,14 @@ export function DeliveryGame() {
         }
         runtime.stopDwell = stoppedInZone ? runtime.stopDwell + deltaSeconds : 0;
         if (runtime.stopDwell >= DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds) {
-          runtime.completedStops = [...runtime.completedStops, runtime.stopIndex];
-          runtime.stopIndex += 1;
+          runtime.completedStops = [...runtime.completedStops, deliveryIndex];
+          runtime.skippedStops = runtime.skippedStops.filter(index => index !== deliveryIndex);
+          Object.assign(runtime, advanceDeliveryTargets(runtime));
           runtime.stopDwell = 0;
           runtime.deliveryPulse += 1;
           runtime.deliverySuccessRemaining = DELIVERY_GAME_CONFIG.deliverySuccessSeconds;
         }
-      }
+      } else runtime.stopDwell = 0;
 
       // An alley-to-main join bypasses that section of the main road; do not
       // sweep collisions across the entrance-to-exit route-coordinate jump.
@@ -392,6 +422,8 @@ export function DeliveryGame() {
         data-position={frame.position.toFixed(2)}
         data-speed={frame.speed.toFixed(2)}
         data-lane={frame.laneTarget}
+        data-travel-direction={frame.travelDirection}
+        data-turn-choice={frame.turnChoice ? `${frame.turnChoice.stopIndex}:${frame.turnChoice.entryEnd}` : ""}
         data-collision-count={frame.collisionCount}
         data-slowdown-active={frame.slowdownUntil > performance.now() ? "true" : "false"}
         data-stop-index={frame.stopIndex}
@@ -401,6 +433,7 @@ export function DeliveryGame() {
         data-detour={frame.detour}
         data-closure-reached={frame.closureReached ? "true" : "false"}
         data-driveway-index={frame.driveway?.stopIndex ?? -1}
+        data-driveway-entry={frame.driveway?.entryEnd ?? "entrance"}
         data-driveway-progress={(frame.driveway?.progress ?? 0).toFixed(3)}
         data-driveway-length={frame.driveway ? getDrivewayLength(frame.driveway.stopIndex).toFixed(3) : 0}
         data-delivery-zone-start={frame.driveway ? getDrivewayDeliveryInterval(frame.driveway.stopIndex).start.toFixed(3) : 0}
@@ -473,6 +506,9 @@ export function DeliveryGame() {
             driveway={frame.driveway}
             guidanceReplay={guidanceReplay}
             closureReached={frame.closureReached}
+            travelDirection={frame.travelDirection}
+            turnChoice={frame.turnChoice}
+            completedStops={frame.completedStops}
           />
 
           <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />

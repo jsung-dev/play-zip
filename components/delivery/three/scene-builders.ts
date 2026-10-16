@@ -9,7 +9,7 @@ import {
   type DeliveryBrand,
   type ObstaclePlacement,
 } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
 import { BUS_AD_PANELS } from "@/data/delivery-outdoor-ads";
@@ -301,8 +301,11 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
       const distance = start + (end - start) * n / 40;
       const segment = getDrivewayFrame(index, distance);
       if (distance > length) segment.position.addScaledVector(segment.tangent, distance - length);
+      const flare = getDrivewayPavedWidth(index, distance) - width;
+      const pavedWidth = ribbonWidth > 1 ? ribbonWidth + flare : ribbonWidth;
+      const edgeOffset = offset + Math.sign(offset) * flare / 2;
       for (const side of [-1, 1]) {
-        const point = segment.position.clone().addScaledVector(segment.lateral, offset + side * ribbonWidth / 2);
+        const point = segment.position.clone().addScaledVector(segment.lateral, edgeOffset + side * pavedWidth / 2);
         positions.push(point.x, y, point.z);
       }
       if (n < 40) { const i = n * 2; indices.push(i, i + 1, i + 2, i + 1, i + 3, i + 2); }

@@ -109,7 +109,10 @@ export function createRouteGuidance(world: DeliveryWorld) {
     const points=deliveryGuidanceWaypoints(state,highlighted);
     arrows.forEach((arrow,i)=>{
       const sample=points[i]; arrow.visible=!!sample;
-      if(sample){arrow.position.copy(sample.frame.position);arrow.position.y=0;arrow.rotation.y=sample.frame.yaw+(sample.reverse?Math.PI:0);arrow.scale.setScalar(highlighted?1.12:1);}
+      if(sample){arrow.position.copy(sample.frame.position);arrow.position.y=0;arrow.rotation.y=sample.frame.yaw+(sample.reverse?Math.PI:0);arrow.scale.setScalar(highlighted?1.12:1);
+        (arrow.children[0] as THREE.Mesh).material=sample.selected===false?mint:white;
+        (arrow.children[1] as THREE.Mesh).material=sample.selected===false?white:mint;
+      }
     });
     return {target: index<DELIVERY_STOPS.length?DELIVERY_STOPS[index].id:"final",house:target.houseId,door:target.doorKey,mode:enabled&&pin.visible?(entrance?"entrance":"house"):"hidden",arrows:enabled?points.length:0,highlighted:enabled&&highlighted,ring:enabled&&entrance&&index<rings.length};
   };
