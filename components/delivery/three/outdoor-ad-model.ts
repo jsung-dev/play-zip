@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { OUTDOOR_AD_STYLE, type OutdoorAdPlacement } from "@/data/delivery-outdoor-ads";
+import { OUTDOOR_AD_STYLE, OUTDOOR_AD_FORMATS, type OutdoorAdPlacement, type OverheadAdPlacement } from "@/data/delivery-outdoor-ads";
+import { getRouteFrame } from "@/data/delivery-map";
 import { advertisementLayout, advertisementTransform, isLandmark } from "./scene-layout";
 import { TOWN_COLORS, type SceneArt } from "./scene-art";
 import type { OutdoorAdResources } from "./outdoor-ad-material";
@@ -62,5 +63,27 @@ export function createOutdoorAdvertisement(ad: OutdoorAdPlacement, art: SceneArt
   art.put(group, resources.panel(ad, w), 0, y, .15);
   const transform = advertisementTransform(ad);
   group.position.copy(transform.position); group.rotation.y = transform.yaw;
+  return group;
+}
+
+/** Open gantry, not a wall: supports stay outside road and bus-only shoulders. */
+export function createOverheadAdvertisement(ad: OverheadAdPlacement, art: SceneArt, resources: OutdoorAdResources) {
+  const group = new THREE.Group(), h = ad.width / OUTDOOR_AD_FORMATS[ad.format].ratio;
+  group.name = `outdoor-installation:${ad.id}`;
+  group.userData = { routeDistance: ad.distance, outdoorAdId: ad.id, format: ad.format,
+    clearance: ad.height - h / 2 - .22, supportSpan: ad.supportSpan };
+  const beamY = ad.height + h / 2 + .1;
+  for (const side of [-1, 1]) {
+    const x = side * ad.supportSpan / 2;
+    art.put(group, art.box(.3, beamY, .3, TOWN_COLORS.metal), x, beamY / 2, -.32);
+    art.put(group, art.box(.65, .25, .75, TOWN_COLORS.pavement), x, .125, -.32);
+  }
+  art.put(group, art.box(ad.supportSpan + .3, .22, .3, TOWN_COLORS.metal), 0, beamY, -.32);
+  art.put(group, art.box(ad.width + .4, h + .4, .28, OUTDOOR_AD_STYLE.frame), 0, ad.height, -.06);
+  art.put(group, art.box(ad.width + .13, h + .13, .055, "#fff7e6"), 0, ad.height, .105);
+  art.merge(group);
+  art.put(group, resources.panel(ad, ad.width), 0, ad.height, .15);
+  const frame = getRouteFrame(ad.distance);
+  group.position.copy(frame.position); group.rotation.y = frame.yaw;
   return group;
 }

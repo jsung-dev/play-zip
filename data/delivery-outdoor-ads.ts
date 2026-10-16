@@ -38,6 +38,16 @@ export const OUTDOOR_ADS: OutdoorAdPlacement[] = [
   { id: "outdoor-915", format: "square", image: null, type: "corner-store", distance: 915, route: "main", side: "right", lateralOffset: 15.1, height: 10.3, width: 7, rotation: { approach: 42, yawDegrees: 0 } },
 ];
 
+// Overhead placement is separate from ground-mounted boards: its open span must
+// not reserve a solid lot across the street or move the existing 13 billboards.
+export type OverheadAdPlacement = OutdoorCreative & {
+  format: "banner"; distance: number; width: number; height: number; supportSpan: number;
+};
+export const DESTINATION_OVERHEAD_AD: OverheadAdPlacement = {
+  id: "outdoor-final-overhead", format: "banner", image: null,
+  distance: 975, width: 14, height: 9.2, supportSpan: 18.5,
+};
+
 export type BusAdPanel = OutdoorCreative & {
   busId: string;
   width: number;

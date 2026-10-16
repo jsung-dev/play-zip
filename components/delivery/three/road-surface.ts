@@ -1,6 +1,16 @@
 import * as THREE from "three";
 
-export const ROAD_SURFACE = { color: "#929A9C", sidewalk: "#F5F0E5", textureRepeatMeters: 4 } as const;
+export const ROAD_SURFACE = { color: "#929A9C", restricted: "#C7BCAB", sidewalk: "#F5F0E5", textureRepeatMeters: 4 } as const;
+
+/** Bus-only shoulders and the closed road are visibly separate from riding.
+ * Reuse the asphalt grain; no new image, lighting or per-frame work is needed. */
+export function createRestrictedSurfaceMaterial(road: THREE.Material) {
+  const material = new THREE.MeshBasicMaterial({ color: ROAD_SURFACE.restricted,
+    map: road instanceof THREE.MeshBasicMaterial ? road.map : null,
+    side: THREE.DoubleSide, toneMapped: false });
+  material.name = "non-drivable-stone";
+  return material;
+}
 
 /** One neutral, matte surface per world, shared by every driveable ribbon.
  * Unlit color avoids different face winding/lighting tinting adjoining pieces;

@@ -9,13 +9,13 @@ import {
   type DeliveryBrand,
   type ObstaclePlacement,
 } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtraLaneX, turnLaneSide, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtraLaneX, turnLaneSide, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
-import { applyRoadSurfaceUV, createRoadSurfaceMaterial, ROAD_SURFACE } from "./road-surface";
+import { applyRoadSurfaceUV, createRoadSurfaceMaterial, createRestrictedSurfaceMaterial, ROAD_SURFACE } from "./road-surface";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
-import { BUS_AD_PANELS } from "@/data/delivery-outdoor-ads";
+import { BUS_AD_PANELS, DESTINATION_OVERHEAD_AD } from "@/data/delivery-outdoor-ads";
 import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-material";
-import { createOutdoorAdvertisement } from "./outdoor-ad-model";
+import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
 
 export type BikeRig = {
@@ -228,19 +228,26 @@ function createRoadRibbon(width: number, material: THREE.Material, branch: Detou
 
 export function createRoad(art: SceneArt, road: THREE.Material) {
   const group = new THREE.Group();
+  const restricted = createRestrictedSurfaceMaterial(road);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), art.material(TOWN_COLORS.lawn));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -.14; group.add(ground);
   group.add(createRoadRibbon(DELIVERY_GAME_CONFIG.roadWidth, road));
   const pavedSections = [[-45, ROAD_CLOSURE.junctionDistance - 20], [ROAD_CLOSURE.mergeEnd + 18, DELIVERY_GAME_CONFIG.totalDistance]];
   for (const [start, end] of pavedSections) {
     for (const side of [-1, 1]) {
-      group.add(createRoadRibbon(3.4, road, "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset));
+      const shoulder = createRoadRibbon(3.4, restricted, "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset);
+      shoulder.name = `bus-only-shoulder:${side}:${start}`;
+      group.add(shoulder);
       group.add(createRoadRibbon(2.3, art.material(ROAD_SURFACE.sidewalk), "main", .025, start, end, side * 8.95));
       group.add(createRoadRibbon(.19, art.material(TOWN_COLORS.curb), "main", .052, start, end, side * 7.8));
       group.add(createRoadRibbon(.12, art.material("#e5e4d4"), "main", .04, start, end, side * (DELIVERY_GAME_CONFIG.roadWidth / 2 - .1)));
     }
   }
   const forkStart = ROAD_CLOSURE.junctionDistance - 18, forkEnd = ROAD_CLOSURE.mergeEnd + 18;
+  // The barrier's inaccessible continuation, BELOW both usable bypasses.
+  // Their existing gray ribbons cover the join, without changing route vertices.
+  const closed = createRoadRibbon(DELIVERY_GAME_CONFIG.roadWidth, restricted, "main", .014, ROAD_CLOSURE.distance, ROAD_CLOSURE.mergeEnd);
+  closed.name = "closed-main-road"; group.add(closed);
   for (const branch of ["left", "right"] as const) {
     group.add(createRoadRibbon(9.3, art.material(ROAD_SURFACE.sidewalk), branch, -.015, forkStart, forkEnd));
     group.add(createRoadRibbon(8.2, road, branch, branch === "left" ? .027 : .029, forkStart, forkEnd));
@@ -267,7 +274,13 @@ export function createRoad(art: SceneArt, road: THREE.Material) {
     const start = Math.min(far, near), end = Math.max(far, near), segments = 40;
     for (let n = 0; n <= segments; n++) {
       const distance = start + (end-start) * n / segments, frame = getRouteFrame(distance);
-      const outer = Math.abs(getExtraLaneX(connection, distance)) + TURN_LANE.halfWidth;
+      const laneOuter = Math.abs(getExtraLaneX(connection, distance)) + TURN_LANE.halfWidth;
+      // After the same grace point where the rider merges, taper only the
+      // painted asphalt edge into the main road. No square shoulder cut-off.
+      const pastJoin = (distance - connection.distance) * connection.direction;
+      const tailBlend = THREE.MathUtils.smoothstep(pastJoin, TURN_LANE.grace, TURN_LANE.tail);
+      const outer = Math.max(DELIVERY_GAME_CONFIG.roadWidth / 2,
+        THREE.MathUtils.lerp(laneOuter, DELIVERY_GAME_CONFIG.roadWidth / 2, tailBlend));
       for (const x of [3.65, outer]) {
         const p = frame.position.clone().addScaledVector(frame.lateral, side * x);
         positions.push(p.x, .06, p.z);
@@ -336,7 +349,12 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
       const distance = start + (end - start) * n / 40;
       const segment = getDrivewayFrame(index, distance);
       if (distance > length) segment.position.addScaledVector(segment.tangent, distance - length);
-      const flare = getDrivewayPavedWidth(index, distance) - width;
+      // Match the fourth lane's 3m mouth, then ease into the unchanged 4.4m
+      // alley. The old 7.6m decorative flare left gray triangles on the walk.
+      // This is pavement skin only; driveway curves, entries and bounds stay put.
+      const joinDistance = Math.min(distance, length - distance);
+      const flare = THREE.MathUtils.lerp(TURN_LANE.halfWidth * 2, width,
+        THREE.MathUtils.smoothstep(joinDistance, 0, 6)) - width;
       const pavedWidth = ribbonWidth > 1 ? ribbonWidth + flare : ribbonWidth;
       const edgeOffset = offset + Math.sign(offset) * flare / 2;
       for (const side of [-1, 1]) {
@@ -643,6 +661,8 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
     root.add(ad);
     worldObjects.push(ad);
   }
+  const overhead = createOverheadAdvertisement(DESTINATION_OVERHEAD_AD, art, outdoorResources);
+  root.add(overhead); worldObjects.push(overhead);
 
   for (const placement of BUS_PLACEMENTS) {
     const bus = createBus(placement, art, outdoorResources);

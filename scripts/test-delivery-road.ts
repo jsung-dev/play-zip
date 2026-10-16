@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { DELIVERY_BRANDS } from "../data/delivery-game";
-import { DELIVERY_STOPS } from "../data/delivery-map";
+import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG } from "../data/delivery-game";
+import { DELIVERY_STOPS, TURN_LANE, TURN_LANE_CONNECTIONS, getRouteFrame } from "../data/delivery-map";
 import { createSceneArt, TOWN_COLORS } from "../components/delivery/three/scene-art";
 import { createRoad, createDeliveryStop } from "../components/delivery/three/scene-builders";
 import { ROAD_SURFACE, applyRoadSurfaceUV, createRoadSurfaceMaterial } from "../components/delivery/three/road-surface";
@@ -21,11 +21,33 @@ for(const marker of markers){
   assert.equal(rim.geometry.groups[0].materialIndex,0,"Entrance rim cannot leave an ivory seam across asphalt");
   assert.equal(rim.geometry.groups.at(-1)!.materialIndex,0,"Exit rim cannot leave an ivory seam across asphalt");
   assert(rim.geometry.groups.some(group=>group.materialIndex===1),"Alley-side ivory edging remains outside joins");
+  const asphalt=marker.children[1] as THREE.Mesh;
+  const vertices=asphalt.geometry.getAttribute("position");
+  for(const n of [0,vertices.count-2]){
+    const a=new THREE.Vector3().fromBufferAttribute(vertices,n),b=new THREE.Vector3().fromBufferAttribute(vertices,n+1);
+    assert(Math.abs(a.distanceTo(b)-TURN_LANE.halfWidth*2)<.00005,"Alley mouth meets extra lane without a flare across the sidewalk");
+  }
 }
 for(const group of [ground,...markers])group.traverse(object=>{
   if(object instanceof THREE.Mesh&&object.material===road)meshes.push(object);
 });
-assert.equal(meshes.length,16,"Main + four bus shoulders + two bypasses + six turn lanes + three alleys share one material");
+assert.equal(meshes.length,12,"Main + two bypasses + six turn lanes + three alleys share one material");
+const restricted=ground.children.filter((m):m is THREE.Mesh=>m instanceof THREE.Mesh&&!Array.isArray(m.material)&&m.material.name==="non-drivable-stone");
+assert.equal(restricted.length,5,"Four bus-only shoulders and closed main-road continuation are visually distinct");
+for(const connection of TURN_LANE_CONNECTIONS){
+  const lane=ground.getObjectByName(`turn-lane-${connection.stopIndex}-${connection.entryEnd}`) as THREE.Mesh;
+  const positions=lane.geometry.getAttribute("position");
+  const vertex=connection.direction===1?positions.count-1:1;
+  const point=new THREE.Vector3().fromBufferAttribute(positions,vertex);
+  const frame=getRouteFrame(connection.distance+connection.direction*TURN_LANE.tail);
+  assert(Math.abs(Math.abs(point.sub(frame.position).dot(frame.lateral))-DELIVERY_GAME_CONFIG.roadWidth/2)<.00005,"No abrupt rectangular end at either merge");
+}
+for(const mesh of restricted){
+  const material=mesh.material as THREE.MeshBasicMaterial;
+  assert.equal(material.color.getHexString(),ROAD_SURFACE.restricted.slice(1).toLowerCase());
+  assert.equal(material.map,road.map,"Reuse the neutral texture");
+  assert.equal(material.toneMapped,false);
+}
 for(const mesh of meshes){
   const positions=mesh.geometry.getAttribute("position"),uv=mesh.geometry.getAttribute("uv");
   assert.equal(positions.count,uv.count);
@@ -44,4 +66,4 @@ assert(road.map instanceof THREE.DataTexture);
 const pixels=road.map.image.data as Uint8Array;
 for(let i=0;i<pixels.length;i+=4){assert(pixels[i]>=252);assert.equal(pixels[i],pixels[i+1]);assert.equal(pixels[i],pixels[i+2]);}
 road.map!.dispose();road.dispose();
-console.log("16 road surfaces share #929A9C material, neutral world-aligned grain, unchanged geometry/markings and distinct ivory sidewalks/green grass.");
+console.log("12 driveable surfaces share #929A9C; 5 inaccessible surfaces use stone color. Geometry/markings, ivory sidewalks and green grass preserved.");

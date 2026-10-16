@@ -118,7 +118,49 @@ try {
  };
  await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
  await load();await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');await until(async()=>(await state()).status==='playing','start');
- if(process.env.GUIDANCE_QA_ROAD==='1') {
+ if(process.env.GUIDANCE_QA_NEIGHBORHOOD==='1') {
+  const frames=[
+    ['street',{position:80}],['shops',{position:250}],
+    ['entry',{position:184,laneTarget:-1,laneX:-5,laneFromX:-5}],
+    ['exit',{position:190,driveway:{stopIndex:0,progress:getDrivewayLength(0)-3,entryPosition:190,entryLaneX:-5}}],
+    ['restricted',{position:580,detour:'left'}],
+    ['overhead-far',{position:940,detour:'left'}],['overhead-near',{position:958,detour:'left'}],
+  ];
+  for(const [name,values] of frames){
+    await fixture({speed:0,driveway:null,travelDirection:1,laneStartedAt:0,laneTarget:1,laneX:0,laneFromX:0,detour:'main',deliverySuccessRemaining:0,...values});
+    await delay(1100);await capture(`neighborhood-${name}-390`);
+  }
+  for(const [w,h] of [[335,568],[430,932]]){
+    await checkHud(w,h);
+    for(const [name,position] of [['street',80],['overhead',945]]){
+      await fixture({position,speed:0,driveway:null,detour:'left',laneTarget:1,laneX:0,laneFromX:0,laneStartedAt:0});
+      await delay(1000);await capture(`neighborhood-${name}-${w}`);
+    }
+  }
+  await size(390,844);
+  // Actual touch driving over the recoloured entrance and exit; no route edits.
+  await fixture({position:181,speed:0,driveway:null,travelDirection:1,laneTarget:-1,laneX:-5,laneFromX:-5,laneStartedAt:0});
+  await delay(250);
+  await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:260,y:660,id:5}]});
+  await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:260,y:550,id:5}]});
+  await until(async()=>(await details()).alley===0,'touch entrance',7000);
+  await until(async()=>(await details()).alley===-1,'touch through alley exit',12000);
+  assert((await details()).speed>19);assert.equal((await details()).brand,'seoul');
+  await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await until(async()=>(await details()).speed===0,'touch released',3000);
+  results.push({check:'touch entrance and exit',...await details()});
+  await fixture({position:950,speed:0,driveway:null,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0,detour:'left',completedStops:[],quizPassedStops:[],skippedStops:[0,1,2],stopIndex:3});
+  await driveUntil(s=>s.status==='arriving'||s.status==='completed','drive beneath overhead banner');
+  await until(async()=>(await details()).status==='completed','final advertisement');
+  assert.equal((await details()).count,1);
+  assert.equal(await run(()=>document.querySelector('[data-purchase-ad]').dataset.purchaseAd),'seoul');
+  await capture('neighborhood-completed-390');
+  await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');
+  assert.equal((await details()).count,0);
+  assert.deepEqual(errors,[]);
+  results.push({passed:true,mobileWidths:[335,390,430],touchThroughAlley:true,overheadPassage:true,selectedBrandPreserved:true,finalAd:true,restart:true,runtimeErrors:errors});
+  console.log(JSON.stringify({passed:true,checks:'building forms, restricted surfaces, overhead banner, mobile driving and completion',out}));
+ } else if(process.env.GUIDANCE_QA_ROAD==='1') {
   const label=process.env.ROAD_QA_LABEL||'after';
   const frames=[
     ['main',{position:80,laneTarget:1,laneX:0,laneFromX:0}],
@@ -436,7 +478,7 @@ try {
  console.log(JSON.stringify({passed:true,results:results.length,out},null,2));
  }
 } finally {
- await writeFile(join(out,process.env.GUIDANCE_QA_ROAD==='1'?`road-${process.env.ROAD_QA_LABEL||'after'}-results.json`:process.env.GUIDANCE_QA_LANE_VISUAL==='1'?'lane-visual-results.json':process.env.GUIDANCE_QA_LANES==='1'?process.env.GUIDANCE_QA_LANES_CONTINUE==='1'?'lane-continued-results.json':'lane-results.json':process.env.GUIDANCE_QA_TURN_VISUAL==='1'?'turn-visual-results.json':process.env.GUIDANCE_QA_TURNS==='1'?'turn-results.json':process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
+ await writeFile(join(out,process.env.GUIDANCE_QA_NEIGHBORHOOD==='1'?'neighborhood-results.json':process.env.GUIDANCE_QA_ROAD==='1'?`road-${process.env.ROAD_QA_LABEL||'after'}-results.json`:process.env.GUIDANCE_QA_LANE_VISUAL==='1'?'lane-visual-results.json':process.env.GUIDANCE_QA_LANES==='1'?process.env.GUIDANCE_QA_LANES_CONTINUE==='1'?'lane-continued-results.json':'lane-results.json':process.env.GUIDANCE_QA_TURN_VISUAL==='1'?'turn-visual-results.json':process.env.GUIDANCE_QA_TURNS==='1'?'turn-results.json':process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
  try{if(ws?.readyState===1)ws.send(JSON.stringify({id:++id,method:'Browser.close'}));}catch{}
  await delay(400);browser.kill();ws?.close();for(const p of pending.values())clearTimeout(p.timer);
  if(resolve(profile).startsWith(resolve(tmpdir())+sep)&&basename(profile).startsWith('delivery-guidance-qa-'))await rm(profile,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});

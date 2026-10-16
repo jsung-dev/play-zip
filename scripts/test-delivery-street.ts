@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { SCENERY_ITEMS, DELIVERY_GAME_CONFIG, type SceneryItem } from "../data/delivery-game";
 import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "../data/delivery-map";
 import { createSceneArt } from "../components/delivery/three/scene-art";
+import { streetArchitecture } from "../components/delivery/three/street-architecture";
 import { resolveAdvertisements, sceneryHasClearance } from "../components/delivery/three/scene-layout";
 import { buildStreetLayout, buildingProfile, polygonsOverlap, pointPolygonDistance, streetTransform, rectangle, advertisementSightlines, buildingBlocksRay, adFootprint } from "../components/delivery/three/street-layout";
 
@@ -26,17 +27,27 @@ for (const type of ["house", "shop"] as const) for (let variant = 0; variant < 5
   const item = { id: "fixture", distance: 0, side: "left", type, variant } as SceneryItem;
   const old = bounds(art.building(item)), current = bounds(art.building(item, true)), p = buildingProfile(item, true);
   const a = old.getSize(new THREE.Vector3()), b = current.getSize(new THREE.Vector3());
-  assert(b.y / a.y >= 1.6 && b.y / a.y <= 2, `Actual height ratio ${type}/${variant}`);
-  assert(b.x / a.x >= 1.2 && b.x / a.x <= 1.4, `Actual frontage ratio ${type}/${variant}`);
+  const spec = streetArchitecture(item);
+  assert(spec.floors >= 2 && spec.floors <= 5, `Actual storeys ${type}/${variant}`);
+  assert(b.y > spec.height && b.x > spec.width, "Real model, not camera scaling");
   assert(current.max.x <= p.halfWidth + .001 && -current.min.x <= p.halfWidth + .001, `Width envelope ${type}/${variant}: ${current.min.x},${current.max.x} vs ${p.halfWidth}`);
   assert(current.max.z <= p.front + .001 && -current.min.z <= p.back + .001, `Depth envelope ${type}/${variant}`);
   assert(current.max.y <= p.solidHeight + .001, `Height envelope ${type}/${variant}`);
   const twin = art.building(item, true);
   assert.equal(twin.children.find(c => c instanceof THREE.Mesh)?.geometry, art.building(item, true).children.find(c => c instanceof THREE.Mesh)?.geometry, "Repeated models share geometry");
-  dimensions.push({ type, variant, oldWidth: +a.x.toFixed(2), newWidth: +b.x.toFixed(2), oldHeight: +a.y.toFixed(2), newHeight: +b.y.toFixed(2), floors: p.floors });
+  dimensions.push({ type, variant, kind: spec.kind, oldWidth: +a.x.toFixed(2), newWidth: +b.x.toFixed(2), oldHeight: +a.y.toFixed(2), newHeight: +b.y.toFixed(2), floors: spec.floors });
 }
+assert.equal(new Set(dimensions.map(d => d.kind)).size, 6, "Six genuinely different architectural types");
+assert.deepEqual([...new Set(dimensions.map(d => d.floors))].sort(), [2,3,4,5]);
+assert(Math.max(...dimensions.map(d=>d.newWidth))/Math.min(...dimensions.map(d=>d.newWidth))>1.4, "Wide shops and narrow villas have different real frontage");
 const ads = resolveAdvertisements(), buildings = buildStreetLayout(ads), oldBuildings = SCENERY_ITEMS.filter(i => ["house", "shop"].includes(i.type) && sceneryHasClearance(i, ads));
-assert(buildings.length > 150 && buildings.length < 240, "Dense but bounded world population");
+assert.equal(buildings.length,203,"Preserve the existing lot plan");
+let triangles = 0, meshes = 0;
+for(const item of buildings) art.building(item,true).traverse(o=>{
+  if(o instanceof THREE.Mesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;}
+});
+assert(triangles<=1299699,"Do not increase the measured pre-change street geometry budget");
+assert(meshes<=3422,"Preserve material batching budget");
 for (let i = 0; i < buildings.length; i++) {
   const b = buildings[i];
   for (const other of buildings.slice(i + 1)) assert(!polygonsOverlap(b.footprint, other.footprint, .3), `Buildings overlap: ${b.id}/${other.id}`);
@@ -77,7 +88,8 @@ for (const side of ["left", "right"]) {
   }
 }
 assert(gaps.length > 60, "Enough genuinely continuous frontage outside exceptions");
-const result = { dimensions, oldBuildings: oldBuildings.length, newBuildings: buildings.length, normalGaps: gaps.length, gapMeters: [Math.min(...gaps), Math.max(...gaps)], gapRatios: [Math.min(...ratios), Math.max(...ratios)], ads: ads.length, checks: ["real model bounds", "template reuse", "no overlap", "sidewalks", "driveways", "ad sightlines", "10–20% normal gaps"] };
+const result = { dimensions, triangles, meshes, baselineTriangles:1299699, baselineMeshes:3422, oldBuildings: oldBuildings.length, newBuildings: buildings.length, normalGaps: gaps.length, gapMeters: [Math.min(...gaps), Math.max(...gaps)], gapRatios: [Math.min(...ratios), Math.max(...ratios)], ads: ads.length, checks: ["six forms / 2–5 storeys", "real model inside old lot bounds", "template reuse", "no overlap", "sidewalks", "driveways", "ad sightlines", "unchanged lot gaps"] };
+mkdirSync("test-artifacts/streetscape",{recursive:true});
 writeFileSync("test-artifacts/streetscape/geometry.json", JSON.stringify(result, null, 2));
 console.table(dimensions);
 console.log(JSON.stringify({ ...result, dimensions: undefined }, null, 2));

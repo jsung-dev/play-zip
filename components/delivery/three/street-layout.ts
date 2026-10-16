@@ -15,6 +15,8 @@ export const STREET_BUILDINGS = {
   endDistance: 970,
 } as const;
 
+// Street=true is the reserved legacy LOT envelope. Architecture may be smaller,
+// but keeping this planner stable preserves all existing roads and ad sightlines.
 export function buildingProfile(item: Pick<SceneryItem, "variant" | "type">, street = false) {
   const v = item.variant % 5, shop = item.type === "shop";
   const width = (shop ? 6.2 : 5.4 + v % 2 * .8) * (street ? STREET_BUILDINGS.frontageMultiplier : 1);

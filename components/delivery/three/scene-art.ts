@@ -5,6 +5,7 @@ import { DELIVERY_GAME_CONFIG, type DeliveryBrand, type SceneryItem } from "@/da
 import { BUILDING_SCALE } from "./scene-layout";
 import { buildingProfile } from "./street-layout";
 import { ROAD_SURFACE } from "./road-surface";
+import { createStreetArchitecture } from "./street-architecture";
 
 export const TOWN_COLORS = {
   sky: "#50bff0", haze: "#d9eceb", lawn: "#b8d998", road: ROAD_SURFACE.color,
@@ -136,6 +137,12 @@ export function createSceneArt() {
     };
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
+    if (street) {
+      const model = createStreetArchitecture(item, { box, put, windowOn, shadow, merge });
+      model.scale.set(BUILDING_SCALE.width, BUILDING_SCALE.height, BUILDING_SCALE.depth);
+      buildingTemplates.set(key, model);
+      return place(model.clone());
+    }
     const group = new THREE.Group();
     const v = item.variant % 5, shop = item.type === "shop";
     const { width: w, height: h, depth: d, floors } = buildingProfile(item, street);
