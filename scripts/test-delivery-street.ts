@@ -5,6 +5,7 @@ import { SCENERY_ITEMS, DELIVERY_GAME_CONFIG, type SceneryItem } from "../data/d
 import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "../data/delivery-map";
 import { createSceneArt } from "../components/delivery/three/scene-art";
 import { streetArchitecture } from "../components/delivery/three/street-architecture";
+import { createStreetArchitecture } from "../components/delivery/three/street-architecture";
 import { resolveAdvertisements, sceneryHasClearance } from "../components/delivery/three/scene-layout";
 import { buildStreetLayout, buildingProfile, polygonsOverlap, pointPolygonDistance, streetTransform, rectangle, advertisementSightlines, buildingBlocksRay, adFootprint } from "../components/delivery/three/street-layout";
 
@@ -37,8 +38,23 @@ for (const type of ["house", "shop"] as const) for (let variant = 0; variant < 5
   assert.equal(twin.children.find(c => c instanceof THREE.Mesh)?.geometry, art.building(item, true).children.find(c => c instanceof THREE.Mesh)?.geometry, "Repeated models share geometry");
   dimensions.push({ type, variant, kind: spec.kind, oldWidth: +a.x.toFixed(2), newWidth: +b.x.toFixed(2), oldHeight: +a.y.toFixed(2), newHeight: +b.y.toFixed(2), floors: spec.floors });
 }
-assert.equal(new Set(dimensions.map(d => d.kind)).size, 6, "Six genuinely different architectural types");
+assert.equal(new Set(dimensions.map(d => d.kind)).size, 5, "The five A–E reference-sheet types");
 assert.deepEqual([...new Set(dimensions.map(d => d.floors))].sort(), [2,3,4,5]);
+const mint = createStreetArchitecture({ type: "house", variant: 1 } as SceneryItem, art);
+assert.equal(mint.userData.architecture.floors, 4, "Mint villa has four individually constructed storeys");
+const recess = mint.userData.balconyRecess;
+assert.equal(recess.floors.length, 3, "Three upstairs recessed balconies above the storefront");
+mint.updateMatrixWorld(true);
+for (const floor of recess.floors) {
+  const y = .2 + floor * mint.userData.architecture.pitch + 1.4;
+  const ray = new THREE.Raycaster(new THREE.Vector3(recess.x, y, recess.front + 2), new THREE.Vector3(0,0,-1));
+  const hit = ray.intersectObject(mint, true)[0];
+  assert(hit && hit.point.z < recess.front - .7, "Mint balcony is an actual deep void, not a painted panel");
+}
+const brightMaterial = art.buildingBox(1,1,1,"#BDE6C2").material as THREE.MeshLambertMaterial;
+assert.equal(brightMaterial, art.buildingBox(2,2,2,"#BDE6C2").material, "Building-only lighting materials are pooled");
+assert.equal(brightMaterial.toneMapped, false, "Keep the reference pastel colour in architecture");
+assert.notEqual(brightMaterial, art.box(1,1,1,"#BDE6C2").material, "Do not change the courier or ad material response");
 assert(Math.max(...dimensions.map(d=>d.newWidth))/Math.min(...dimensions.map(d=>d.newWidth))>1.4, "Wide shops and narrow villas have different real frontage");
 const ads = resolveAdvertisements(), buildings = buildStreetLayout(ads), oldBuildings = SCENERY_ITEMS.filter(i => ["house", "shop"].includes(i.type) && sceneryHasClearance(i, ads));
 assert.equal(buildings.length,203,"Preserve the existing lot plan");
@@ -46,8 +62,8 @@ let triangles = 0, meshes = 0;
 for(const item of buildings) art.building(item,true).traverse(o=>{
   if(o instanceof THREE.Mesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;}
 });
-assert(triangles<=1299699,"Do not increase the measured pre-change street geometry budget");
-assert(meshes<=3422,"Preserve material batching budget");
+assert(triangles<=449542,"Do not increase the immediately preceding street geometry budget");
+assert(meshes<=2600,"Bound material batches while keeping five distinct palettes");
 for (let i = 0; i < buildings.length; i++) {
   const b = buildings[i];
   for (const other of buildings.slice(i + 1)) assert(!polygonsOverlap(b.footprint, other.footprint, .3), `Buildings overlap: ${b.id}/${other.id}`);
@@ -88,7 +104,7 @@ for (const side of ["left", "right"]) {
   }
 }
 assert(gaps.length > 60, "Enough genuinely continuous frontage outside exceptions");
-const result = { dimensions, triangles, meshes, baselineTriangles:1299699, baselineMeshes:3422, oldBuildings: oldBuildings.length, newBuildings: buildings.length, normalGaps: gaps.length, gapMeters: [Math.min(...gaps), Math.max(...gaps)], gapRatios: [Math.min(...ratios), Math.max(...ratios)], ads: ads.length, checks: ["six forms / 2–5 storeys", "real model inside old lot bounds", "template reuse", "no overlap", "sidewalks", "driveways", "ad sightlines", "unchanged lot gaps"] };
+const result = { dimensions, triangles, meshes, baselineTriangles:449542, baselineMeshes:2206, oldBuildings: oldBuildings.length, newBuildings: buildings.length, normalGaps: gaps.length, gapMeters: [Math.min(...gaps), Math.max(...gaps)], gapRatios: [Math.min(...ratios), Math.max(...ratios)], ads: ads.length, checks: ["A–E / 2–5 storeys", "four-floor mint / ray-tested balcony recesses", "real model inside old lot bounds", "template and material reuse", "no overlap", "sidewalks", "driveways", "ad sightlines", "unchanged lot gaps"] };
 mkdirSync("test-artifacts/streetscape",{recursive:true});
 writeFileSync("test-artifacts/streetscape/geometry.json", JSON.stringify(result, null, 2));
 console.table(dimensions);

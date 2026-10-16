@@ -2,35 +2,36 @@ import * as THREE from "three";
 
 export type BuildingKit = {
   box: (w: number, h: number, d: number, color: string, radius?: number) => THREE.Mesh;
+  buildingBox?: (w: number, h: number, d: number, color: string) => THREE.Mesh;
   put: (g: THREE.Group, o: THREE.Object3D, x: number, y: number, z: number) => THREE.Object3D;
   shadow: (g: THREE.Group, w: number, d: number, x?: number, z?: number) => THREE.Object3D;
   merge: (g: THREE.Group) => THREE.Group;
 };
 
-// Architecture only: delivery houses, ad creatives, bicycle and lighting keep
-// their original materials. No logos or lettering are generated here.
+// A–E reference sheet palette. Only scenery architecture uses these finishes.
 export const NEIGHBORHOOD_FINISH = {
-  walls: ["#FFF0CF", "#B9E3CA", "#F6C5A9", "#F6E4AC", "#D0E9D8"],
-  accents: ["#DA9677", "#5AA58A", "#C8876B", "#82AE85", "#66A999"],
-  cream: "#FFF9E9", stone: "#D9CFB8", metal: "#47675F",
-  glass: "#65BCC8", recess: "#367D88",
+  walls: ["#F7B998", "#BDE6C2", "#FFEDCA", "#D5BBEB", "#FFE298"],
+  accents: ["#FFF1D0", "#90BE99", "#FFF1D0", "#B995D3", "#8DCEAC"],
+  cream: "#FFF3D9", stone: "#D8D1C4", metal: "#526061",
+  glass: "#59C8F3", recess: "#426D78",
 } as const;
 
 /** Low-poly facade pieces, pooled by the world's existing art factory. */
 export function facadeDetails(art: BuildingKit) {
   const c = NEIGHBORHOOD_FINISH;
-  const piece = (g: THREE.Group, w: number, h: number, d: number, color: string, x: number, y: number, z: number) => art.put(g, art.box(w, h, d, color), x, y, z);
+  const box = art.buildingBox ?? art.box;
+  const piece = (g: THREE.Group, w: number, h: number, d: number, color: string, x: number, y: number, z: number) => art.put(g, box(w, h, d, color), x, y, z);
   const pane = (g: THREE.Group, x: number, y: number, z: number, w: number, h: number, divisions = 2, darkFrame = false) => {
     const frame = darkFrame ? c.metal : c.cream;
-    piece(g, w + .13, h + .13, .07, c.recess, x, y, z);
+    piece(g, w + .16, h + .16, .08, c.recess, x, y, z);
     piece(g, w, h, .025, c.glass, x, y, z + .055);
-    piece(g, w * .23, h - .08, .009, "#A0D9D9", x - w * .32, y, z + .072);
+    piece(g, w * .16, h - .08, .009, "#86D3F0", x - w * .36, y, z + .072);
     for (const side of [-1, 1]) {
-      piece(g, .075, h + .16, .09, frame, x + side * (w + .06) / 2, y, z + .09);
-      piece(g, w + .16, .075, .09, frame, x, y + side * (h + .06) / 2, z + .09);
+      piece(g, .12, h + .24, .16, frame, x + side * (w + .12) / 2, y, z + .1);
+      piece(g, w + .24, .12, .16, frame, x, y + side * (h + .12) / 2, z + .1);
     }
     for (let n = 1; n < divisions; n++) piece(g, .055, h, .07, frame, x - w / 2 + w * n / divisions, y, z + .1);
-    piece(g, w + .23, .1, .21, c.cream, x, y - h / 2 - .13, z + .055);
+    piece(g, w + .3, .12, .28, frame, x, y - h / 2 - .15, z + .08);
   };
   const rail = (g: THREE.Group, w: number, x: number, base: number, z: number) => {
     piece(g, w, .07, .07, c.metal, x, base + .65, z);
@@ -50,7 +51,9 @@ export function facadeDetails(art: BuildingKit) {
     piece(g, w * .91, .28, .31, "#83BA79", x, y + .42, z);
   };
   const awning = (g: THREE.Group, w: number, x: number, y: number, z: number, color: string, depth = .85) => {
-    const hood = art.box(w, .14, depth, color); hood.rotation.x = -.23;
+    // Slope down toward the street; the old negative angle faced away and
+    // collapsed to a thin strip from the riding camera.
+    const hood = box(w, .14, depth, color); hood.rotation.x = .48;
     art.put(g, hood, x, y, z + depth * .41);
     piece(g, w, .18, .09, color, x, y - .19, z + depth * .89);
   };

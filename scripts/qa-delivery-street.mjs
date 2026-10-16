@@ -7,6 +7,7 @@ import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 const phase = process.env.STREET_QA_PHASE || 'before';
 const url = process.env.STREET_QA_URL || 'http://127.0.0.1:3000/games/delivery';
@@ -114,6 +115,19 @@ try {
     await writeFile(path, Buffer.from(shot.data, 'base64'));
     results.push({ width, height, ...state, path });
     console.log(`${phase}: exact ${position}m ${detour}, ${width}x${height}`);
+  }
+  if (process.env.STREET_QA_MODELS === '1') {
+    await send('Emulation.setDeviceMetricsOverride', { width:1200, height:780, deviceScaleFactor:1, mobile:false });
+    for (const name of ['types','mint']) {
+      await send('Page.navigate', { url:pathToFileURL(resolve(root,'models.html')).href + (name === 'mint' ? '#mint' : '') });
+      for (let n=0;n<60;n++) { await delay(100); if (await evaluate('window.__architectureReady === true')) break; }
+      assert(await evaluate('window.__architectureReady === true'), `Actual model sheet render: ${errors.join('\n')}`);
+      await delay(300);
+      const shot = await send('Page.captureScreenshot',{format:'png',fromSurface:true});
+      await writeFile(`${root}/model-${name}.png`,Buffer.from(shot.data,'base64'));
+      // Hash-only navigation otherwise reuses the old document/geometry.
+      await send('Page.navigate',{url:'about:blank'}); await delay(100);
+    }
   }
   const supplemental = process.env.STREET_QA_OUTDOOR === '1'
     ? await (await import('./qa-delivery-outdoor.mjs')).verifyOutdoor({ send, evaluate, onEvent: (name, handler) => eventHandlers.set(name, handler), root }) : undefined;

@@ -32,6 +32,18 @@ export function createSceneArt() {
       ? new RoundedBoxGeometry(w, h, d, 2, Math.min(radius, w / 3, h / 3, d / 3))
       : new THREE.BoxGeometry(w, h, d)), material(color),
   );
+  // A small neutral fill only for architecture; road, courier, ads and global
+  // lighting retain their original response. No added lights or shadow passes.
+  // Bypass cinematic desaturation for the reference sheet's pastel plaster.
+  const buildingMaterials = new Map<string, THREE.MeshLambertMaterial>();
+  const buildingBox = (w: number, h: number, d: number, color: string) => {
+    if (!buildingMaterials.has(color)) buildingMaterials.set(color, new THREE.MeshLambertMaterial({
+      color, emissive: color, emissiveIntensity: .42, toneMapped: false,
+    }));
+    const mesh = box(w, h, d, color);
+    mesh.material = buildingMaterials.get(color)!;
+    return mesh;
+  };
   const sphere = (radius: number, color: string) => new THREE.Mesh(
     geometry(`sphere:${radius}`, () => new THREE.SphereGeometry(radius, 16, 12)), material(color),
   );
@@ -138,7 +150,7 @@ export function createSceneArt() {
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
     if (street) {
-      const model = createStreetArchitecture(item, { box, put, shadow, merge });
+      const model = createStreetArchitecture(item, { box, buildingBox, put, shadow, merge });
       model.scale.set(BUILDING_SCALE.width, BUILDING_SCALE.height, BUILDING_SCALE.depth);
       buildingTemplates.set(key, model);
       return place(model.clone());
@@ -402,7 +414,7 @@ export function createSceneArt() {
     return merge(group);
   }
 
-  return { box, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, tree, lamp, shelter, bicycle, horizon };
+  return { box, buildingBox, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, tree, lamp, shelter, bicycle, horizon };
 }
 
 export type SceneArt = ReturnType<typeof createSceneArt>;
