@@ -22,8 +22,8 @@ for(const [index,stop] of DELIVERY_STOPS.entries()) {
   }
   const before={position:stop.distance-5,stopIndex:index,driveway:null,laneX:0,detour:'main' as const};
   assert.equal(remainingDeliveryDistance(before),5+interval.start);
-  assert.equal(deliveryGuidanceWaypoints(before).length,3);
-  assert(deliveryGuidanceWaypoints(before).some(p=>p.path==='road'),'unselected junction exposes straight as well as turning');
+  assert(deliveryGuidanceWaypoints(before).length>=1);
+  assert(deliveryGuidanceWaypoints({...before,position:stop.distance-30}).some(p=>p.path==='road'&&p.selected),'turn-lane approach is visibly guided');
   const returning={...before,position:stop.distance,stopIndex:index+1,driveway:{...entry,progress:16}};
   assert(deliveryGuidanceWaypoints(returning).every(p=>!p.reverse&&p.progress>16),'exit arrows continue forward through the same alley');
   const outline=deliveryArrivalOutline(index),positions=outline.getAttribute('position');

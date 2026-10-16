@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { getDeliveryNavigation } from "../components/delivery/delivery-navigation";
 import { getDrivewayDeliveryInterval } from "../data/delivery-map";
-import { chooseDeliveryTurn } from "../components/delivery/delivery-turns";
+import { occupiedDeliveryTurn } from "../components/delivery/delivery-turns";
 import { remainingDeliveryDistance } from "../components/delivery/delivery-guidance";
 
 const base = { position: 0, speed: 0, stopIndex: 0, stopDwell: 0, deliverySuccessRemaining: 0, closureReached: false, detour: "main" as const, driveway: null };
@@ -9,7 +9,7 @@ const cases = [
   { input: base, direction: "forward", text: "직진" },
   { input: { ...base, position: 140 }, direction: "left", text: "왼쪽 골목으로" },
   { input: { ...base, position: 210 }, direction: "forward", text: "큰길 따라 계속" },
-  { input: { ...base, position: 350, stopIndex: 1 }, direction: "right", text: "→ 밀어 회전" },
+  { input: { ...base, position: 350, stopIndex: 1 }, direction: "right", text: "오른쪽 회전 차선" },
   { input: { ...base, position: 470, stopIndex: 2 }, direction: "fork", text: "좌우 우회로" },
   { input: { ...base, position: 490, stopIndex: 2, detour: "right" as const }, direction: "right", text: "오른쪽 우회로" },
   { input: { ...base, position: 567, stopIndex: 2, closureReached: true }, direction: "reverse", text: "후진해서 갈림길로" },
@@ -33,5 +33,5 @@ assert.equal(getDeliveryNavigation({ ...base, position: 567, stopIndex: 2, closu
 assert.equal(getDeliveryNavigation({ ...base, position: 1000, stopIndex: 3 }, true).instruction, "상품 전달 중");
 assert.equal(getDeliveryNavigation({ ...base, stopIndex: 1, deliverySuccessRemaining: 2 }).destination, "민트하우스 3동");
 assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0]}).instruction,"직진","Do not advertise a completed alley as the next mission");
-assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0],turnChoice:chooseDeliveryTurn(175,1,-1)}).destination,"포근빌라 202호","An explicitly selected road names the actual house, not another target");
+assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0],turnChoice:occupiedDeliveryTurn(175,1,-5)}).destination,"포근빌라 202호","The occupied turn lane names the actual house, not another target");
 console.log("Single-line navigation: entrances, missed stops, detour, reverse, delivery and final arrival verified.");

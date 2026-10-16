@@ -1,5 +1,5 @@
 import { DELIVERY_GAME_CONFIG as config } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getDrivewayFrame, getDrivewayLength, getDrivewayDeliveryInterval, getDrivewayExitDistance, getRouteFrame, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getExtraLaneX, getDrivewayFrame, getDrivewayLength, getDrivewayDeliveryInterval, getDrivewayExitDistance, getRouteFrame, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { getDeliveryJunction, type TravelDirection, type TurnChoice } from "./delivery-turns";
 
 export type GuidanceState = { position: number; stopIndex: number; driveway: DrivewayState | null; detour: DetourChoice; laneX: number; closureReached?: boolean; travelDirection?: TravelDirection; turnChoice?: TurnChoice | null; completedStops?: number[] };
@@ -39,16 +39,20 @@ export function deliveryGuidanceWaypoints(state: GuidanceState, replay = false) 
   if (junction) {
     const selected = state.turnChoice?.stopIndex === junction.stopIndex && state.turnChoice.entryEnd === junction.entryEnd;
     const curveLength = getDrivewayLength(junction.stopIndex);
-    const alleyPoints = (selected ? [3, 9, 15] : [9]).map(offset => {
+    const alleyPoints = [9].map(offset => {
       const progress = direction > 0 ? offset : curveLength - offset;
-      return {frame: getDrivewayFrame(junction.stopIndex, progress), reverse: direction < 0, progress, path: "driveway" as const, selected};
+      return {frame: getDrivewayFrame(junction.stopIndex, progress), reverse: direction < 0, progress, path: "driveway" as const, selected: true};
     });
-    if (selected) return alleyPoints;
-    // Both options are visible before selection; only the chosen turn is mint.
-    const straight = [-5, 6].map(offset => {
+    // Always point along the separate turn lane, never ask a through-lane rider
+    // to choose a hidden turn command. The physical lane is the choice.
+    const straight = [-20, -8].filter(offset => (junction.distance + direction * offset - state.position) * direction > 1).map(offset => {
       const distance = junction.distance + direction * offset, frame = getRouteFrame(distance, state.detour);
-      frame.position.addScaledVector(frame.lateral, state.laneX);
-      return {frame, reverse: direction < 0, progress: distance, path: "road" as const, selected: false};
+      frame.position.addScaledVector(frame.lateral, getExtraLaneX(junction, distance));
+      return {frame, reverse: direction < 0, progress: distance, path: "road" as const, selected: true};
+    });
+    if (selected && !straight.length) return [3, 9, 15].map(offset => {
+      const progress = direction > 0 ? offset : curveLength - offset;
+      return {frame: getDrivewayFrame(junction.stopIndex, progress), reverse: direction < 0, progress, path: "driveway" as const, selected: true};
     });
     return [...straight, ...alleyPoints];
   }

@@ -10,19 +10,19 @@ for (const [index, stop] of DELIVERY_STOPS.entries()) {
   const main = getRouteFrame(stop.distance);
   const length = getDrivewayLength(index);
   const start = getDrivewayFrame(index, 0);
-  assert(start.position.distanceTo(main.position.clone().addScaledVector(main.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing)) < 1e-6);
+  assert(start.position.distanceTo(main.position.clone().addScaledVector(main.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing * 2)) < 1e-6);
   assert(start.tangent.dot(main.tangent) > .999, "Entrance changes direction abruptly");
   assert(length > 45 && length < 90, "Exit should stay within the local delivery block");
   const end = getDrivewayFrame(index, length);
   const exit = getRouteFrame(getDrivewayExitDistance(index));
-  assert(end.position.distanceTo(exit.position.clone().addScaledVector(exit.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing)) < 1e-6, "Exit does not join its main-road lane");
+  assert(end.position.distanceTo(exit.position.clone().addScaledVector(exit.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing * 2)) < 1e-6, "Exit does not join its extra lane");
   assert(end.tangent.dot(exit.tangent) > .999, "Exit changes direction abruptly");
   const zone = getDrivewayDeliveryInterval(index);
   const center = getDrivewayFrame(index, (zone.start + zone.end) / 2);
   assert(center.position.clone().sub(main.position).dot(main.lateral) * side > DELIVERY_GAME_CONFIG.roadWidth, "Delivery pad is still on the main road");
   const house = getDeliveryHouseTransform(index), p = buildingProfile({type: "house", variant: index});
   const footprint = rectangle(house.position, house.yaw, -p.halfWidth, p.halfWidth, -p.back, p.front);
-  const entry = { entryPosition: stop.distance + 4, entryLaneX: side * (DELIVERY_GAME_CONFIG.laneSpacing - .3) };
+  const entry = { entryPosition: stop.distance + .5, entryLaneX: side * (DELIVERY_GAME_CONFIG.laneSpacing * 2 - .3) };
   const lateMain = getRouteFrame(entry.entryPosition);
   assert(getDrivewayFrame(index, 0, entry).position.distanceTo(lateMain.position.addScaledVector(lateMain.lateral, entry.entryLaneX)) < 1e-6, "Late entry teleports");
   for (let p = .25; p <= length; p += .25) {

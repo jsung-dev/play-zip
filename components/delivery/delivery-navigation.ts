@@ -59,7 +59,7 @@ export function getDeliveryNavigation(state: NavigationState, arriving = false):
   if (junction && (junction.stopIndex === state.stopIndex || state.turnChoice?.stopIndex === junction.stopIndex)) {
     const side = DELIVERY_STOPS[junction.stopIndex].side;
     const chosen = state.turnChoice?.stopIndex === junction.stopIndex && state.turnChoice.entryEnd === junction.entryEnd;
-    return {direction: side, instruction: chosen ? side === "left" ? "좌회전 선택" : "우회전 선택" : side === "left" ? "← 밀어 회전" : "→ 밀어 회전",
+    return {direction: side, instruction: chosen ? "골목으로 진입" : side === "left" ? "왼쪽 회전 차선" : "오른쪽 회전 차선",
       destination: chosen ? DELIVERY_STOPS[junction.stopIndex].address : destination,
       remaining: chosen ? Math.ceil(remainingDeliveryDistance({...state,stopIndex:junction.stopIndex})) : remaining, phase: "approaching"};
   }

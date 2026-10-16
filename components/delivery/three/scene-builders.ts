@@ -9,7 +9,7 @@ import {
   type DeliveryBrand,
   type ObstaclePlacement,
 } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtraLaneX, turnLaneSide, turnLaneAhead, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayPavedWidth, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
 import { BUS_AD_PANELS } from "@/data/delivery-outdoor-ads";
@@ -271,6 +271,36 @@ function createRoad(art: SceneArt) {
     }
   }
   dashes.count = count; dashes.instanceMatrix.needsUpdate = true; group.add(dashes);
+  // Reuse the roadside shoulder only at each junction. Main road and its two
+  // lane dividers stay untouched. Shared materials/geometry keep this light.
+  const turnSurface = new THREE.MeshLambertMaterial({color: "#9eafa4", map: grain, side: THREE.DoubleSide});
+  const stripeMaterial = art.material("#fff8e6");
+  const stripeGeometry = new THREE.BoxGeometry(.12, .018, 2.6);
+  for (const connection of TURN_LANE_CONNECTIONS) {
+    const side = turnLaneSide(connection), positions: number[] = [], indices: number[] = [];
+    const far = connection.distance - connection.direction * (TURN_LANE.approach + TURN_LANE.taper);
+    const near = connection.distance + connection.direction * TURN_LANE.tail;
+    const start = Math.min(far, near), end = Math.max(far, near), segments = 40;
+    for (let n = 0; n <= segments; n++) {
+      const distance = start + (end-start) * n / segments, frame = getRouteFrame(distance);
+      const outer = Math.abs(getExtraLaneX(connection, distance)) + TURN_LANE.halfWidth;
+      for (const x of [3.65, outer]) {
+        const p = frame.position.clone().addScaledVector(frame.lateral, side * x);
+        positions.push(p.x, .06, p.z);
+      }
+      if (n < segments) { const k = n*2; indices.push(k,k+1,k+2,k+1,k+3,k+2); }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions,3));
+    geometry.setIndex(indices); geometry.computeVertexNormals();
+    const surface = new THREE.Mesh(geometry,turnSurface); surface.name = `turn-lane-${connection.stopIndex}-${connection.entryEnd}`; group.add(surface);
+    for (let ahead = 6; ahead <= TURN_LANE.approach; ahead += 7) {
+      const distance = connection.distance - connection.direction * ahead, frame = getRouteFrame(distance);
+      const stripe = new THREE.Mesh(stripeGeometry,stripeMaterial);
+      stripe.position.copy(frame.position).addScaledVector(frame.lateral,side * 3.75);
+      stripe.position.y=.09; stripe.rotation.y=frame.yaw; group.add(stripe);
+    }
+  }
   return group;
 }
 

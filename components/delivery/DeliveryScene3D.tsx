@@ -9,7 +9,7 @@ import { buildDeliveryWorld } from "./three/scene-builders";
 import { TOWN_COLORS } from "./three/scene-art";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
-import type { TravelDirection, TurnChoice } from "./delivery-turns";
+import { busTurnLaneClear, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import styles from "./DeliveryGame.module.css";
 
 type SceneState = {
@@ -187,15 +187,19 @@ export function DeliveryScene3D({
       const exitMix = current.driveway ? THREE.MathUtils.smoothstep(getDrivewayLength(current.driveway.stopIndex) - current.driveway.progress, 0, 9) : 0;
       const drivewayMix = Math.min(entryMix, exitMix);
       const cameraRail = routeFrame.position.clone();
+      // Preserve the original camera on all three through lanes. Only follow
+      // the extra lane's added width so the rider stays visible on portrait phones.
+      const throughLaneOffset = (offset: number) => THREE.MathUtils.clamp(offset, -DELIVERY_GAME_CONFIG.laneSpacing, DELIVERY_GAME_CONFIG.laneSpacing);
+      if (!current.driveway) cameraRail.addScaledVector(routeFrame.lateral, current.laneX - throughLaneOffset(current.laneX));
       if (current.driveway) {
         const enteredAtExit = current.driveway.entryEnd === "exit";
         const side = DELIVERY_STOPS[current.driveway.stopIndex].side === "left" ? -1 : 1;
         const entranceFrame = getRouteFrame(enteredAtExit ? DELIVERY_STOPS[current.driveway.stopIndex].distance : current.driveway.entryPosition);
         const exitFrame = getRouteFrame(enteredAtExit ? current.driveway.entryPosition : getDrivewayExitDistance(current.driveway.stopIndex));
-        const entranceLane = enteredAtExit ? side * DELIVERY_GAME_CONFIG.laneSpacing : current.driveway.entryLaneX;
-        const exitLane = enteredAtExit ? current.driveway.entryLaneX : side * DELIVERY_GAME_CONFIG.laneSpacing;
-        cameraRail.addScaledVector(entranceFrame.lateral, -entranceLane * (1 - entryMix));
-        cameraRail.addScaledVector(exitFrame.lateral, -exitLane * (1 - exitMix));
+        const entranceLane = enteredAtExit ? side * DELIVERY_GAME_CONFIG.laneSpacing * 2 : current.driveway.entryLaneX;
+        const exitLane = enteredAtExit ? current.driveway.entryLaneX : side * DELIVERY_GAME_CONFIG.laneSpacing * 2;
+        cameraRail.addScaledVector(entranceFrame.lateral, -throughLaneOffset(entranceLane) * (1 - entryMix));
+        cameraRail.addScaledVector(exitFrame.lateral, -throughLaneOffset(exitLane) * (1 - exitMix));
       }
       const cameraTarget = cameraRail.clone()
         .addScaledVector(routeFrame.lateral, .8 + current.laneX * 0.12)
@@ -264,7 +268,7 @@ export function DeliveryScene3D({
         const busPosition = busFrame.position.clone().addScaledVector(busFrame.lateral, (activeMovingBus.placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset);
         activeMovingBus.group.position.set(busPosition.x, 0, busPosition.z);
         activeMovingBus.group.rotation.y = busFrame.yaw;
-        if (movingBusDistance < current.position - 45 || movingBusDistance < 0) {
+        if (movingBusDistance < current.position - 45 || movingBusDistance < 0 || !busTurnLaneClear(movingBusDistance, movingBusDistance, activeMovingBus.placement.side)) {
           activeMovingBus.group.visible = false;
           activeMovingBus = null;
         }
@@ -273,6 +277,7 @@ export function DeliveryScene3D({
       if (!activeMovingBus && !nearRoadClosure && current.playing && !current.paused) {
         const nextBus = world.movingBuses.find(({ placement }) => (
           current.position >= placement.distance && !shownMovingBuses.has(placement.id)
+          && busTurnLaneClear(current.position - 45, current.position + 68, placement.side)
         ));
         if (nextBus) {
           shownMovingBuses.add(nextBus.placement.id);

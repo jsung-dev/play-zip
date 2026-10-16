@@ -97,6 +97,27 @@ export function getDetourOffset(distance: number, branch: DetourChoice) {
 // Only the three delivery spurs change: keep the entrance, then reconnect to
 // the same side of the main road. Pavement, driving and guidance share this path.
 export const DRIVEWAY_ROUTE = { exitAdvance: 38, passMargin: 6, houseOffset: 7.2 } as const;
+// Local fourth lanes use the roadside shoulder. The sidewalk starts at x=7.8.
+export const TURN_LANE = { approach: 40, taper: 12, grace: 2, tail: 8, halfWidth: 1.5 } as const;
+export type TurnLaneConnection = { stopIndex: number; entryEnd: "entrance" | "exit"; direction: 1 | -1; distance: number };
+export const TURN_LANE_CONNECTIONS: TurnLaneConnection[] = DELIVERY_STOPS.flatMap((stop, stopIndex) => [
+  {stopIndex, entryEnd: "entrance" as const, direction: 1 as const, distance: stop.distance},
+  {stopIndex, entryEnd: "exit" as const, direction: -1 as const, distance: stop.distance + DRIVEWAY_ROUTE.exitAdvance},
+]);
+export function turnLaneSide(connection: TurnLaneConnection) { return DELIVERY_STOPS[connection.stopIndex].side === "left" ? -1 : 1; }
+export function turnLaneAhead(connection: TurnLaneConnection, position: number) { return (connection.distance - position) * connection.direction; }
+export function turnLaneOpening(connection: TurnLaneConnection, position: number) {
+  return smoothStep((TURN_LANE.approach + TURN_LANE.taper - turnLaneAhead(connection, position)) / TURN_LANE.taper);
+}
+export function getPhysicalTurnLane(position: number, side?: number) {
+  return TURN_LANE_CONNECTIONS.find(connection => {
+    const ahead = turnLaneAhead(connection, position);
+    return (side === undefined || turnLaneSide(connection) === side) && ahead >= -TURN_LANE.tail && ahead <= TURN_LANE.approach + TURN_LANE.taper;
+  }) ?? null;
+}
+export function getExtraLaneX(connection: TurnLaneConnection, position: number) {
+  return turnLaneSide(connection) * DELIVERY_GAME_CONFIG.laneSpacing * (1 + turnLaneOpening(connection, position));
+}
 const drivewayCurves = new Map<number, THREE.CurvePath<THREE.Vector3>>();
 const deliveryCenters = new Map<number, number>();
 export function getDrivewayExitDistance(stopIndex: number) {
@@ -109,13 +130,13 @@ export function getDrivewayCurve(stopIndex: number) {
   const stop = DELIVERY_STOPS[stopIndex];
   const frame = getRouteFrame(stop.distance);
   const side = stop.side === "left" ? -1 : 1;
-  const start = frame.position.clone().addScaledVector(frame.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing);
+  const start = frame.position.clone().addScaledVector(frame.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing * 2);
   const end = frame.position.clone()
     .addScaledVector(frame.lateral, side * DELIVERY_GAME_CONFIG.drivewaySideOffset)
     .addScaledVector(frame.tangent, DELIVERY_GAME_CONFIG.drivewayForwardOffset);
   const entrance = new THREE.CubicBezierCurve3(start, start.clone().addScaledVector(frame.tangent, 9), end.clone().addScaledVector(frame.tangent, -9), end);
   const exitFrame = getRouteFrame(getDrivewayExitDistance(stopIndex));
-  const exit = exitFrame.position.clone().addScaledVector(exitFrame.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing);
+  const exit = exitFrame.position.clone().addScaledVector(exitFrame.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing * 2);
   const curve = new THREE.CurvePath<THREE.Vector3>();
   curve.add(entrance);
   curve.add(new THREE.CubicBezierCurve3(end, end.clone().addScaledVector(frame.tangent, 14), exit.clone().addScaledVector(exitFrame.tangent, -14), exit));

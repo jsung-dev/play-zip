@@ -1,38 +1,58 @@
-import { DELIVERY_STOPS, getDrivewayExitDistance, getDrivewayLength, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_GAME_CONFIG as config } from "@/data/delivery-game";
+import { TURN_LANE, TURN_LANE_CONNECTIONS, getPhysicalTurnLane, getExtraLaneX, turnLaneAhead, turnLaneSide, getDrivewayLength, type DrivewayState, type TurnLaneConnection } from "@/data/delivery-map";
 
 export type TravelDirection = 1 | -1;
-export type TurnChoice = { stopIndex: number; entryEnd: "entrance" | "exit"; direction: TravelDirection; distance: number };
-export const TURN_SELECTION = { approach: 40, grace: 2 } as const;
+// Derived from actual fourth-lane occupancy, no longer a queued input command.
+export type TurnChoice = TurnLaneConnection;
 
 /** Every physical junction is usable, independent of the current mission. */
 export function getDeliveryJunction(position: number, direction: TravelDirection = 1): TurnChoice | null {
-  const candidates = DELIVERY_STOPS.map((stop, stopIndex): TurnChoice => ({
-    stopIndex, direction, entryEnd: direction > 0 ? "entrance" : "exit",
-    distance: direction > 0 ? stop.distance : getDrivewayExitDistance(stopIndex),
-  })).filter(junction => {
-    const ahead = (junction.distance - position) * direction;
-    return ahead >= -TURN_SELECTION.grace && ahead <= TURN_SELECTION.approach;
-  });
-  candidates.sort((a, b) => Math.abs(a.distance - position) - Math.abs(b.distance - position));
-  return candidates[0] ?? null;
+  return TURN_LANE_CONNECTIONS.find(connection => connection.direction === direction
+    && turnLaneAhead(connection, position) >= -TURN_LANE.grace
+    && turnLaneAhead(connection, position) <= TURN_LANE.approach) ?? null;
 }
 
-export function turnChoiceIsValid(choice: TurnChoice, position: number, direction: TravelDirection) {
-  const ahead = (choice.distance - position) * choice.direction;
-  return choice.direction === direction && ahead >= -TURN_SELECTION.grace && ahead <= TURN_SELECTION.approach + 1;
+export function laneTargetX(target: number, position: number) {
+  if (target >= 0 && target <= 2) return (target - 1) * config.laneSpacing;
+  const side = target < 0 ? -1 : 1, connection = getPhysicalTurnLane(position, side);
+  return connection ? getExtraLaneX(connection, position) : side * config.laneSpacing;
 }
 
-/** A new left/right action chooses a turn; merely occupying a lane never does. */
-export function chooseDeliveryTurn(position: number, direction: TravelDirection, horizontal: -1 | 1) {
+export function nextDeliveryLane(position: number, target: number, horizontal: -1 | 1) {
+  const connection = getPhysicalTurnLane(position);
+  const available = connection && turnLaneAhead(connection, position) >= -TURN_LANE.grace
+    && turnLaneAhead(connection, position) <= TURN_LANE.approach;
+  const minimum = available && turnLaneSide(connection) < 0 ? -1 : 0;
+  const maximum = available && turnLaneSide(connection) > 0 ? 3 : 2;
+  return Math.max(minimum, Math.min(maximum, target + horizontal));
+}
+
+/** Keep a rider on the tapered merge; normalize only once the lane ends. */
+export function settledDeliveryLane(position: number, target: number) {
+  if (target >= 0 && target <= 2) return target;
+  const connection = getPhysicalTurnLane(position, target < 0 ? -1 : 1);
+  return connection && turnLaneAhead(connection, position) >= -TURN_LANE.grace ? target : Math.max(0, Math.min(2, target));
+}
+
+export function occupiedDeliveryTurn(position: number, direction: TravelDirection, laneX: number): TurnChoice | null {
   const junction = getDeliveryJunction(position, direction);
-  if (!junction) return undefined; // Ordinary lane change, outside a junction.
-  const side = DELIVERY_STOPS[junction.stopIndex].side === "left" ? -1 : 1;
-  return side === horizontal ? junction : null; // Opposite input explicitly chooses straight.
+  return junction && laneX * turnLaneSide(junction) > config.laneSpacing * 1.5 ? junction : null;
 }
 
-export function enterSelectedTurn(choice: TurnChoice | null, position: number, speed: number, laneX: number): DrivewayState | null {
-  if (!choice || speed * choice.direction <= 0 || (position - choice.distance) * choice.direction < 0) return null;
-  if (!turnChoiceIsValid(choice, position, choice.direction)) return null;
-  return {stopIndex: choice.stopIndex, entryEnd: choice.entryEnd, entryPosition: position, entryLaneX: laneX,
-    progress: choice.entryEnd === "entrance" ? 0 : getDrivewayLength(choice.stopIndex)};
+export function enterTurnLane(position: number, speed: number, laneX: number): DrivewayState | null {
+  if (!speed) return null;
+  const connection = occupiedDeliveryTurn(position, speed > 0 ? 1 : -1, laneX);
+  if (!connection || turnLaneAhead(connection, position) > 0) return null;
+  return {stopIndex: connection.stopIndex, entryEnd: connection.entryEnd, entryPosition: position, entryLaneX: laneX,
+    progress: connection.entryEnd === "entrance" ? 0 : getDrivewayLength(connection.stopIndex)};
+}
+
+/** Ad buses wait for a clear shoulder instead of occupying the player's turn lane. */
+export function busTurnLaneClear(from: number, to: number, side: "left" | "right") {
+  return !TURN_LANE_CONNECTIONS.some(connection => {
+    if (turnLaneSide(connection) !== (side === "left" ? -1 : 1)) return false;
+    const a = connection.distance - connection.direction * (TURN_LANE.approach + TURN_LANE.taper);
+    const b = connection.distance + connection.direction * TURN_LANE.tail;
+    return Math.max(from,to) + 5 >= Math.min(a,b) && Math.min(from,to) - 5 <= Math.max(a,b);
+  });
 }

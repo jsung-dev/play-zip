@@ -107,7 +107,7 @@ export const DeliveryJoystick = forwardRef<DeliveryJoystickHandle, Props>(functi
           <span className={styles.joystickThumb} style={{ transform: `translate(${thumb.x}px, ${thumb.y}px)` }}><Move /></span>
         </span>
       </button>
-      <span id={helpId} className={styles.screenReaderOnly}>상단 길안내를 제외한 주행 화면 어디서든 터치한 뒤 위로 밀어 전진, 아래로 밀어 후진합니다. 일반 구간에서 좌우로 한 번 밀면 한 차선 이동합니다. 갈림길 앞에서는 골목 방향으로 밀어 회전을 선택하고 반대쪽으로 밀면 직진으로 취소합니다. 선택한 길은 민트색 화살표로 표시됩니다. 놓친 배달은 돌아와 다시 할 수 있습니다. 원 밖으로 밀어도 조작이 유지됩니다. 손을 놓으면 감속해 멈춥니다. 키보드 화살표로도 조작할 수 있습니다.</span>
+      <span id={helpId} className={styles.screenReaderOnly}>상단 길안내를 제외한 주행 화면 어디서든 터치한 뒤 위로 밀어 전진, 아래로 밀어 후진합니다. 좌우로 한 번 밀면 인접 차선으로 이동합니다. 골목 앞에서만 나타나는 바깥쪽 회전 차선으로 옮기면 골목으로 이어집니다. 기존 세 차선은 직진합니다. 놓친 배달은 돌아와 다시 할 수 있습니다. 원 밖으로 밀어도 조작이 유지됩니다. 손을 놓으면 감속해 멈춥니다. 키보드 화살표로도 조작할 수 있습니다.</span>
     </div>
   );
 });
