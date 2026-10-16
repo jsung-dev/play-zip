@@ -99,7 +99,7 @@ try {
       for (; fiber && !runtime; fiber = fiber.return) {
         for (let hook = fiber.memoizedState; hook; hook = hook.next) {
           const value = hook.memoizedState?.current;
-          if (value && typeof value.position === 'number' && 'laneTarget' in value && 'quizPassedCount' in value) { runtime = value; break; }
+          if (value && typeof value.position === 'number' && 'laneTarget' in value && 'quizPassedStops' in value) { runtime = value; break; }
         }
       }
       if (!runtime) throw new Error('Visual fixture runtime ref not found');

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
-import { getRouteFrame, getDrivewayFrame, getDrivewayLength, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, DELIVERY_STOPS, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
 import { TOWN_COLORS } from "./three/scene-art";
@@ -176,9 +176,16 @@ export function DeliveryScene3D({
       world.bicycle.leftLeg.rotation.x = legSwing;
       world.bicycle.rightLeg.rotation.x = -legSwing;
 
-      const drivewayMix = current.driveway ? THREE.MathUtils.smoothstep(current.driveway.progress, 0, 7) : 0;
+      const entryMix = current.driveway ? THREE.MathUtils.smoothstep(current.driveway.progress, 0, 7) : 0;
+      const exitMix = current.driveway ? THREE.MathUtils.smoothstep(getDrivewayLength(current.driveway.stopIndex) - current.driveway.progress, 0, 9) : 0;
+      const drivewayMix = Math.min(entryMix, exitMix);
       const cameraRail = routeFrame.position.clone();
-      if (current.driveway) cameraRail.addScaledVector(mainFrame.lateral, -current.driveway.entryLaneX * (1 - drivewayMix));
+      if (current.driveway) {
+        cameraRail.addScaledVector(mainFrame.lateral, -current.driveway.entryLaneX * (1 - entryMix));
+        const exitFrame = getRouteFrame(getDrivewayExitDistance(current.driveway.stopIndex));
+        const side = DELIVERY_STOPS[current.driveway.stopIndex].side === "left" ? -1 : 1;
+        cameraRail.addScaledVector(exitFrame.lateral, -side * DELIVERY_GAME_CONFIG.laneSpacing * (1 - exitMix));
+      }
       const cameraTarget = cameraRail.clone()
         .addScaledVector(routeFrame.lateral, .8 + current.laneX * 0.12)
         .addScaledVector(routeFrame.tangent, -DELIVERY_GAME_CONFIG.cameraFollowDistance);
@@ -226,8 +233,7 @@ export function DeliveryScene3D({
         const progress = index === current.stopIndex ? Math.min(1, current.stopDwell / DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds) : 0;
         stop.parcel.visible = progress > .08 && !reduceMotion;
         if (stop.parcel.visible) {
-          const stopFrame = getDrivewayFrame(index, getDrivewayLength(index));
-          const destination = stopFrame.position.clone().addScaledVector(stopFrame.tangent, 4.5);
+          const destination = stop.house.localToWorld(new THREE.Vector3(...stop.house.userData.entranceLocal as [number, number, number]));
           const deliveryProgress = THREE.MathUtils.smoothstep(progress, .08, 1);
           stop.parcel.position.copy(bikePosition).lerp(destination, deliveryProgress);
           stop.parcel.position.y = 1.65 + Math.sin(deliveryProgress * Math.PI) * 1.3;

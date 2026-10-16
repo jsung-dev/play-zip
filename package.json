@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check:boundary": "node scripts/check-project-boundary.mjs",
-    "test:delivery": "tsx scripts/test-delivery-joystick.ts && tsx scripts/test-delivery-navigation.ts && tsx scripts/test-delivery-driveways.ts && tsx scripts/test-delivery-art.ts && tsx scripts/test-delivery-street.ts && tsx scripts/test-delivery-outdoor-model.ts",
+    "test:delivery": "tsx scripts/test-delivery-joystick.ts && tsx scripts/test-delivery-navigation.ts && tsx scripts/test-delivery-driveways.ts && tsx scripts/test-delivery-guidance.ts && tsx scripts/test-delivery-progress.ts && tsx scripts/test-delivery-art.ts && tsx scripts/test-delivery-street.ts && tsx scripts/test-delivery-outdoor-model.ts",
     "qa:delivery": "node scripts/qa-delivery-game.mjs"
   },
   "dependencies": {

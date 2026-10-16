@@ -93,8 +93,15 @@ export function getDetourOffset(distance: number, branch: DetourChoice) {
   return detourOffsetAt(distance, branch);
 }
 
-// The same short curve drives the pavement, bicycle, camera and delivery pad.
-const drivewayCurves = new Map<number, THREE.CubicBezierCurve3>();
+// Only the three delivery spurs change: keep the entrance, then reconnect to
+// the same side of the main road. Pavement, driving and guidance share this path.
+export const DRIVEWAY_ROUTE = { exitAdvance: 38, passMargin: 6, houseOffset: 7.2 } as const;
+const drivewayCurves = new Map<number, THREE.CurvePath<THREE.Vector3>>();
+const deliveryCenters = new Map<number, number>();
+export function getDrivewayExitDistance(stopIndex: number) {
+  return DELIVERY_STOPS[stopIndex].distance + DRIVEWAY_ROUTE.exitAdvance;
+}
+
 export function getDrivewayCurve(stopIndex: number) {
   const cached = drivewayCurves.get(stopIndex);
   if (cached) return cached;
@@ -105,7 +112,13 @@ export function getDrivewayCurve(stopIndex: number) {
   const end = frame.position.clone()
     .addScaledVector(frame.lateral, side * DELIVERY_GAME_CONFIG.drivewaySideOffset)
     .addScaledVector(frame.tangent, DELIVERY_GAME_CONFIG.drivewayForwardOffset);
-  const curve = new THREE.CubicBezierCurve3(start, start.clone().addScaledVector(frame.tangent, 9), end.clone().addScaledVector(frame.tangent, -9), end);
+  const entrance = new THREE.CubicBezierCurve3(start, start.clone().addScaledVector(frame.tangent, 9), end.clone().addScaledVector(frame.tangent, -9), end);
+  const exitFrame = getRouteFrame(getDrivewayExitDistance(stopIndex));
+  const exit = exitFrame.position.clone().addScaledVector(exitFrame.lateral, side * DELIVERY_GAME_CONFIG.laneSpacing);
+  const curve = new THREE.CurvePath<THREE.Vector3>();
+  curve.add(entrance);
+  curve.add(new THREE.CubicBezierCurve3(end, end.clone().addScaledVector(frame.tangent, 14), exit.clone().addScaledVector(exitFrame.tangent, -14), exit));
+  deliveryCenters.set(stopIndex, entrance.getLength());
   drivewayCurves.set(stopIndex, curve);
   return curve;
 }
@@ -114,22 +127,40 @@ export function getDrivewayLength(stopIndex: number) {
   return getDrivewayCurve(stopIndex).getLength();
 }
 
+export function getDrivewayDeliveryInterval(stopIndex: number) {
+  getDrivewayCurve(stopIndex);
+  const center = deliveryCenters.get(stopIndex)!;
+  const halfDepth = DELIVERY_GAME_CONFIG.drivewayDeliveryDepth / 2;
+  return { start: center - halfDepth, end: center + halfDepth, width: DELIVERY_GAME_CONFIG.drivewayWidth };
+}
+
+export function getDeliveryHouseTransform(stopIndex: number) {
+  getDrivewayCurve(stopIndex);
+  const frame = getDrivewayFrame(stopIndex, deliveryCenters.get(stopIndex)!);
+  const side = DELIVERY_STOPS[stopIndex].side === "left" ? -1 : 1;
+  // Move only this house to the outside of its delivery pad. The old house
+  // stood across the dead end; its door now faces the unobstructed through-road.
+  return { position: frame.position.clone().addScaledVector(frame.lateral, side * DRIVEWAY_ROUTE.houseOffset), yaw: frame.yaw - side * Math.PI / 2 };
+}
+
 export function getDrivewayFrame(stopIndex: number, progress: number, entry?: Pick<DrivewayState, "entryPosition" | "entryLaneX">) {
   const curve = getDrivewayCurve(stopIndex);
   const length = curve.getLength();
   const t = THREE.MathUtils.clamp(progress / length, 0, 1);
-  const point = curve.getPointAt(t);
-  const tangent = curve.getTangentAt(t).normalize();
+  // CurvePath.getPoint is already arc-length parameterized across its curves.
+  const point = curve.getPoint(t);
+  const tangent = curve.getTangent(t).normalize();
   if (entry) {
     const entryFrame = getRouteFrame(entry.entryPosition);
     const actualEntry = entryFrame.position.addScaledVector(entryFrame.lateral, entry.entryLaneX);
     // A forgiving entrance window without teleporting to the curve's center.
-    point.addScaledVector(actualEntry.sub(curve.v0), 1 - smoothStep(progress / 7));
+    point.addScaledVector(actualEntry.sub(curve.getPoint(0)), 1 - smoothStep(progress / 7));
   }
   return { position: point, tangent, lateral: new THREE.Vector3(-tangent.z, 0, tangent.x), yaw: Math.atan2(-tangent.x, -tangent.z) };
 }
 
 export function isAtDrivewayDelivery(driveway: DrivewayState | null, stopIndex: number) {
-  return driveway?.stopIndex === stopIndex
-    && driveway.progress >= getDrivewayLength(stopIndex) - DELIVERY_GAME_CONFIG.drivewayDeliveryDepth;
+  if (driveway?.stopIndex !== stopIndex) return false;
+  const zone = getDrivewayDeliveryInterval(stopIndex);
+  return driveway.progress >= zone.start && driveway.progress <= zone.end;
 }

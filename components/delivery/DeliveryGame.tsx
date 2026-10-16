@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, getDrivewayExitDistance, getDrivewayDeliveryInterval, getRouteFrame, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
+import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
 import styles from "./DeliveryGame.module.css";
@@ -27,7 +28,9 @@ type RuntimeState = {
   collisionCount: number;
   slowdownUntil: number;
   stopIndex: number;
-  quizPassedCount: number;
+  quizPassedStops: number[];
+  completedStops: number[];
+  skippedStops: number[];
   stopDwell: number;
   deliveryPulse: number;
   deliverySuccessRemaining: number;
@@ -41,7 +44,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedCount: 0, stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null });
 
 function approach(value: number, target: number, maxDelta: number) {
   if (value < target) return Math.min(target, value + maxDelta);
@@ -112,8 +115,8 @@ export function DeliveryGame() {
 
   const completeQuiz = useCallback(() => {
     const runtime = runtimeRef.current;
-    if (status !== "quiz" || runtime.quizPassedCount > runtime.stopIndex) return;
-    runtime.quizPassedCount = runtime.stopIndex + 1;
+    if (status !== "quiz" || runtime.quizPassedStops.includes(runtime.stopIndex)) return;
+    runtime.quizPassedStops = [...runtime.quizPassedStops, runtime.stopIndex];
     runtime.speed = 0;
     runtime.stopDwell = 0;
     clearInputs();
@@ -151,18 +154,12 @@ export function DeliveryGame() {
       const bothPressed = input.forward && input.reverse;
       const nextStop = DELIVERY_STOPS[runtime.stopIndex];
       const entranceLane = nextStop?.side === "left" ? 0 : 2;
-      const approachingDriveway = nextStop && runtime.laneTarget === entranceLane
-        && nextStop.distance - runtime.position < 45 && nextStop.distance - runtime.position > -6;
-      const drivewayRemaining = runtime.driveway ? getDrivewayLength(runtime.driveway.stopIndex) - runtime.driveway.progress : Infinity;
-      const forwardLimit = runtime.driveway
-        ? Math.min(DELIVERY_GAME_CONFIG.drivewaySpeed, Math.sqrt(Math.max(0, drivewayRemaining) * 2 * DELIVERY_GAME_CONFIG.decelerationPerSecond))
-        : approachingDriveway ? DELIVERY_GAME_CONFIG.drivewaySpeed : DELIVERY_GAME_CONFIG.forwardSpeedPerSecond;
       const desiredSpeed = bothPressed
         ? 0
         : input.forward
-          ? forwardLimit
+          ? DELIVERY_GAME_CONFIG.forwardSpeedPerSecond
           : input.reverse
-            ? -(runtime.driveway ? DELIVERY_GAME_CONFIG.drivewayReverseSpeed : DELIVERY_GAME_CONFIG.reverseSpeedPerSecond)
+            ? -DELIVERY_GAME_CONFIG.reverseSpeedPerSecond
             : 0;
       const changingDirection = desiredSpeed !== 0 && runtime.speed !== 0 && Math.sign(desiredSpeed) !== Math.sign(runtime.speed);
       const rate = changingDirection
@@ -178,17 +175,21 @@ export function DeliveryGame() {
       runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
       if (Math.abs(runtime.speed) < 0.012 && desiredSpeed === 0) runtime.speed = 0;
       const previousPosition = runtime.position;
+      const wasInDriveway = runtime.driveway !== null;
       if (runtime.driveway) {
         const driveway = runtime.driveway;
         const length = getDrivewayLength(driveway.stopIndex);
         driveway.progress += runtime.speed * deltaSeconds;
-        if (driveway.progress >= length - .025 && runtime.speed >= 0) {
-          const releaseForwardInput = runtime.speed > 0 || input.forward;
-          driveway.progress = length;
-          runtime.speed = 0;
-          // A floating joystick begins neutral. Do not discard that new touch
-          // every frame while parked, before it can be dragged into reverse.
-          if (releaseForwardInput) clearInputs();
+        if (driveway.progress >= length && runtime.speed >= 0) {
+          // The path ends at this exact main-road lane. Carry the small frame
+          // remainder across the join without stopping or teleporting.
+          const exitDistance = getDrivewayExitDistance(driveway.stopIndex);
+          const unitsPerMeter = getRouteFrame(exitDistance + .5).position.distanceTo(getRouteFrame(exitDistance - .5).position);
+          runtime.position = exitDistance + (driveway.progress - length) / unitsPerMeter;
+          runtime.laneTarget = DELIVERY_STOPS[driveway.stopIndex].side === "left" ? 0 : 2;
+          runtime.laneX = runtime.laneFromX = (runtime.laneTarget - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
+          runtime.laneStartedAt = timestamp;
+          runtime.driveway = null;
         } else if (driveway.progress <= 0 && runtime.speed < 0) {
           runtime.position = driveway.entryPosition;
           runtime.laneX = runtime.laneFromX = driveway.entryLaneX;
@@ -230,20 +231,21 @@ export function DeliveryGame() {
       }
 
       if (!runtime.driveway && runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
-        const releaseForwardInput = runtime.speed > 0 || input.forward;
         runtime.position = DELIVERY_GAME_CONFIG.totalDistance;
         runtime.speed = 0;
-        if (releaseForwardInput || runtime.stopIndex >= DELIVERY_STOPS.length) clearInputs();
-        if (runtime.stopIndex >= DELIVERY_STOPS.length) {
-          setFrame({ ...runtime });
-          setStatus("arriving");
-          return;
-        }
+        Object.assign(runtime, advanceDeliveryTargets(runtime));
+        clearInputs();
+        setFrame({ ...runtime });
+        setStatus("arriving");
+        return;
       }
 
+      const previousStopIndex = runtime.stopIndex;
+      Object.assign(runtime, advanceDeliveryTargets(runtime));
+      if (runtime.stopIndex !== previousStopIndex) runtime.stopDwell = 0;
       if (nextStop && runtime.position <= DELIVERY_GAME_CONFIG.totalDistance) {
         const stoppedInZone = isAtDrivewayDelivery(runtime.driveway, runtime.stopIndex) && Math.abs(runtime.speed) < 0.55;
-        if (stoppedInZone && runtime.quizPassedCount <= runtime.stopIndex) {
+        if (stoppedInZone && !runtime.quizPassedStops.includes(runtime.stopIndex)) {
           runtime.speed = 0;
           runtime.stopDwell = 0;
           clearInputs();
@@ -253,6 +255,7 @@ export function DeliveryGame() {
         }
         runtime.stopDwell = stoppedInZone ? runtime.stopDwell + deltaSeconds : 0;
         if (runtime.stopDwell >= DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds) {
+          runtime.completedStops = [...runtime.completedStops, runtime.stopIndex];
           runtime.stopIndex += 1;
           runtime.stopDwell = 0;
           runtime.deliveryPulse += 1;
@@ -260,7 +263,9 @@ export function DeliveryGame() {
         }
       }
 
-      if (!runtime.driveway && Math.abs(runtime.speed) > 0.01) {
+      // An alley-to-main join bypasses that section of the main road; do not
+      // sweep collisions across the entrance-to-exit route-coordinate jump.
+      if (!wasInDriveway && !runtime.driveway && Math.abs(runtime.speed) > 0.01) {
         for (const obstacle of OBSTACLE_PLACEMENTS) {
           if (timestamp < (obstaclePassUntilRef.current.get(obstacle.id) ?? 0)) continue;
           const crossesObstacle = Math.min(previousPosition, runtime.position) <= obstacle.distance + DELIVERY_GAME_CONFIG.collisionHalfLength
@@ -369,7 +374,7 @@ export function DeliveryGame() {
   const nextStop = DELIVERY_STOPS[frame.stopIndex];
   const totalDeliveries = DELIVERY_STOPS.length + 1;
   // Count completed handoffs, including the final destination after its animation.
-  const completedDeliveries = Math.min(totalDeliveries, frame.stopIndex + (status === "completed" ? 1 : 0));
+  const completedDeliveries = completedDeliveryCount(frame.completedStops, status === "completed");
   const canPause = status === "playing" || status === "arriving";
   const navigation = getDeliveryNavigation(frame, status === "arriving");
   const NavigationIcon = { forward: ArrowUp, left: ArrowLeft, right: ArrowRight, reverse: ArrowDown, fork: GitFork, stop: Pause, delivery: PackageCheck, complete: Check }[navigation.direction];
@@ -381,7 +386,9 @@ export function DeliveryGame() {
         aria-label="몽글몽글 3D 자전거 배달 게임"
         data-game-status={status}
         data-delivery-brand={selectedBrand ?? ""}
-        data-quiz-passed={frame.quizPassedCount}
+        data-quiz-passed={frame.quizPassedStops.length}
+        data-completed-stops={frame.completedStops.join(",")}
+        data-skipped-stops={frame.skippedStops.join(",")}
         data-position={frame.position.toFixed(2)}
         data-speed={frame.speed.toFixed(2)}
         data-lane={frame.laneTarget}
@@ -396,6 +403,8 @@ export function DeliveryGame() {
         data-driveway-index={frame.driveway?.stopIndex ?? -1}
         data-driveway-progress={(frame.driveway?.progress ?? 0).toFixed(3)}
         data-driveway-length={frame.driveway ? getDrivewayLength(frame.driveway.stopIndex).toFixed(3) : 0}
+        data-delivery-zone-start={frame.driveway ? getDrivewayDeliveryInterval(frame.driveway.stopIndex).start.toFixed(3) : 0}
+        data-delivery-zone-end={frame.driveway ? getDrivewayDeliveryInterval(frame.driveway.stopIndex).end.toFixed(3) : 0}
       >
         <header className={navStyles.hud} data-navigation-hud aria-label="배달 길안내">
           <div className={navStyles.card}>
@@ -474,7 +483,7 @@ export function DeliveryGame() {
         {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
-        {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} onRestart={returnToStart} />}
+        {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} onRestart={returnToStart} />}
       </section>
     </main>
   );

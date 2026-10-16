@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
-import { DELIVERY_STOPS, getDrivewayLength } from "../data/delivery-map.ts";
+import { DELIVERY_STOPS, getDrivewayDeliveryInterval } from "../data/delivery-map.ts";
 import { DELIVERY_GAME_CONFIG, DELIVERY_BRANDS } from "../data/delivery-game.ts";
 
 const url = process.env.DELIVERY_GAME_URL || "http://127.0.0.1:3010/games/delivery";
@@ -80,7 +80,7 @@ async function fixture(values) {
     let fiber=el[Object.keys(el).find(k=>k.startsWith("__reactFiber$"))],runtime;
     for(;fiber&&!runtime;fiber=fiber.return) for(let hook=fiber.memoizedState;hook;hook=hook.next) {
       const value=hook.memoizedState?.current;
-      if(value&&typeof value.position==="number"&&"quizPassedCount" in value&&"laneTarget" in value){runtime=value;break;}
+      if(value&&typeof value.position==="number"&&"quizPassedStops" in value&&"laneTarget" in value){runtime=value;break;}
     }
     if(!runtime)throw new Error("No visual fixture runtime");
     Object.assign(runtime,values);
@@ -95,11 +95,11 @@ async function start(brand) {
 }
 async function arriveQuiz(index) {
   const stop=DELIVERY_STOPS[index];
-  await fixture({position:stop.distance,speed:0,stopIndex:index,quizPassedCount:index,stopDwell:0,driveway:{stopIndex:index,progress:getDrivewayLength(index),entryPosition:stop.distance,entryLaneX:stop.side==="left"?-2.5:2.5}});
+  await fixture({position:stop.distance,speed:0,stopIndex:index,quizPassedStops:Array.from({length:index},(_,i)=>i),completedStops:Array.from({length:index},(_,i)=>i),stopDwell:0,driveway:{stopIndex:index,progress:getDrivewayDeliveryInterval(index).start+2,entryPosition:stop.distance,entryLaneX:stop.side==="left"?-2.5:2.5}});
   await until(async()=>(await state()).status==="quiz","quiz "+index);
 }
 async function finish() {
-  await fixture({position:DELIVERY_GAME_CONFIG.totalDistance,speed:0,stopIndex:DELIVERY_STOPS.length,quizPassedCount:DELIVERY_STOPS.length,driveway:null,detour:"left",closureReached:false});
+  await fixture({position:DELIVERY_GAME_CONFIG.totalDistance,speed:0,stopIndex:DELIVERY_STOPS.length,quizPassedStops:[0,1,2],completedStops:[0,1,2],driveway:null,detour:"left",closureReached:false});
   await until(async()=>(await state()).status==="completed","completed",10000);
 }
 async function checkLayout(screen,width,height) {

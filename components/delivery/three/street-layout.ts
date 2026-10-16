@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG, type SceneryItem } from "@/data/delivery-game";
 import { type OutdoorAdPlacement as AdPlacement } from "@/data/delivery-outdoor-ads";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getDrivewayFrame, getDrivewayLength, getRouteFrame, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_STOPS, DRIVEWAY_ROUTE, ROAD_CLOSURE, getDrivewayFrame, getDrivewayLength, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "@/data/delivery-map";
 import { BUILDING_SCALE, advertisementLayout, advertisementPanelCorners, advertisementTransform, resolveAdvertisements } from "./scene-layout";
 
 // World architecture only. Never used by driving, collision or camera code.
@@ -127,9 +127,9 @@ export function buildStreetLayout(ads: AdPlacement[] = resolveAdvertisements()) 
   const buildings: StreetBuilding[] = [], adSolids = ads.map(ad => ({ ad, footprint: adFootprint(ad) }));
   const rays = advertisementSightlines(ads);
   const driveways = DELIVERY_STOPS.map((stop, index) => {
-    const length = getDrivewayLength(index), frame = getDrivewayFrame(index, length);
+    const length = getDrivewayLength(index), transform = getDeliveryHouseTransform(index);
     const profile = buildingProfile({ variant: index, type: "house" });
-    const house = rectangle(frame.position.clone().addScaledVector(frame.tangent, 7.8), frame.yaw, -profile.halfWidth, profile.halfWidth, -profile.back, profile.front);
+    const house = rectangle(transform.position, transform.yaw, -profile.halfWidth, profile.halfWidth, -profile.back, profile.front);
     return { stop, house, samples: Array.from({ length: Math.ceil(length * 2) + 1 }, (_, n) => point2(getDrivewayFrame(index, Math.min(length, n / 2)).position)) };
   });
   const roads = Array.from({ length: 2001 }, (_, i) => {
@@ -154,7 +154,7 @@ export function buildStreetLayout(ads: AdPlacement[] = resolveAdvertisements()) 
       for (const extra of [0, 1.5, 3, 5, 7, 9, 12]) {
         const item = extra === 0 ? base : makeBuilding(distance, side, index, extra);
         if (adSolids.some(a => Math.abs(a.ad.distance - distance) < 35 && polygonsOverlap(item.footprint, a.footprint, .6))) continue;
-        if (driveways.some(d => Math.abs(d.stop.distance - distance) < 45 && (polygonsOverlap(item.footprint, d.house, 1) || d.samples.some(p => pointPolygonDistance(p, item.footprint) < DELIVERY_GAME_CONFIG.drivewayWidth / 2 + .65)))) continue;
+        if (driveways.some(d => distance > d.stop.distance - 30 && distance < d.stop.distance + DRIVEWAY_ROUTE.exitAdvance + 25 && (polygonsOverlap(item.footprint, d.house, 1) || d.samples.some(p => pointPolygonDistance(p, item.footprint) < DELIVERY_GAME_CONFIG.drivewayWidth / 2 + .65)))) continue;
         const nearbyRoads = roads.slice(Math.max(0, Math.floor((distance - 18) * 2)), Math.ceil((distance + 18) * 2));
         if (nearbyRoads.some(r => r.lines.some(l => pointPolygonDistance(l.point, item.footprint) < l.width + .15))) continue;
         if (buildings.some(b => Math.abs(b.distance - distance) < 35 && polygonsOverlap(item.footprint, b.footprint, .35))) continue;

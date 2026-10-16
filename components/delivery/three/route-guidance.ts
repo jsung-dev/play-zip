@@ -79,7 +79,7 @@ export function createRouteGuidance(world: DeliveryWorld) {
     const index=Math.min(state.stopIndex,targets.length-1), target=targets[index];
     const near=index<DELIVERY_STOPS.length?Math.abs(state.position-DELIVERY_STOPS[index].distance)<100:state.position>880;
     const inAlley=state.driveway?.stopIndex===index;
-    const close=inAlley ? deliveryArrivalInterval(index).end-state.driveway!.progress<=14 : index===DELIVERY_STOPS.length && state.position>975;
+    const close=inAlley ? Math.abs(deliveryArrivalInterval(index).end-state.driveway!.progress)<=14 : index===DELIVERY_STOPS.length && state.position>975;
     if(!close) cachedDoorVisible=false;
     if(enabled&&near&&(timestamp-lastVisibilityCheck>140||index!==previousIndex)){
       lastVisibilityCheck=timestamp;previousIndex=index;

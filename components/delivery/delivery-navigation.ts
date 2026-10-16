@@ -1,5 +1,5 @@
 import { DELIVERY_GAME_CONFIG } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getDrivewayLength, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getDrivewayDeliveryInterval, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { remainingDeliveryDistance } from "./delivery-guidance";
 
 type NavigationState = {
@@ -34,14 +34,15 @@ export function getDeliveryNavigation(state: NavigationState, arriving = false):
   }
   if (state.driveway) {
     const driveway = state.driveway;
-    if (driveway.stopIndex < state.stopIndex) {
-      return { direction: "reverse", instruction: "후진해서 큰길로", destination, remaining, phase: "returning" };
+    const zone = getDrivewayDeliveryInterval(driveway.stopIndex);
+    if (driveway.stopIndex < state.stopIndex || driveway.progress > zone.end) {
+      return { direction: "forward", instruction: "출구 따라 큰길로", destination, remaining, phase: "returning" };
     }
     const inZone = isAtDrivewayDelivery(driveway, state.stopIndex);
     const dwelling = inZone && Math.abs(state.speed) < .55 && state.stopDwell > 0;
     return {
       direction: dwelling ? "delivery" : inZone ? "stop" : "forward",
-      instruction: dwelling ? "상품 전달 중" : inZone ? "멈춰서 배달" : getDrivewayLength(driveway.stopIndex) - driveway.progress <= 14 ? "입구로 이동" : "골목 안으로 이동",
+      instruction: dwelling ? "상품 전달 중" : inZone ? "멈춰서 배달" : zone.start - driveway.progress <= 8 ? "입구로 이동" : "골목 안으로 이동",
       destination: DELIVERY_STOPS[driveway.stopIndex]?.address ?? destination,
       remaining,
       phase: dwelling ? "delivering" : inZone ? "braking" : "approaching",
@@ -51,7 +52,7 @@ export function getDeliveryNavigation(state: NavigationState, arriving = false):
     return { direction: "reverse", instruction: "후진해서 갈림길로", destination, remaining };
   }
   if (next && state.position > next.distance + 6) {
-    return { direction: "reverse", instruction: "후진해서 골목으로", destination, remaining, phase: "approaching" };
+    return { direction: "forward", instruction: "큰길 따라 계속", destination, remaining };
   }
   if (next && Math.abs(state.position - next.distance) <= 55) {
     return { direction: next.side, instruction: next.side === "left" ? "왼쪽 골목으로" : "오른쪽 골목으로", destination, remaining, phase: "approaching" };

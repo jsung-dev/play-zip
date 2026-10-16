@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
-import { DELIVERY_STOPS, getDrivewayLength } from "../data/delivery-map.ts";
+import { DELIVERY_STOPS, getDrivewayLength, getDrivewayDeliveryInterval, getDrivewayExitDistance } from "../data/delivery-map.ts";
 import { DELIVERY_GAME_CONFIG } from "../data/delivery-game.ts";
 
 const url = process.env.DELIVERY_GAME_URL || "http://127.0.0.1:3010/games/delivery";
@@ -78,7 +78,7 @@ async function fixture(values) {
     let fiber=el[Object.keys(el).find(k=>k.startsWith("__reactFiber$"))],runtime;
     for(;fiber&&!runtime;fiber=fiber.return) for(let hook=fiber.memoizedState;hook;hook=hook.next) {
       const value=hook.memoizedState?.current;
-      if(value&&typeof value.position==="number"&&"quizPassedCount" in value&&"laneTarget" in value){runtime=value;break;}
+      if(value&&typeof value.position==="number"&&"quizPassedStops" in value&&"laneTarget" in value){runtime=value;break;}
     }
     if(!runtime)throw new Error("No visual fixture runtime");
     Object.assign(runtime,values);
@@ -89,7 +89,8 @@ async function key(key,down=true) { const codes={ArrowUp:38,ArrowDown:40,ArrowLe
 const details=()=>run(()=>{
  const e=document.querySelector('[data-game-status]'),c=document.querySelector('canvas');
  return {status:e.dataset.gameStatus,position:+e.dataset.position,speed:+e.dataset.speed,brand:e.dataset.deliveryBrand,stop:+e.dataset.stopIndex,passed:+e.dataset.quizPassed,alley:+e.dataset.drivewayIndex,progress:+e.dataset.drivewayProgress,length:+e.dataset.drivewayLength,lane:+e.dataset.lane,
- instruction:document.querySelector('[data-navigation-instruction]').textContent,remaining:parseInt(document.querySelector('[data-navigation-remaining]').textContent),guide:{...c.dataset},disabled:document.querySelector('[data-joystick]').disabled};
+ instruction:document.querySelector('[data-navigation-instruction]').textContent,remaining:parseInt(document.querySelector('[data-navigation-remaining]').textContent),guide:{...c.dataset},disabled:document.querySelector('[data-joystick]').disabled,
+ completed:e.dataset.completedStops,skipped:e.dataset.skippedStops,collisions:+e.dataset.collisionCount,slowdown:e.dataset.slowdownActive,count:+document.querySelector('[aria-label="배달 완료 수"]').getAttribute('aria-valuenow')};
 });
 async function driveUntil(condition,label) {await key('ArrowUp');await until(async()=>condition(await details()),label,18000);await key('ArrowUp',false);await delay(550);}
 async function capture(name){await delay(160);await screenshot(name);results.push({name,...await details()});}
@@ -131,15 +132,37 @@ try {
   for(const [w,h] of [[335,568],[390,844],[430,932]])await checkHud(w,h);
   await size(390,844);await screenshot('counter-start-390');
   for(let n=1;n<=DELIVERY_STOPS.length;n++) {
-   await fixture({position:0,speed:0,stopIndex:n,quizPassedCount:n,driveway:null});
+   await fixture({position:0,speed:0,stopIndex:n,quizPassedStops:Array.from({length:n},(_,i)=>i),completedStops:Array.from({length:n},(_,i)=>i),driveway:null});
    await until(async()=>(await state()).stop===n,'completed stop '+n);await checkCount(n);
   }
-  await fixture({position:DELIVERY_GAME_CONFIG.totalDistance,speed:0,driveway:null});
+  await fixture({position:DELIVERY_GAME_CONFIG.totalDistance,speed:0,driveway:null,detour:'left'});
   await until(async()=>(await state()).status==='arriving','final handoff');await checkCount(3);
   await until(async()=>(await state()).status==='completed','final completion');await checkCount(4);
   await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');
   await until(async()=>(await state()).status==='ready','restart');await checkCount(0);
   assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,counterStates:results,runtimeErrors:errors},null,2));
+ } else if(process.env.GUIDANCE_QA_PARTIAL==='1') {
+  // Isolate the mixed case; do not rerun the already-passed full-route checks.
+  await fixture({position:232,speed:0,laneX:0,laneFromX:0,laneTarget:1});
+  await driveUntil(s=>s.stop===1,'pass first stop threshold');
+  assert.equal((await details()).count,0);assert.equal((await details()).skipped,'0');
+  const stop=DELIVERY_STOPS[1],zone=getDrivewayDeliveryInterval(1);
+  // A small pad overshoot is still recoverable with the unchanged reverse key.
+  await fixture({position:stop.distance,speed:0,laneX:2.5,laneFromX:2.5,laneTarget:2,driveway:{stopIndex:1,progress:zone.end+1,entryPosition:stop.distance,entryLaneX:2.5}});
+  await delay(250);assert.equal((await details()).stop,1);
+  await key('ArrowDown');await until(async()=>(await details()).progress<zone.end-1,'correct small pad overshoot',4000);await key('ArrowDown',false);
+  await until(async()=>(await details()).status==='quiz','second quiz after first skipped',4000);
+  assert.equal((await details()).passed,0);assert.equal((await details()).count,0);
+  await touch('[data-quiz-answer="seoul"]');await until(async()=>(await details()).count===1,'second-only handoff',5000);
+  assert.equal((await details()).completed,'1');assert.equal((await details()).passed,1);
+  await fixture({position:990,speed:0,driveway:null,detour:'left'});
+  await driveUntil(s=>s.status==='arriving'||s.status==='completed','partial final handoff');
+  await until(async()=>(await details()).status==='completed','partial result');
+  assert.equal((await details()).count,2);assert.equal((await details()).skipped,'0,2');
+  assert.equal(await run(()=>document.querySelector('[data-completion-count]').textContent),'배달 2 / 4 완료');
+  await capture('through-complete-2');assert.deepEqual(errors,[]);
+  results.push({passed:true,missFirstVisitSecond:true,smallOvershootReverseCorrection:true,actualCount:2,runtimeErrors:errors});
+  console.log('Partial deliveries: second-stop quiz after skipped first stop, reverse correction, 2/4 result passed.');
  } else if(process.env.GUIDANCE_QA_VISUAL==='1') {
   // A touch that begins in the new HUD must not start the floating joystick.
   await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:170,y:94,id:1}]});
@@ -152,54 +175,87 @@ try {
   assert((await details()).position>0,'lower joystick remains usable');
   await fixture({position:185,speed:0,laneX:-2.5,laneFromX:-2.5,laneTarget:0,laneStartedAt:0});await delay(700);await capture('approach-final');
   await touch('button[aria-label="게임 일시정지"]');await capture('pause-final');await touch('[data-guidance-replay]');
-  await fixture({position:190,speed:0,driveway:{stopIndex:0,progress:getDrivewayLength(0)-5.9,entryPosition:190,entryLaneX:-2.5}});await delay(900);await capture('entrance-final');
+  await fixture({position:190,speed:0,driveway:{stopIndex:0,progress:getDrivewayDeliveryInterval(0).start-2,entryPosition:190,entryLaneX:-2.5}});await delay(900);await capture('entrance-final');
   assert.equal((await details()).guide.guidanceMode,'entrance');
   for(const [w,h] of [[335,568],[430,932]]){await size(w,h);await delay(350);await capture('entrance-final-'+w);}
   assert.deepEqual(errors,[]);console.log('Targeted guidance captures passed');
  } else {
- // Only setup uses a fixture. Alley entry, driving, stopping and arrival use real inputs.
- await fixture({position:172,speed:0,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0});
- await delay(400);
- await key('ArrowLeft');await key('ArrowLeft',false);
- await driveUntil(s=>s.position>=183,'approach first alley');
- await capture('approach-390');
- const approach=await details();assert.equal(approach.instruction,'왼쪽 골목으로');assert.equal(approach.guide.guidanceHouse,'delivery-house-stop-01');
- assert.equal(approach.guide.guidanceMode,'house');assert.equal(approach.guide.guidanceRing,'false');assert.equal(+approach.guide.guidanceArrows,3);
- assert(approach.remaining>Math.abs(190-approach.position)+20,'HUD includes alley, not distance to turn');
+ // Fixtures only place us BEFORE each changed block. Entry, braking, quiz,
+ // handoff and forward exit use actual keys/touch and the production tick.
  for(const [w,h] of [[335,568],[390,844],[430,932]])await checkHud(w,h);
  await size(390,844);
- await touch('button[aria-label="게임 일시정지"]');await capture('paused-390');
- const before=await details();assert(before.disabled);
- const buttons=await run(()=>[...document.querySelector('article[aria-label="게임 일시정지"]').querySelectorAll('button,a')].map(e=>e.textContent.trim()));
- assert.deepEqual(buttons,['계속 배달하기','길 안내 다시 보기','처음으로','플랫폼으로']);
- for(const [w,h] of [[335,568],[430,932]]){await size(w,h);await run(()=>document.querySelector('[data-platform-return]').scrollIntoView({block:'nearest'}));await screenshot('paused-'+w);}
- await size(390,844);
- for(let n=0;n<2;n++){
-  await touch('[data-guidance-replay]');await until(async()=>(await details()).guide.guidanceHighlighted==='true','guidance emphasis');
-  const replay=await details();assert.equal(replay.position,before.position);assert.equal(replay.brand,'seoul');assert.equal(replay.stop,0);assert.equal(replay.passed,0);assert.equal(replay.speed,0);
-  if(n===0)await touch('button[aria-label="게임 일시정지"]');
+ const resetAndStart=async()=>{
+   await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');
+   assert.equal((await details()).count,0);assert.equal((await details()).completed,'');assert.equal((await details()).skipped,'');
+   await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');
+ };
+ const finish=async(expected)=>{
+   await fixture({position:990,speed:0,driveway:null,detour:'left'});
+   await driveUntil(s=>s.status==='arriving'||s.status==='completed','final delivery');
+   await until(async()=>(await details()).status==='completed','purchase ad');
+   assert.equal((await details()).count,expected);
+   assert.equal(await run(()=>document.querySelector('[data-completion-count]').textContent),`배달 ${expected} / 4 완료`);
+   assert.equal(await run(()=>document.querySelector('[data-purchase-ad]').dataset.purchaseAd),'seoul');
+   await capture('through-complete-'+expected);
+ };
+ for(const [i,stop] of DELIVERY_STOPS.entries()) {
+   const zone=getDrivewayDeliveryInterval(i),center=(zone.start+zone.end)/2;
+   await fixture({position:stop.distance-12,speed:0,driveway:null,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0,detour:'left',deliverySuccessRemaining:0});await delay(300);
+   await key(stop.side==='left'?'ArrowLeft':'ArrowRight');await key(stop.side==='left'?'ArrowLeft':'ArrowRight',false);await delay(350);
+   if(i===0)await capture('through-entrance-390');
+   await key('ArrowUp');
+   await until(async()=>{const s=await details();return s.alley===i&&s.progress+s.speed*s.speed/(2*DELIVERY_GAME_CONFIG.decelerationPerSecond)>=center-.8;},'coast into delivery pad '+i,14000);
+   const braking=await details();assert(braking.speed>12,'No former 6m/s alley cap');
+   await key('ArrowUp',false);
+   await until(async()=>(await details()).status==='quiz','manual stop triggers quiz '+i,6000);
+   const parked=await details();assert(parked.progress>=zone.start&&parked.progress<=zone.end);assert.equal(parked.count,i);
+   await touch('[data-quiz-answer="mongle"]');assert.equal((await details()).status,'quiz');
+   await touch('[data-quiz-answer="seoul"]');await until(async()=>(await details()).count===i+1,'actual handoff '+i,7000);
+   assert.equal((await details()).stop,i+1);
+   if(i===0){
+     await delay(3200);await touch('button[aria-label="게임 일시정지"]');const paused=await details();await delay(250);assert.equal((await details()).progress,paused.progress);
+     await touch('[data-guidance-replay]');assert.equal((await details()).brand,'seoul');assert.equal((await details()).count,1);
+     await capture('through-exit-guidance-390');assert.equal((await details()).instruction,'출구 따라 큰길로');
+   }
+   await key('ArrowUp');await until(async()=>(await details()).progress>35,'exit corridor '+i,10000);
+   if(i===0)await capture('through-exit-390');
+   await until(async()=>(await details()).alley===-1,'forward main-road merge '+i,10000);
+   const merged=await details();assert(merged.position>=getDrivewayExitDistance(i));assert(merged.speed>19,'No forced stop/slowdown on merge');assert.equal(merged.count,i+1);assert.equal(merged.collisions,0,'No collision sweep across bypassed main road');
+   await key('ArrowUp',false);await until(async()=>(await details()).speed===0,'coast after merge',4000);
+   results.push({check:'forward visit and exit',stop:stop.id,braking,parked,merged});
  }
- await capture('replay-390');
- await driveUntil(s=>s.alley===0&&s.progress>8,'drive into left alley');await capture('alley-390');
- assert.equal((await details()).instruction,'골목 안으로 이동');
- await driveUntil(s=>s.progress>s.length-9,'approach actual entrance');await capture('entrance-390');
- const entry=await details();assert.equal(entry.guide.guidanceMode,'entrance');assert.equal(entry.guide.guidanceRing,'true');assert.equal(entry.instruction,'입구로 이동');
- assert(entry.progress<entry.length-DELIVERY_GAME_CONFIG.drivewayDeliveryDepth,'not arrived before the original zone');
- await driveUntil(s=>s.status==='quiz','reach original delivery zone');const arrived=await details();
- assert(arrived.progress>=arrived.length-DELIVERY_GAME_CONFIG.drivewayDeliveryDepth);assert.equal(arrived.remaining,0);assert.equal(arrived.passed,0);
- await touch('[data-quiz-answer="seoul"]');await until(async()=>(await details()).stop===1,'original quiz and dwell completion',7000);
- await capture('next-target');assert.equal((await details()).guide.guidanceTarget,'stop-02');
- await key('ArrowDown');await until(async()=>(await details()).alley===-1,'reverse from delivered alley',14000);await key('ArrowDown',false);await delay(800);
- assert.equal((await details()).stop,1);
- await fixture({position:380,speed:0,driveway:null,laneX:0,laneFromX:0,laneTarget:1,deliverySuccessRemaining:0});await delay(500);await capture('right-alley');
- assert.equal((await details()).instruction,'오른쪽 골목으로');assert.equal((await details()).guide.guidanceTarget,'stop-02');assert.equal((await details()).guide.guidanceHouse,'delivery-house-stop-02');
- await touch('button[aria-label="게임 일시정지"]');await touch('button[class*="textButton"]');
- assert.equal((await state()).status,'ready');assert.equal((await state()).position,0);
- assert.deepEqual(errors,[]);results.push({passed:true,realAlleyEntry:true,originalArrival:true,quizAndNextTarget:true,reverse:true,replayTwice:true,restart:true,runtimeErrors:errors});
+ await finish(4);await resetAndStart();
+ // Mobile: hold forward through a delivery alley without stopping. It is
+ // skipped only after passing the pad plus its explicit exit margin.
+ await fixture({position:180,speed:0,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0});await delay(200);
+ await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:260,y:650,id:5}]});
+ await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:165,y:540,id:5}]});
+ await until(async()=>(await details()).alley===0,'mobile enters alley',12000);
+ await until(async()=>(await details()).stop===1,'mobile passes unserved pad',12000);
+ assert.equal((await details()).count,0);assert.equal((await details()).skipped,'0');assert.equal((await details()).status,'playing');
+ await until(async()=>(await details()).alley===-1,'mobile forward exit',10000);
+ assert((await details()).speed>19);
+ await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await until(async()=>(await details()).speed===0,'touch release coasts',4000);
+ // Miss the other entrances on the main road, with no forced reversal.
+ for(const i of [1,2]){
+   await fixture({position:DELIVERY_STOPS[i].distance-10,speed:0,laneX:0,laneFromX:0,laneTarget:1,laneStartedAt:0,detour:'left'});
+   await driveUntil(s=>s.stop===i+1,'main-road skip '+i);
+   assert.equal((await details()).count,0);assert.notEqual((await details()).instruction,'후진해서 골목으로');
+ }
+ await finish(1);
+ await touch('[data-purchase-cta]');assert.equal(await run(()=>document.querySelector('[data-purchase-preview]').dataset.purchasePreview),'true');
+ await resetAndStart();
+ // Collision penalty still expires; forward input resumes full normal speed.
+ await fixture({position:140,speed:0,laneX:-2.5,laneFromX:-2.5,laneTarget:0,laneStartedAt:0});
+ await key('ArrowUp');await until(async()=>(await details()).collisions===1,'collision retained',6000);
+ await until(async()=>{const s=await details();return s.slowdown==='false'&&s.speed>=19;},'collision slowdown clears',7000);
+ await key('ArrowUp',false);results.push({check:'collision recovery',...await details()});
+ assert.deepEqual(errors,[]);results.push({passed:true,threeForwardVisits:true,mobileAlleySkip:true,mainRoadSkips:true,counts:[0,1,2,3,4],allMissedFinalCount:1,purchasePreview:true,restart:true,runtimeErrors:errors});
  console.log(JSON.stringify({passed:true,results:results.length,out},null,2));
  }
 } finally {
- await writeFile(join(out,process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
+ await writeFile(join(out,process.env.GUIDANCE_QA_COUNTER==='1'?'counter-results.json':process.env.GUIDANCE_QA_PARTIAL==='1'?'partial-results.json':process.env.GUIDANCE_QA_VISUAL==='1'?'visual-results.json':'results.json'),JSON.stringify(results,null,2));
  try{if(ws?.readyState===1)ws.send(JSON.stringify({id:++id,method:'Browser.close'}));}catch{}
  await delay(400);browser.kill();ws?.close();for(const p of pending.values())clearTimeout(p.timer);
  if(resolve(profile).startsWith(resolve(tmpdir())+sep)&&basename(profile).startsWith('delivery-guidance-qa-'))await rm(profile,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});

@@ -9,7 +9,7 @@ import {
   type DeliveryBrand,
   type ObstaclePlacement,
 } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDrivewayFrame, getDrivewayLength, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
 import { BUS_AD_PANELS } from "@/data/delivery-outdoor-ads";
@@ -284,10 +284,12 @@ function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourCh
 function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt, brand: DeliveryBrand) {
   const index = DELIVERY_STOPS.findIndex((item) => item.id === stop.id);
   const length = getDrivewayLength(index);
-  const frame = getDrivewayFrame(index, length);
+  const zone = getDrivewayDeliveryInterval(index);
+  const frame = getDrivewayFrame(index, (zone.start + zone.end) / 2);
+  const houseTransform = getDeliveryHouseTransform(index);
   const house = art.building({ id: stop.id, distance: stop.distance, side: stop.side, type: "house", variant: index });
-  house.position.copy(frame.position).addScaledVector(frame.tangent, 7.8);
-  house.rotation.y = frame.yaw;
+  house.position.copy(houseTransform.position);
+  house.rotation.y = houseTransform.yaw;
   house.name = `delivery-house-${stop.id}`;
   house.userData.deliveryStopId = stop.id;
   const marker = markDistance(new THREE.Group(), stop.distance);
@@ -310,19 +312,21 @@ function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt
     geometry.setIndex(indices); geometry.computeVertexNormals();
     return new THREE.Mesh(geometry, material);
   };
-  marker.add(ribbon(width + .5, art.material("#f1ead9"), 0, length + 3));
-  marker.add(ribbon(width, art.material("#b9c6b4"), 0, length + 3, 0, .076));
-  for (const offset of [-width / 2, width / 2]) marker.add(ribbon(.12, edgeMaterial, 0, length + 3, offset, .095));
+  marker.add(ribbon(width + .5, art.material("#f1ead9")));
+  marker.add(ribbon(width, art.material("#b9c6b4"), 0, length, 0, .076));
+  // Fade the borders into the main road instead of drawing a barrier at either join.
+  for (const offset of [-width / 2, width / 2]) marker.add(ribbon(.12, edgeMaterial, 3, length - 3, offset, .095));
 
   // Current-target guidance is rendered separately from permanent road geometry.
   const furniture = new THREE.Group();
   const side = stop.side === "left" ? -1 : 1;
   furniture.position.copy(frame.position); furniture.rotation.y = frame.yaw;
   marker.add(furniture);
-  for (const x of [-width / 2 - .5, width / 2 + .5]) {
-    art.put(furniture, art.box(.8, .48, 1.3, "#cfbea2", .07), x, .24, -2);
+  for (const z of [-5.5, 5.5]) {
+    const x = side * (width / 2 + 1);
+    art.put(furniture, art.box(.8, .48, 1.3, "#cfbea2", .07), x, .24, z);
     const bush = art.sphere(.55, "#8ca77f"); bush.scale.z = 1.5;
-    art.put(furniture, bush, x, .7, -2);
+    art.put(furniture, bush, x, .7, z);
   }
 
   const parcel = new THREE.Group();

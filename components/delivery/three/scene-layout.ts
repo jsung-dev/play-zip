@@ -1,7 +1,7 @@
 import { DELIVERY_GAME_CONFIG, type SceneryItem } from "@/data/delivery-game";
 import { OUTDOOR_ADS, OUTDOOR_AD_FORMATS, type OutdoorAdPlacement as AdPlacement } from "@/data/delivery-outdoor-ads";
 import * as THREE from "three";
-import { DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame } from "@/data/delivery-map";
+import { DELIVERY_STOPS, DRIVEWAY_ROUTE, ROAD_CLOSURE, getRouteFrame } from "@/data/delivery-map";
 
 // Small architectural lift, without changing road/driveway collision geometry.
 export const BUILDING_SCALE = { width: 1.24, height: 1.27, depth: 1.18 } as const;
@@ -13,7 +13,7 @@ export function isLandmark(placement: AdPlacement) {
 
 export function resolveAdvertisements(placements: AdPlacement[] = OUTDOOR_ADS): AdPlacement[] {
   return placements.map((placement) => DELIVERY_STOPS.some((stop) => (
-    stop.side === placement.side && placement.distance > stop.distance - 12 && placement.distance < stop.distance + 36
+    stop.side === placement.side && placement.distance > stop.distance - 12 && placement.distance < stop.distance + DRIVEWAY_ROUTE.exitAdvance + 12
   )) ? { ...placement, side: placement.side === "left" ? "right" : "left" } : placement);
 }
 
@@ -47,7 +47,7 @@ export function advertisementPanelCorners(placement: AdPlacement) {
 }
 
 export function sceneryHasClearance(item: SceneryItem, ads: AdPlacement[]) {
-  if (DELIVERY_STOPS.some((stop) => stop.side === item.side && item.distance > stop.distance - 16 && item.distance < stop.distance + 38)) return false;
+  if (DELIVERY_STOPS.some((stop) => stop.side === item.side && item.distance > stop.distance - 16 && item.distance < stop.distance + DRIVEWAY_ROUTE.exitAdvance + 12)) return false;
   if (item.distance > ROAD_CLOSURE.junctionDistance - 18 && item.distance < ROAD_CLOSURE.mergeEnd + 18) return false;
   // Reserve the approach as well as the sign's footprint. Use the FINAL side
   // after driveway relocation, so a tree or enlarged facade cannot hide it.

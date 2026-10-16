@@ -137,9 +137,7 @@ export const DELIVERY_GAME_CONFIG = {
   drivewayWidth: 4.4,
   drivewaySideOffset: 18,
   drivewayForwardOffset: 17,
-  drivewaySpeed: 6,
-  drivewayReverseSpeed: 4,
-  drivewayDeliveryDepth: 4,
+  drivewayDeliveryDepth: 8,
 } as const;
 
 // 장애물은 첫 100m 연습 구간 이후에만 두고, 목적지 전 구간은 비워 둡니다.

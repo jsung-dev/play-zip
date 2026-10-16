@@ -125,7 +125,7 @@ export function DeliveryBrandQuiz({ brand, stopIndex, address, onCorrect }: {
   </div>;
 }
 
-export function DeliveryPurchaseAd({ brand, onRestart }: { brand: DeliveryBrand; onRestart: () => void }) {
+export function DeliveryPurchaseAd({ brand, completedDeliveries, onRestart }: { brand: DeliveryBrand; completedDeliveries: number; onRestart: () => void }) {
   const [preview, setPreview] = useState(false);
   const ref = useDialogFocus();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -135,7 +135,7 @@ export function DeliveryPurchaseAd({ brand, onRestart }: { brand: DeliveryBrand;
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.purchaseCard}`} style={brandStyle(brand)} role="dialog" aria-modal="true" aria-labelledby="delivery-complete-title" data-purchase-ad={brand.id} data-purchase-preview={preview} data-campaign-screen="complete">
       <div className={styles.deliveryReceipt}><span><PackageCheck aria-hidden="true" /></span><h2 id="delivery-complete-title">배달 완료!</h2></div>
       <p className={styles.purchaseDestination}>{DELIVERY_GAME_CONFIG.destinationName}</p>
-      <div className={styles.completionStats}><span><House aria-hidden="true" />{stopCountLabel} 경유 완료</span><span><MapPin aria-hidden="true" />{DELIVERY_GAME_CONFIG.totalDistance.toLocaleString("ko-KR")}m 도착</span></div>
+      <div className={styles.completionStats}><span data-completion-count><House aria-hidden="true" />배달 {completedDeliveries} / {DELIVERY_STOPS.length + 1} 완료</span><span><MapPin aria-hidden="true" />{DELIVERY_GAME_CONFIG.totalDistance.toLocaleString("ko-KR")}m 도착</span></div>
       <div className={styles.purchaseCreative}>
         <span className={styles.adBadge}>AD · 구매 광고 예시</span>
         <BrandImage brand={brand} kind="logo" alt={brand.name} className={styles.purchaseLogo} />

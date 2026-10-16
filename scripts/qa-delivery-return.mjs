@@ -143,10 +143,10 @@ try {
     let fiber = el[Object.keys(el).find(k=>k.startsWith("__reactFiber$"))], runtime;
     for (;fiber&&!runtime;fiber=fiber.return) for(let hook=fiber.memoizedState;hook;hook=hook.next) {
       const value=hook.memoizedState?.current;
-      if(value&&typeof value.position==="number"&&"quizPassedCount" in value&&"laneTarget" in value) {runtime=value;break;}
+      if(value&&typeof value.position==="number"&&"quizPassedStops" in value&&"laneTarget" in value) {runtime=value;break;}
     }
     if(!runtime)throw new Error("No visual fixture runtime");
-    Object.assign(runtime,{position:1000,speed:0,stopIndex:3,quizPassedCount:3,driveway:null,detour:"left",closureReached:false});
+    Object.assign(runtime,{position:1000,speed:0,stopIndex:3,quizPassedStops:[0,1,2],completedStops:[0,1,2],driveway:null,detour:"left",closureReached:false});
   });
   await until(async () => (await state()).status === "completed", "completion UI", 10000);
   for (const [width, height] of [[360, 640], [390, 844], [430, 844]]) {

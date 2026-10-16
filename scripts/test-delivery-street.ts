@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as THREE from "three";
 import { writeFileSync } from "node:fs";
 import { SCENERY_ITEMS, DELIVERY_GAME_CONFIG, type SceneryItem } from "../data/delivery-game";
-import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getRouteFrame, type DetourChoice } from "../data/delivery-map";
+import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "../data/delivery-map";
 import { createSceneArt } from "../components/delivery/three/scene-art";
 import { resolveAdvertisements, sceneryHasClearance } from "../components/delivery/three/scene-layout";
 import { buildStreetLayout, buildingProfile, polygonsOverlap, pointPolygonDistance, streetTransform, rectangle, advertisementSightlines, buildingBlocksRay, adFootprint } from "../components/delivery/three/street-layout";
@@ -49,8 +49,8 @@ for (let i = 0; i < buildings.length; i++) {
     }
   }
   for (let i = 0; i < DELIVERY_STOPS.length; i++) {
-    const length = getDrivewayLength(i), frame = getDrivewayFrame(i, length), p = buildingProfile({ type: "house", variant: i });
-    const house = rectangle(frame.position.clone().addScaledVector(frame.tangent, 7.8), frame.yaw, -p.halfWidth, p.halfWidth, -p.back, p.front);
+    const length = getDrivewayLength(i), transform = getDeliveryHouseTransform(i), p = buildingProfile({ type: "house", variant: i });
+    const house = rectangle(transform.position, transform.yaw, -p.halfWidth, p.halfWidth, -p.back, p.front);
     assert(!polygonsOverlap(b.footprint, house, .9), `Delivery-house clearance: ${b.id}`);
     for (let d = 0; d <= length; d += .25) {
       const point = getDrivewayFrame(i, d).position;
