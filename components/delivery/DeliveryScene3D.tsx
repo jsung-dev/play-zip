@@ -32,6 +32,7 @@ type SceneState = {
   travelDirection: TravelDirection;
   turnChoice: TurnChoice | null;
   completedStops: number[];
+  jumpHeight: number;
 };
 
 export function DeliveryScene3D({
@@ -54,12 +55,13 @@ export function DeliveryScene3D({
   travelDirection,
   turnChoice,
   completedStops,
+  jumpHeight,
   deliveryBrand,
 }: SceneState & { deliveryBrand: DeliveryBrand }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops });
+  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight });
   const [webglFailed, setWebglFailed] = useState(false);
-  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops };
+  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -114,6 +116,9 @@ export function DeliveryScene3D({
     let activeMovingBus: (typeof world.movingBuses)[number] | null = null;
     let movingBusDistance = 0;
     let renderedSession = stateRef.current.sessionKey;
+    let landingElapsed = 1;
+    let wasAirborne = false;
+    const bikeScale = world.bicycle.group.scale.x;
     const shownMovingBuses = new Set<string>();
 
     const resetMovingBuses = () => {
@@ -163,7 +168,17 @@ export function DeliveryScene3D({
       const routeFrame = current.driveway ? getDrivewayFrame(current.driveway.stopIndex, current.driveway.progress, current.driveway) : mainFrame;
       world.horizon.position.set(routeFrame.position.x, 0, routeFrame.position.z);
       const bikePosition = routeFrame.position.clone().addScaledVector(routeFrame.lateral, current.driveway ? 0 : current.laneX);
-      world.bicycle.group.position.set(bikePosition.x, 0.08, bikePosition.z);
+      world.bicycle.group.position.set(bikePosition.x, 0.08 + current.jumpHeight, bikePosition.z);
+      // Keep the contact shadow on the road while airborne.
+      world.bicycle.groundShadow.position.y = .045 - current.jumpHeight / bikeScale;
+      world.bicycle.groundShadow.scale.setScalar(1 - current.jumpHeight * .25);
+      const airborne = current.jumpHeight > 0;
+      if (wasAirborne && !airborne) landingElapsed = 0;
+      wasAirborne = airborne;
+      if (!current.paused) landingElapsed += deltaSeconds;
+      // Brief squash on landing only; the camera rail ignores jump height.
+      const squash = reduceMotion ? 0 : Math.sin(Math.min(1, landingElapsed / .18) * Math.PI) * .07;
+      world.bicycle.group.scale.set(bikeScale * (1 + squash * .5), bikeScale * (1 - squash), bikeScale * (1 + squash * .5));
       world.bicycle.group.rotation.y = routeFrame.yaw;
       const laneVelocity = (current.laneX - previousLaneX) / Math.max(deltaSeconds, 0.001);
       previousLaneX = current.laneX;
@@ -175,7 +190,7 @@ export function DeliveryScene3D({
       const impactProgress = activeCollisionId ? Math.min(1, collisionElapsedMs / 420) : 1;
       const impactBump = activeCollisionId ? Math.sin(impactProgress * Math.PI) * 0.1 : 0;
       world.bicycle.group.rotation.z = Math.max(-0.15, Math.min(0.15, -laneVelocity * 0.023));
-      world.bicycle.group.rotation.x = impactBump;
+      world.bicycle.group.rotation.x = impactBump + current.jumpHeight * .06;
       wheelPhase -= (current.speed * deltaSeconds) / 0.43;
       for (const wheel of world.bicycle.wheels) wheel.rotation.x = wheelPhase;
       world.bicycle.pedal.rotation.x = wheelPhase * 1.35;

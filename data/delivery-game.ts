@@ -36,7 +36,9 @@ export type ObstaclePlacement = {
   id: string;
   distance: number;
   lane: 0 | 1 | 2;
-  kind: "cones" | "barrier" | "box";
+  kind: "cones" | "barrier" | "box" | "plank" | "crates";
+  // Lanes covered to the right of `lane`; 3 blocks the whole road (jump only).
+  span?: 1 | 2 | 3;
 };
 
 export const DELIVERY_BRANDS: Record<BrandId, DeliveryBrand> = {
@@ -150,6 +152,12 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "obstacle-665", distance: 665, lane: 1, kind: "barrier" },
   { id: "obstacle-770", distance: 770, lane: 0, kind: "cones" },
   { id: "obstacle-855", distance: 855, lane: 2, kind: "box" },
+  // 점프용: 골목 진입·출구, 우회 구간, 시작 직후, 목적지 직전은 비워 둡니다.
+  { id: "jump-118", distance: 118, lane: 1, kind: "plank" },
+  { id: "jump-295", distance: 295, lane: 0, kind: "plank", span: 3 },
+  { id: "jump-705", distance: 705, lane: 0, kind: "crates", span: 2 },
+  { id: "jump-745", distance: 745, lane: 0, kind: "plank", span: 3 },
+  { id: "jump-920", distance: 920, lane: 1, kind: "crates", span: 2 },
 ];
 
 // 광고 브랜드/옥외 광고 설정은 data/delivery-outdoor-ads.ts에서 독립 관리합니다.

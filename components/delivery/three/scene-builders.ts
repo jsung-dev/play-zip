@@ -17,6 +17,7 @@ import { BUS_AD_PANELS, DESTINATION_OVERHEAD_AD } from "@/data/delivery-outdoor-
 import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-material";
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
+import { obstacleCenterX, obstacleSpan } from "../delivery-jump";
 
 export type BikeRig = {
   group: THREE.Group;
@@ -24,6 +25,7 @@ export type BikeRig = {
   pedal: THREE.Group;
   leftLeg: THREE.Group;
   rightLeg: THREE.Group;
+  groundShadow: THREE.Object3D;
 };
 
 export type MovingBusRig = {
@@ -525,14 +527,17 @@ function createBus(placement: BusPlacement, art: SceneArt, resources: OutdoorAdR
 
 function createObstacle(placement: ObstaclePlacement): ObstacleRig {
   const group = markDistance(new THREE.Group(), placement.distance);
-  group.position.x = (placement.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
+  group.position.x = obstacleCenterX(placement);
   group.position.z = -placement.distance;
   group.userData.obstacleId = placement.id;
   const body = new THREE.MeshLambertMaterial({ color: "#ef714f", transparent: true, opacity: 1 });
   const light = new THREE.MeshLambertMaterial({ color: "#fff1cb", transparent: true, opacity: 1 });
   const dark = new THREE.MeshLambertMaterial({ color: "#455a54", transparent: true, opacity: 1 });
   const shadow = new THREE.MeshBasicMaterial({ color: "#344944", transparent: true, opacity: 0.2 });
-  const shadowMesh = new THREE.Mesh(new THREE.CircleGeometry(1.55, 18), shadow);
+  const width = obstacleSpan(placement) * DELIVERY_GAME_CONFIG.laneSpacing - 0.3;
+  const shadowMesh = placement.span && placement.span > 1
+    ? new THREE.Mesh(new THREE.PlaneGeometry(width + 0.4, 1.6), shadow)
+    : new THREE.Mesh(new THREE.CircleGeometry(1.55, 18), shadow);
   shadowMesh.rotation.x = -Math.PI / 2;
   shadowMesh.position.y = 0.025;
   group.add(shadowMesh);
@@ -562,6 +567,32 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
       foot.position.set(x, 0.45, 0);
       group.add(foot);
     }
+  } else if (placement.kind === "plank") {
+    // Low wooden board with a bright stripe so it reads from far away.
+    const wood = new THREE.MeshLambertMaterial({ color: "#c98c59", transparent: true, opacity: 1 });
+    const warn = new THREE.MeshLambertMaterial({ color: "#f3c84b", transparent: true, opacity: 1 });
+    const board = new THREE.Mesh(new THREE.BoxGeometry(width, 0.24, 0.5), wood);
+    board.position.set(0, 0.2, 0);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, 0.08, 0.52), warn);
+    stripe.position.set(0, 0.24, 0);
+    group.add(board, stripe);
+    for (let x = -width / 2 + 0.25; x <= width / 2 - 0.2; x += 1.1) {
+      const block = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.56), dark);
+      block.position.set(x, 0.05, 0);
+      group.add(block);
+    }
+  } else if (placement.kind === "crates") {
+    // A row of plain milk crates; no logos or brand marks.
+    const crate = new THREE.MeshLambertMaterial({ color: "#5fb3c8", transparent: true, opacity: 1 });
+    const count = Math.round(width / 0.62);
+    for (let index = 0; index < count; index += 1) {
+      const x = -width / 2 + (index + 0.5) * (width / count);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(width / count - 0.06, 0.42, 0.58), crate);
+      box.position.set(x, 0.21, 0);
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(width / count - 0.04, 0.06, 0.6), light);
+      rim.position.set(x, 0.42, 0);
+      group.add(box, rim);
+    }
   } else {
     const carton = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.92, 0.94), new THREE.MeshLambertMaterial({ color: "#c98c59", transparent: true, opacity: 1 }));
     carton.position.set(0, 0.49, 0);
@@ -571,7 +602,7 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
     group.add(carton, tape);
   }
 
-  return { id: placement.id, distance: placement.distance, x: group.position.x, halfWidth: 1.2, group };
+  return { id: placement.id, distance: placement.distance, x: group.position.x, halfWidth: 1.2 + (obstacleSpan(placement) - 1) * DELIVERY_GAME_CONFIG.laneSpacing / 2, group };
 }
 
 

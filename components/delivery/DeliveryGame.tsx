@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronsUp, GitFork, PackageCheck, Pause, Play } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, getDrivewayExitDistance, getDrivewayDeliveryInterval, getRouteFrame, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
@@ -13,6 +13,7 @@ import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progr
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTurn, enterTurnLane, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
+import { clearsObstacle, jumpHeightAt, JUMP_CONFIG, obstacleCenterX, obstacleHitHalfWidth } from "./delivery-jump";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
 
@@ -40,6 +41,7 @@ type RuntimeState = {
   driveway: DrivewayState | null;
   travelDirection: TravelDirection;
   turnChoice: TurnChoice | null;
+  jumpElapsed: number | null;
 };
 
 type DriveInput = {
@@ -47,7 +49,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null });
 
 function approach(value: number, target: number, maxDelta: number) {
   if (value < target) return Math.min(target, value + maxDelta);
@@ -149,6 +151,14 @@ export function DeliveryGame() {
     setFrame({ ...runtime });
   }, [paused, status]);
 
+  const jump = useCallback(() => {
+    if (status !== "playing" || paused) return;
+    const runtime = runtimeRef.current;
+    if (runtime.jumpElapsed !== null) return;
+    runtime.jumpElapsed = 0;
+    setFrame({ ...runtime });
+  }, [paused, status]);
+
   useEffect(() => {
     if (status !== "playing" || paused) return;
 
@@ -159,6 +169,10 @@ export function DeliveryGame() {
       lastFrameRef.current = timestamp;
       // Advance feedback on game time, so pausing/backgrounding cannot skip it.
       runtime.deliverySuccessRemaining = Math.max(0, runtime.deliverySuccessRemaining - deltaSeconds);
+      if (runtime.jumpElapsed !== null) {
+        runtime.jumpElapsed += deltaSeconds;
+        if (runtime.jumpElapsed >= JUMP_CONFIG.seconds) runtime.jumpElapsed = null;
+      }
       const input = driveInputRef.current;
       if (input.forward !== input.reverse) runtime.travelDirection = input.reverse ? -1 : 1;
       const settledLane = settledDeliveryLane(runtime.position, runtime.laneTarget);
@@ -256,6 +270,7 @@ export function DeliveryGame() {
       if (!runtime.driveway && runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
         runtime.position = DELIVERY_GAME_CONFIG.totalDistance;
         runtime.speed = 0;
+        runtime.jumpElapsed = null;
         Object.assign(runtime, advanceDeliveryTargets(runtime));
         clearInputs();
         setFrame({ ...runtime });
@@ -273,6 +288,7 @@ export function DeliveryGame() {
           runtime.stopIndex = deliveryIndex;
           runtime.speed = 0;
           runtime.stopDwell = 0;
+          runtime.jumpElapsed = null;
           clearInputs();
           setFrame({ ...runtime });
           setStatus("quiz");
@@ -284,6 +300,7 @@ export function DeliveryGame() {
       // An alley-to-main join bypasses that section of the main road; do not
       // sweep collisions across the entrance-to-exit route-coordinate jump.
       if (!wasInDriveway && !runtime.driveway && Math.abs(runtime.speed) > 0.01) {
+        const jumpHeight = jumpHeightAt(runtime.jumpElapsed);
         for (const obstacle of OBSTACLE_PLACEMENTS) {
           if (timestamp < (obstaclePassUntilRef.current.get(obstacle.id) ?? 0)) continue;
           const crossesObstacle = Math.min(previousPosition, runtime.position) <= obstacle.distance + DELIVERY_GAME_CONFIG.collisionHalfLength
@@ -295,8 +312,8 @@ export function DeliveryGame() {
             : Math.max(0, Math.min(1, (obstacle.distance - previousPosition) / stepDistance));
           const actualBikeX = previousLaneX + (runtime.laneX - previousLaneX) * progressAcrossStep
             + getDetourOffset(obstacle.distance, runtime.detour);
-          const obstacleX = (obstacle.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
-          if (Math.abs(actualBikeX - obstacleX) >= DELIVERY_GAME_CONFIG.collisionHalfWidth + 0.52) continue;
+          if (Math.abs(actualBikeX - obstacleCenterX(obstacle)) >= obstacleHitHalfWidth(obstacle)) continue;
+          if (clearsObstacle(obstacle.kind, jumpHeight)) continue;
 
           runtime.speed *= 0.38;
           runtime.collisionId = obstacle.id;
@@ -331,11 +348,15 @@ export function DeliveryGame() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]).has(event.code)) return;
+      if (!new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]).has(event.code)) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (status !== "playing" || paused) return;
       event.preventDefault();
+      if (event.code === "Space") {
+        if (!event.repeat) jump();
+        return;
+      }
       if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
         if (!event.repeat) moveLane(event.code === "ArrowLeft" ? -1 : 1);
         return;
@@ -345,7 +366,7 @@ export function DeliveryGame() {
       syncDriveInput();
     };
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (!new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]).has(event.code)) return;
+      if (!new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]).has(event.code)) return;
       if (status === "playing" && !paused) event.preventDefault();
       if (event.code === "ArrowUp") keyInputsRef.current.forward = false;
       if (event.code === "ArrowDown") keyInputsRef.current.reverse = false;
@@ -360,7 +381,7 @@ export function DeliveryGame() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [clearInputs, moveLane, paused, status, syncDriveInput]);
+  }, [clearInputs, jump, moveLane, paused, status, syncDriveInput]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -414,6 +435,7 @@ export function DeliveryGame() {
         data-travel-direction={frame.travelDirection}
         data-turn-choice={frame.turnChoice ? `${frame.turnChoice.stopIndex}:${frame.turnChoice.entryEnd}` : ""}
         data-collision-count={frame.collisionCount}
+        data-jumping={frame.jumpElapsed !== null ? "true" : "false"}
         data-slowdown-active={frame.slowdownUntil > performance.now() ? "true" : "false"}
         data-stop-index={frame.stopIndex}
         data-stop-dwell={frame.stopDwell.toFixed(3)}
@@ -498,9 +520,25 @@ export function DeliveryGame() {
             travelDirection={frame.travelDirection}
             turnChoice={frame.turnChoice}
             completedStops={frame.completedStops}
+            jumpHeight={jumpHeightAt(frame.jumpElapsed)}
           />
 
           <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />
+          {status === "playing" && !paused && (
+            <button
+              className={styles.jumpButton}
+              type="button"
+              aria-label="점프"
+              data-jump-button
+              data-airborne={frame.jumpElapsed !== null}
+              // Fires on touch-down; its own pointer, so the joystick finger keeps steering.
+              onPointerDown={(event) => { event.preventDefault(); jump(); }}
+              onClick={(event) => { if (event.detail === 0) jump(); }}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <ChevronsUp aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         {status === "ready" && <DeliveryBrandStart selected={selectedBrand} onSelect={setSelectedBrand} onStart={startGame} />}

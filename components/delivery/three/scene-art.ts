@@ -296,6 +296,7 @@ export function createSceneArt() {
     const group = new THREE.Group(), wheels: THREE.Group[] = [];
     const steel = TOWN_COLORS.ink, frame = "#e59779", cream = "#fff4db";
     shadow(group, 2.4, 3.5, .25, .15);
+    const groundShadow = group.children[group.children.length - 1];
     for (const z of [-1.0, 1.0]) {
       const wheel = new THREE.Group();
       const tire = new THREE.Mesh(geometry("bike-tire", () => new THREE.TorusGeometry(.49, .068, 10, 32)), material("#384e4b"));
@@ -391,7 +392,7 @@ export function createSceneArt() {
     };
     const leftLeg = makeLeg(-1), rightLeg = makeLeg(1);
     group.add(rider); group.scale.setScalar(.9);
-    return { group, wheels, pedal, leftLeg, rightLeg };
+    return { group, wheels, pedal, leftLeg, rightLeg, groundShadow };
   }
 
   function horizon() {
