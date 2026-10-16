@@ -1,143 +1,156 @@
 import * as THREE from "three";
 import type { SceneryItem } from "@/data/delivery-game";
 import { buildingProfile } from "./street-layout";
+import { facadeDetails, NEIGHBORHOOD_FINISH as finish, type BuildingKit } from "./building-facade";
 
-export type StreetBuildingKind = "wide-shop" | "corner-shop" | "gable-house" | "balcony-villa" | "slim-villa" | "terrace-house";
+export type StreetBuildingKind = "wide-shop" | "corner-shop" | "split-house" | "balcony-villa" | "slim-villa" | "terrace-house";
 
-// These are architecture inside the EXISTING lots, not new placement rules.
-// Heights, setbacks, balconies and roofs all fit the old clearance envelope.
+// Actual model dimensions, independent from the unchanged lot planner.
 export function streetArchitecture(item: Pick<SceneryItem, "type" | "variant">) {
-  const lot = buildingProfile(item, true), v = item.variant % 5;
-  const shop = item.type === "shop";
-  const kinds: StreetBuildingKind[] = ["gable-house", "balcony-villa", "slim-villa", "terrace-house", "corner-shop"];
+  const lot = buildingProfile(item, true), v = item.variant % 5, shop = item.type === "shop";
+  const kinds: StreetBuildingKind[] = ["split-house", "balcony-villa", "slim-villa", "terrace-house", "corner-shop"];
   const kind = shop ? v % 2 ? "corner-shop" : "wide-shop" : kinds[v];
   const floors = shop ? v % 2 ? 3 : 2 : [3, 4, 5, 3, 4][v];
-  const pitch = shop ? floors === 2 ? 3.15 : 2.45 : 2.9;
-  return { kind, floors, pitch, width: lot.width * (shop ? v % 2 ? .94 : 1 : [.94, .86, .76, .98, .91][v]),
+  const pitch = shop ? floors === 2 ? 3.05 : 2.38 : [2.82, 3.03, 3.12, 2.85, 3.03][v];
+  return { kind, floors, pitch, width: lot.width * (shop ? v % 2 ? .88 : 1.015 : [.93, .83, .71, .98, .9][v]),
     height: floors * pitch, depth: lot.depth, variant: v };
 }
 
-type ArchitectureKit = {
-  box: (w: number, h: number, d: number, color: string, radius?: number) => THREE.Mesh;
-  put: (g: THREE.Group, o: THREE.Object3D, x: number, y: number, z: number) => THREE.Object3D;
-  windowOn: (g: THREE.Group, x: number, y: number, z: number, w?: number, h?: number) => void;
-  shadow: (g: THREE.Group, w: number, d: number) => THREE.Object3D;
-  merge: (g: THREE.Group) => THREE.Group;
-};
-
-// Six silhouettes, ten cached combinations. No labels, logos or new shop signs.
-// Plain low-poly solids and a small shared palette keep the street batchable.
-export function createStreetArchitecture(item: SceneryItem, art: ArchitectureKit) {
-  const spec = streetArchitecture(item);
-  const { kind, width: w, depth: d, height: h, floors, pitch, variant: v } = spec;
-  const group = new THREE.Group();
-  group.userData.architecture = spec;
-  const walls = ["#fae8bc", "#c8e7d4", "#d8c3e9", "#f2c9af", "#edf0cf"];
-  const trims = ["#d88b6b", "#479e80", "#9b7abd", "#d8a16c", "#579f9a"];
-  const wall = walls[v], trim = trims[v], cream = "#fff7e6", metal = "#3d635e";
-  const { box, put, windowOn } = art;
-  const front = d / 2;
-  const piece = (width: number, height: number, depth: number, color: string, x: number, y: number, z: number) => put(group, box(width, height, depth, color), x, y, z);
-  art.shadow(group, w + 1.2, d + 1.2);
-  piece(w + .3, .22, d + .4, "#ecdfc9", 0, .11, 0);
-
-  const stepped = kind === "corner-shop" || kind === "terrace-house";
-  const topWidth = stepped ? w * (kind === "terrace-house" ? .66 : .8) : w;
-  const topX = stepped ? (w - topWidth) / 2 : 0;
-  const topDepth = stepped ? d - .65 : d;
-  if (stepped) {
-    piece(w, h - pitch, d, wall, 0, (h - pitch) / 2 + .2, 0);
-    piece(topWidth, pitch, topDepth, wall, topX, h - pitch / 2 + .2, -.325);
-  } else piece(w, h, d, wall, 0, h / 2 + .2, 0);
-  piece(w + .12, .38, d + .1, "#d7ccb7", 0, .4, 0);
-
-  const rail = (width: number, x: number, y: number, z: number) => {
-    piece(width, .075, .075, metal, x, y + .62, z);
-    for (let n = 0; n <= 4; n++) piece(.045, .62, .045, metal, x + width * (n / 4 - .5), y + .31, z);
-  };
-  const balcony = (width: number, x: number, y: number, z: number) => {
-    piece(width + .16, .16, .64, cream, x, y, z + .25);
-    rail(width, x, y + .06, z + .54);
-    for (const side of [-1, 1]) piece(.05, .06, .55, metal, x + side * width / 2, y + .68, z + .27);
-  };
-  const parapet = (width: number, depth: number, x: number, y: number, z: number) => {
-    piece(width + .28, .18, depth + .26, cream, x, y, z);
+/** Six massings, with distinct facades on BOTH approach-facing ends.
+ * Only scenery is changed: riding paths, delivery houses and ads are separate.
+ */
+export function createStreetArchitecture(item: SceneryItem, art: BuildingKit) {
+  const spec = streetArchitecture(item), { kind, width: w, depth: d, height: h, floors, pitch, variant: v } = spec;
+  const g = new THREE.Group(); g.userData.architecture = spec;
+  const { piece, pane, rail, balcony, planter, awning, aircon } = facadeDetails(art);
+  const wall = finish.walls[v], accent = finish.accents[v], cream = finish.cream, front = d / 2;
+  const solid = (width: number, height: number, depth: number, x: number, y: number, z: number, color: string = wall) => piece(g, width, height, depth, color, x, y, z);
+  const cap = (width: number, depth: number, x: number, y: number, z: number) => {
+    solid(width + .2, .2, depth + .16, x, y, z, cream);
     for (const side of [-1, 1]) {
-      piece(width + .1, .42, .13, wall, x, y + .25, z + side * depth / 2);
-      piece(.13, .42, depth, wall, x + side * width / 2, y + .25, z);
+      solid(width + .05, .36, .12, x, y + .27, z + side * depth / 2);
+      solid(.12, .36, depth, x + side * width / 2, y + .27, z);
     }
   };
+  art.shadow(g, w + 1.2, d + 1.2);
+  solid(w + .2, .22, d + .3, 0, .11, 0, "#ecdfc9");
+  const stepped = kind === "wide-shop" || kind === "corner-shop" || kind === "terrace-house";
+  const setback = kind === "terrace-house" ? 1.2 : kind === "wide-shop" ? .9 : .72;
+  const topWidth = w * (kind === "terrace-house" ? .58 : kind === "wide-shop" ? .93 : .77);
+  const topX = (w - topWidth) / 2;
 
-  // Floor lines and windows follow actual storeys, not vertically scaled art.
+  if (kind === "balcony-villa") {
+    // Real recessed balcony stack between two solid vertical cores.
+    solid(w, h, d - .9, 0, h / 2 + .2, -.45);
+    for (const side of [-1, 1]) solid(w * .16, h, d, side * w * .42, h / 2 + .2, 0);
+  } else if (kind === "slim-villa") {
+    solid(w * .66, h - .18, d - .35, w * .17, (h - .18) / 2 + .2, -.175);
+    solid(w * .34, h, d, -w * .33, h / 2 + .2, 0, cream);
+  } else if (kind === "split-house") {
+    solid(w * .49, h - pitch, d, -w * .255, (h - pitch) / 2 + .2, 0);
+    solid(w * .51, h, d - .5, w * .245, h / 2 + .2, -.25);
+  } else if (stepped) {
+    solid(w, h - pitch, d, 0, (h - pitch) / 2 + .2, 0);
+    solid(topWidth, pitch, d - setback, topX, h - pitch / 2 + .2, -setback / 2);
+  }
+  solid(w + .08, .34, d + .08, 0, .39, 0, finish.stone);
+
   for (let floor = 0; floor < floors; floor++) {
-    const upper = floor === floors - 1 && stepped;
-    const fw = upper ? topWidth : w, fx = upper ? topX : 0, fz = front - (upper ? .65 : 0);
-    const base = floor * pitch + .2;
-    if (floor > 0) piece(fw + .14, .15, upper ? topDepth + .15 : d + .15, cream, fx, base, upper ? -.325 : 0);
-    const retail = floor === 0 && (kind === "wide-shop" || kind === "corner-shop");
-    const columns = kind === "wide-shop" ? 3 : 2;
-    const ww = retail ? Math.min(1.8, fw * .22) : kind === "slim-villa" ? .95 : kind === "terrace-house" ? 1.25 : 1.05;
-    const wh = retail ? 1.9 : kind === "balcony-villa" ? 1.65 : 1.38;
-    for (let col = 0; col < columns; col++) {
-      const x = fx + (col - (columns - 1) / 2) * fw * (columns === 3 ? .3 : .48);
-      windowOn(group, x, base + (retail ? 1.24 : 1.45), fz + .025, ww, wh);
-    }
-    if (floor > 0 && kind === "balcony-villa") balcony(w * .43, (floor % 2 ? -1 : 1) * w * .24, base + .37, front);
-    if (kind === "slim-villa") {
-      // Narrow stairwell glazing makes this a vertical villa, not a tall shop.
-      windowOn(group, 0, base + 1.5, front + .03, .38, 1.95);
-    }
-    for (const side of [-1, 1]) {
-      const face = new THREE.Group();
-      const depth = upper ? topDepth : d;
-      const count = kind === "slim-villa" ? 1 : 2;
-      for (let n = 0; n < count; n++) windowOn(face, (n - (count - 1) / 2) * 2.05, base + 1.45, 0, kind === "corner-shop" ? 1.25 : .86, 1.38);
-      face.rotation.y = side * Math.PI / 2;
-      face.position.set(fx + side * (fw / 2 + .015), 0, upper ? -.325 : 0);
-      // depth is intentionally not scaled with the window geometry.
-      if (depth > 3) group.add(face);
-    }
-  }
-  if (kind !== "wide-shop") {
-    piece(.92, 2.05, .14, trim, 0, 1.23, front + .09);
-    piece(.64, 1.25, .03, "#3da9ba", 0, 1.48, front + .18);
-    piece(1.35, .13, .65, cream, 0, 2.47, front + .24);
-  }
-  if (kind === "wide-shop" || kind === "corner-shop") {
-    const count = kind === "wide-shop" ? 3 : 2, aw = w * .85 / count;
-    for (let n = 0; n < count; n++) {
-      const x = (n - (count - 1) / 2) * (aw + .08);
-      const awning = box(aw, .13, .9, trim);
-      awning.rotation.x = -.15; put(group, awning, x, 2.53, front + .36);
-      piece(aw, .18, .1, cream, x, 2.37, front + .8);
+    const base = .2 + floor * pitch, upper = floor === floors - 1, wy = base + pitch * .51;
+    if (kind === "balcony-villa") {
+      pane(g, 0, wy, front - .88, w * .56, 2.03, 3);
+      if (floor > 0) {
+        balcony(g, w * .65, 0, base + .08, front - .87, 1.37);
+        if (floor % 2) planter(g, w * .23, -w * .19, base + .26, front + .22);
+      }
+      pane(g, w * .42, wy + .05, front + .02, w * .1, 1.15, 1);
+    } else if (kind === "slim-villa") {
+      pane(g, -w * .33, wy, front + .025, w * .24, 2.48, 1, true);
+      pane(g, w * .16, wy + .08, front - .325, w * .44, 1.48, 2);
+      if (floor > 0 && floor % 2 === 0) rail(g, w * .43, w * .16, base + .45, front - .08);
+    } else if (kind === "split-house") {
+      pane(g, w * .245, wy, front - .48, w * .34, 1.65, 2);
+      if (!upper) {
+        pane(g, -w * .255, wy, front + .02, w * .34, 1.4, 2);
+        if (floor === 1) balcony(g, w * .38, -w * .255, base + .28, front + .04, .56);
+      }
+    } else {
+      const fw = upper ? topWidth : w, fx = upper ? topX : 0, z = front - (upper ? setback : 0) + .02;
+      const retail = floor === 0 && kind !== "terrace-house";
+      pane(g, fx, wy, z, fw * (retail ? .88 : .77), Math.min(pitch * .68, retail ? 2.25 : 1.72), kind === "wide-shop" ? 4 : 3);
+      if (floor > 0 && !upper && kind === "corner-shop") solid(fw + .1, .18, d + .14, fx, base, 0, cream);
+      if (retail) {
+        awning(g, w * .88, 0, base + pitch - .38, front, accent);
+        piece(g, .075, Math.min(pitch * .68, 2.25), .08, finish.metal, w * .22, wy, z + .12);
+      }
     }
   }
 
-  if (kind === "gable-house") {
-    // Two actual sloping roof planes; geometry remains within the former roof.
-    const rise = 1.1, half = (w + .26) / 2;
-    const gable = new THREE.Shape([new THREE.Vector2(-w / 2, 0), new THREE.Vector2(0, rise), new THREE.Vector2(w / 2, 0)]);
-    const roofBody = new THREE.Mesh(new THREE.ExtrudeGeometry(gable, { depth: d, bevelEnabled: false, steps: 1 }), box(1, 1, 1, wall).material);
-    put(group, roofBody, 0, h + .2, -d / 2);
-    for (const side of [-1, 1]) {
-      const roof = box(Math.hypot(half, rise), .16, d + .25, trim);
-      roof.rotation.z = -side * Math.atan2(rise, half);
-      put(group, roof, side * half / 2, h + .75, 0);
+  // Longitudinal faces dominate the moving camera: no common tiny-window grid.
+  for (const side of [-1, 1]) {
+    const face = new THREE.Group();
+    const lowSplit = kind === "split-house" && side < 0, sideFloors = lowSplit ? floors - 1 : floors;
+    for (let floor = 0; floor < sideFloors; floor++) {
+      const base = .2 + floor * pitch, upper = floor === floors - 1, recessed = stepped && upper;
+      const faceDepth = recessed ? d - setback : kind === "split-house" && side > 0 ? d - .5 : d;
+      const fx = (recessed ? -setback / 2 : kind === "split-house" && side > 0 ? -.25 : 0) * -side;
+      const inset = recessed && side < 0 ? w - topWidth : 0, wy = base + pitch * .51;
+      if (kind === "slim-villa") {
+        pane(face, -.95, wy, 0, 1.65, 2.4, 1, true);
+        pane(face, 1.25, wy + .15, 0, 1.2, .95, 2);
+      } else if (kind === "balcony-villa") {
+        pane(face, 0, wy, 0, 2.9, 1.95, 3);
+        if (floor > 0) {
+          balcony(face, 3.15, 0, base + .15, .03, .53);
+          if (floor === 2) planter(face, 1.05, -.75, base + .33, .32);
+        }
+      } else if (kind === "wide-shop") {
+        pane(face, fx, wy, -inset, faceDepth * .8, upper ? 1.65 : 2.2, 3);
+        if (!upper) awning(face, faceDepth * .9, fx, base + pitch - .38, 0, accent, .15);
+      } else if (kind === "corner-shop") {
+        pane(face, fx, wy, -inset, faceDepth * .76, Math.min(pitch * .68, 1.85), 3);
+        if (floor === 0) awning(face, faceDepth * .84, fx, base + pitch - .38, 0, accent, .4);
+        if (floor > 0 && !upper) rail(face, faceDepth * .74, fx, base + .3, .21);
+      } else if (kind === "terrace-house") {
+        pane(face, fx, wy, -inset, faceDepth * .78, upper ? 1.58 : 1.85, upper ? 2 : 3);
+        if (floor === 1) piece(face, faceDepth, .25, .16, accent, fx, base + .05, .07);
+      } else {
+        pane(face, fx - .8, wy + .15, 0, 1.25, 1.35, 2);
+        pane(face, fx + 1.1, wy - .1, 0, .65, 1.85, 1);
+        if (floor === 1) aircon(face, fx + 1.15, base + .3, 0);
+      }
     }
-    piece(.55, .75, .55, wall, w * .24, h + .8, -.7);
-  } else {
-    parapet(topWidth, topDepth, topX, h + .24, stepped ? -.325 : 0);
-    if (kind === "slim-villa" || kind === "balcony-villa") {
-      piece(w * .36, .85, 1.5, wall, -w * .2, h + .7, -.8);
-      piece(w * .36 + .2, .13, 1.7, cream, -w * .2, h + 1.18, -.8);
-    }
-    if (stepped) {
-      piece(w + .15, .16, d + .16, cream, 0, h - pitch + .23, 0);
-      rail(w * .9, 0, h - pitch + .28, front + .03);
-      // The shorter wing and usable roof terrace are visible from the approach.
-      rail(w - topWidth - .12, -w / 2 + (w - topWidth) / 2, h - pitch + .28, -front + .15);
-    }
+    const pipeHeight = (lowSplit || stepped && side < 0 ? h - pitch : h) - .8;
+    piece(face, .055, pipeHeight, .055, cream, -d * .44, pipeHeight / 2 + .4, .08);
+    face.rotation.y = side * Math.PI / 2; face.position.x = side * (w / 2 + .025); g.add(face);
   }
-  art.merge(group);
-  return group;
+
+  if (kind === "split-house") {
+    cap(w * .49, d, -w * .255, h - pitch + .23, 0);
+    rail(g, w * .43, -w * .255, h - pitch + .5, front + .02);
+    planter(g, w * .3, -w * .255, h - pitch + .36, -.9);
+    const rw = w * .51 + .18, rise = .8;
+    for (const sign of [-1, 1]) {
+      const roof = art.box(Math.hypot(rw / 2, rise), .16, d - .25, accent);
+      roof.rotation.z = -sign * Math.atan2(rise, rw / 2);
+      art.put(g, roof, w * .245 + sign * rw / 4, h + .6, -.25);
+    }
+    const shape = new THREE.Shape([new THREE.Vector2(-rw / 2, 0), new THREE.Vector2(0, rise), new THREE.Vector2(rw / 2, 0)]);
+    const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: d - .5, bevelEnabled: false, steps: 1 }), art.box(1,1,1,wall).material);
+    art.put(g, roof, w * .245, h + .2, -d / 2);
+  } else if (stepped) {
+    cap(topWidth, d - setback, topX, h + .23, -setback / 2);
+    solid(w + .16, .2, d + .16, 0, h - pitch + .25, 0, cream);
+    rail(g, w * .92, 0, h - pitch + .36, front + .04);
+    planter(g, Math.min(1.8,w * .25), -w * .28, h - pitch + .36, front - .25);
+    if (kind === "terrace-house") solid(topWidth * .55, .5, 1.1, topX, h + .6, -.8, cream);
+  } else {
+    cap(w, d, 0, h + .24, 0);
+    solid(w * .38, .75, 1.55, -w * .18, h + .68, -.8);
+    solid(w * .38 + .16, .14, 1.7, -w * .18, h + 1.12, -.8, cream);
+    rail(g, w * .88, 0, h + .46, front + .02);
+    planter(g, w * .32, w * .23, h + .35, front - .35);
+  }
+  art.merge(g);
+  return g;
 }

@@ -4,6 +4,7 @@ import { getRouteFrame } from "@/data/delivery-map";
 import { advertisementLayout, advertisementTransform, isLandmark } from "./scene-layout";
 import { TOWN_COLORS, type SceneArt } from "./scene-art";
 import type { OutdoorAdResources } from "./outdoor-ad-material";
+import { createAdvertisementBuilding } from "./advertisement-building";
 
 // One frame/creative model for every ratio. Host architecture is independent of
 // image content: replacing an image cannot recolour buildings or delivery boxes.
@@ -22,30 +23,7 @@ export function createOutdoorAdvertisement(ad: OutdoorAdPlacement, art: SceneArt
     art.put(group, art.box(.29, .025, .24, "#fff2c9"), x, y + h / 2 + .34, .4);
   }
   if (isLandmark(ad)) {
-    const facadeWidth = w + 1.05, roofY = ad.type === "rooftop" ? y - h / 2 - .55 : y + h / 2 + .65;
-    art.shadow(group, facadeWidth + 5, 11, 0, -1.7);
-    art.put(group, art.box(facadeWidth, roofY, 6, TOWN_COLORS.walls[0], .1), 0, roofY / 2, -3.25);
-    art.put(group, art.box(facadeWidth + .22, .18, 6.2, cream, .03), 0, roofY - .24, -3.25);
-    art.put(group, art.box(facadeWidth + .45, .3, 6.45, "#479e80", .06), 0, roofY + .05, -3.25);
-    art.put(group, art.box(facadeWidth + .8, .2, 7.5, TOWN_COLORS.pavement, .05), 0, .12, -2.6);
-    for (const x of [-w * .31, w * .31]) art.windowOn(group, x, 1.8, -.18, Math.min(3, w * .27), 2.6);
-    art.windowOn(group, 0, 1.65, -.18, 1.25, 2.8);
-    art.put(group, art.box(w + .4, .24, 1.5, "#479e80", .04), 0, 3.35, .28);
-    art.put(group, art.box(w + .4, .23, .12, cream), 0, 3.15, .98);
-    for (const x of [-facadeWidth / 2 + .16, facadeWidth / 2 - .16]) art.put(group, art.box(.28, roofY - .65, .24, cream), x, (roofY + .65) / 2, -.16);
-    for (let rowY = 5.2; rowY < roofY - 1; rowY += 3) {
-      // Front windows never appear behind/through the mounted creative.
-      if (rowY + 1.05 < y - h / 2 || rowY - 1.05 > y + h / 2) {
-        for (const x of [-w * .31, 0, w * .31]) art.windowOn(group, x, rowY, -.18, .95, 1.65);
-        art.put(group, art.box(facadeWidth + .15, .14, .25, cream), 0, rowY + 1.2, -.1);
-      }
-    }
-    for (const side of [-1, 1]) {
-      const face = new THREE.Group();
-      for (let rowY = 1.85; rowY < roofY - 1; rowY += 3) for (const x of [-1.6, 1.2]) art.windowOn(face, x, rowY, 0, 1.1, 1.65);
-      face.rotation.y = side * Math.PI / 2; face.position.set(side * (facadeWidth / 2 + .02), 0, -3.25); group.add(face);
-    }
-    if (ad.type === "rooftop") for (const x of [-w * .33, w * .33]) art.put(group, art.box(.16, h + .65, .2, TOWN_COLORS.metal), x, y - .2, -.3);
+    group.add(createAdvertisementBuilding(ad, art));
   } else {
     const postX = ad.type === "projecting" ? [w / 2 + .23] : [-w * .34, w * .34];
     for (const x of postX) {

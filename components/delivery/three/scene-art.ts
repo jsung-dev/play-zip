@@ -138,7 +138,7 @@ export function createSceneArt() {
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
     if (street) {
-      const model = createStreetArchitecture(item, { box, put, windowOn, shadow, merge });
+      const model = createStreetArchitecture(item, { box, put, shadow, merge });
       model.scale.set(BUILDING_SCALE.width, BUILDING_SCALE.height, BUILDING_SCALE.depth);
       buildingTemplates.set(key, model);
       return place(model.clone());

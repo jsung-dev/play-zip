@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const phase = process.env.STREET_QA_PHASE || 'before';
@@ -15,7 +15,7 @@ const brand = process.env.STREET_QA_BRAND || 'mongle';
 await mkdir(root, { recursive: true });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (ok, text) => { if (!ok) throw new Error(text); };
-const files = ['components/delivery/DeliveryGame.tsx', 'components/delivery/DeliveryScene3D.tsx', 'components/delivery/DeliveryJoystick.tsx', 'components/delivery/DeliveryGame.module.css', 'data/delivery-map.ts'];
+const files = ['components/delivery/DeliveryGame.tsx', 'components/delivery/DeliveryScene3D.tsx', 'components/delivery/DeliveryJoystick.tsx', 'components/delivery/DeliveryGame.module.css', 'data/delivery-map.ts', 'data/delivery-outdoor-ads.ts'];
 const protectedSources = {};
 for (const file of files) protectedSources[file] = createHash('sha256').update(await readFile(file)).digest('hex');
 const art = await readFile('components/delivery/three/scene-art.ts', 'utf8');
@@ -29,6 +29,7 @@ for (const [name, source] of Object.entries({
   busesAndScenery: gameData.slice(gameData.indexOf('export const BUS_PLACEMENTS')),
   palette: art.slice(art.indexOf('export const TOWN_COLORS'), art.indexOf('// Geometry')),
   road: builders.slice(builders.indexOf('function roadSceneryFrame('), builders.indexOf('function placeOnRoute(')),
+  deliveryEntrances: builders.slice(builders.indexOf('export function createDeliveryStop('), builders.indexOf('function createRoadClosure(')),
   fov: layout.slice(layout.indexOf('export function portraitCameraFov(')),
 })) protectedSources[name] = createHash('sha256').update(source).digest('hex');
 if (phase !== 'before') {
@@ -120,5 +121,7 @@ try {
   await writeFile(`${root}/${phase}.json`, JSON.stringify({ protectedSources, results, supplemental }, null, 2));
 } finally {
   socket?.close(); chrome.kill(); await delay(300);
-  await rm(profile, { recursive: true, force: true }).catch(() => {});
+  if (resolve(profile).startsWith(resolve(tmpdir()) + sep) && basename(profile).startsWith('delivery-street-qa-')) {
+    await rm(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => {});
+  }
 }
