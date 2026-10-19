@@ -11,12 +11,12 @@ const smooth = (t: number) => { const v = Math.min(1, Math.max(0, t)); return v 
 
 export const MOVER_PLACEMENTS: MoverPlacement[] = [
   // Big beach ball rolls out from the right kerb, diagonally toward the rider.
-  { id: "ball-290", kind: "ball", trigger: 240, distance: 290 },
+  { id: "ball-255", kind: "ball", trigger: 215, distance: 255 },
   // Bus pulls out of the right bus stop into lane 2 and drives on slowly.
   // (starts just past the parked bus at 710; returns to its bus lane before 800)
   { id: "bus-726", kind: "bus", trigger: 698, distance: 726 },
   // Cat strolls across all three lanes before the last stretch.
-  { id: "cat-885", kind: "cat", trigger: 852, distance: 885 },
+  { id: "cat-910", kind: "cat", trigger: 877, distance: 910 },
   // Duck family waddles across right before the apartment.
   { id: "ducks-952", kind: "ducks", trigger: 918, distance: 952 },
   // Pigeons resting on the road burst into the air as the bike comes close (harmless).

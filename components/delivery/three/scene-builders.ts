@@ -19,7 +19,7 @@ import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdo
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
 import { obstacleCenterX, obstacleSpan } from "../delivery-jump";
 import { BALL_MOTION, MOVER_PLACEMENTS, type MoverPlacement } from "../delivery-movers";
-import { DROPS, RAMPS, type Ramp } from "../delivery-pickups";
+import { BOOSTERS, GAPS, RAMPS, type Gap, type Ramp } from "../delivery-pickups";
 
 export type BikeRig = {
   group: THREE.Group;
@@ -45,12 +45,12 @@ export type ObstacleRig = {
 
 export type MoverRig = { placement: MoverPlacement; group: THREE.Group; animate: (t: number, moving: boolean, seconds: number) => void };
 
-export type DropField = { update: (position: number, collected: Set<number> | undefined, seconds: number) => void };
+export type BoosterField = { update: (position: number, collected: Set<number> | undefined, seconds: number) => void };
 
 export type DeliveryWorld = {
   root: THREE.Group;
   movers: MoverRig[];
-  drops: DropField;
+  boosters: BoosterField;
   bicycle: BikeRig;
   worldObjects: THREE.Object3D[];
   movingBuses: MovingBusRig[];
@@ -681,34 +681,68 @@ function createPigeons(placement: MoverPlacement, art: SceneArt): MoverRig {
   } };
 }
 
-// Milk drops share one instanced mesh: ~130 pickups for a single draw call.
-function createDropField(root: THREE.Group): DropField {
-  const profile = Array.from({ length: 13 }, (_, n) => {
-    const a = n / 12 * Math.PI;
-    // Teardrop: round bottom, pointed top.
-    return new THREE.Vector2(Math.sin(a) * .26 * (1 - n / 12 * .55), -Math.cos(a) * .26 + (n / 12) ** 2 * .22);
+// Milk boosters: a glowing milk bottle with a halo ring, bobbing and spinning.
+function createBoosterField(root: THREE.Group, art: SceneArt): BoosterField {
+  const profile = [[0, 0], [.2, 0], [.24, .06], [.24, .42], [.2, .52], [.1, .62], [.09, .76], [0, .76]].map(([x, y]) => new THREE.Vector2(x, y));
+  const glass = new THREE.MeshLambertMaterial({ color: "#fbfdff", emissive: "#bfe6ff", emissiveIntensity: .55 });
+  const bottles = BOOSTERS.map(booster => {
+    const group = new THREE.Group();
+    const bottle = new THREE.Mesh(new THREE.LatheGeometry(profile, 16), glass); bottle.scale.setScalar(1.6); group.add(bottle);
+    art.put(group, art.cylinder(.16, .16, .1, "#3fa7e0"), 0, 1.27, 0); // cap
+    const label = art.cylinder(.39, .39, .22, "#3fa7e0"); label.position.y = .45; group.add(label);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(.75, .05, 8, 32), new THREE.MeshBasicMaterial({ color: "#9fdcff", transparent: true, opacity: .7, toneMapped: false }));
+    halo.rotation.x = Math.PI / 2; halo.position.y = .05; group.add(halo);
+    art.shadow(group, 1.2, 1.2);
+    const frame = getRouteFrame(booster.distance, booster.branch ?? "main");
+    const home = frame.position.addScaledVector(frame.lateral, (booster.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing);
+    group.position.copy(home); root.add(group);
+    return { group, bottle, halo, booster };
   });
-  const geometry = new THREE.LatheGeometry(profile, 14);
-  const material = new THREE.MeshLambertMaterial({ color: "#f7fcff", emissive: "#a8dcff", emissiveIntensity: .45 });
-  const mesh = new THREE.InstancedMesh(geometry, material, DROPS.length);
-  mesh.frustumCulled = false; // instances span the whole route
-  const homes = DROPS.map(drop => {
-    const frame = getRouteFrame(drop.distance, drop.branch ?? "main");
-    return frame.position.addScaledVector(frame.lateral, drop.x).setY(drop.y);
-  });
-  const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), scale = new THREE.Vector3(), place = new THREE.Vector3();
-  root.add(mesh);
   return { update: (position, collected, seconds) => {
-    DROPS.forEach((drop, n) => {
-      const relative = drop.distance - position;
-      const show = !collected?.has(n) && relative > -15 && relative < 130;
-      rotation.setFromAxisAngle(up, seconds * 2.4 + n * .5);
-      place.copy(homes[n]); place.y += Math.sin(seconds * 3 + n * .7) * .08;
-      matrix.compose(place, rotation, scale.setScalar(show ? 1 : 0));
-      mesh.setMatrixAt(n, matrix);
+    bottles.forEach(({ group, halo, booster }, n) => {
+      const relative = booster.distance - position;
+      group.visible = !collected?.has(n) && relative > -15 && relative < 150;
+      if (!group.visible) return;
+      group.rotation.y = seconds * 2;
+      group.children[0].position.y = .25 + Math.sin(seconds * 3 + n) * .12;
+      halo.scale.setScalar(1 + Math.sin(seconds * 4) * .12);
     });
-    mesh.instanceMatrix.needsUpdate = true;
   } };
+}
+
+// Collapsed road: a dark pit across every lane and both kerbs, ragged asphalt
+// at the edges, and a warning sign ahead pointing riders to the centre ramp.
+function createGap(gap: Gap, art: SceneArt) {
+  const objects: THREE.Object3D[] = [];
+  const width = DELIVERY_GAME_CONFIG.roadWidth + 3.6, length = gap.end - gap.start, slices = Math.ceil(length / 2.5);
+  for (let n = 0; n < slices; n++) {
+    const d = gap.start + (n + .5) * length / slices;
+    const slice = markDistance(new THREE.Group(), d);
+    art.put(slice, art.box(width, .05, length / slices + .08, "#1f1b18"), 0, .03, 0);
+    // Deeper-looking core with a lighter ring of broken asphalt.
+    art.put(slice, art.box(width - 1.2, .06, length / slices + .1, "#0f0d0c"), 0, .035, 0);
+    placeOnRoute(slice, d, gap.branch); objects.push(slice);
+  }
+  for (const [edge, facing] of [[gap.start, 1], [gap.end, -1]] as const) {
+    const lip = markDistance(new THREE.Group(), edge);
+    for (let n = 0; n < 9; n++) {
+      const chunk = art.box(.7 + (n % 3) * .3, .14, .5 + (n % 2) * .3, n % 2 ? "#6c6f6b" : "#575a57");
+      chunk.position.set(-width / 2 + .6 + n * (width - 1.2) / 8, .06, facing * (.15 + (n % 3) * .12));
+      chunk.rotation.set((n % 2 ? .25 : -.2) * facing, n * .7, (n % 3 - 1) * .15);
+      lip.add(chunk);
+    }
+    placeOnRoute(lip, edge, gap.branch); objects.push(lip);
+  }
+  const sign = markDistance(new THREE.Group(), gap.start - 32);
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.7), new THREE.MeshBasicMaterial({
+    map: makeTextTexture({ title: "도로 붕괴!", subtitle: "가운데 점프대로 건너세요", background: "#ffe08a", foreground: "#7a3d1c", width: 640, height: 300 }), toneMapped: false,
+  }));
+  board.position.y = 2.6; sign.add(board);
+  art.put(sign, art.box(3.8, 1.9, .1, "#6f7768"), 0, 2.6, -.07);
+  art.put(sign, art.box(.12, 1.8, .12, "#6f7768"), 0, .9, -.07);
+  sign.position.x = DELIVERY_GAME_CONFIG.roadWidth / 2 + 1.2;
+  placeOnRoute(sign, gap.start - 32, gap.branch); objects.push(sign);
+  return objects;
 }
 
 // Orange launch ramp with white chevrons and corner flags; its high end is the launch point.
@@ -722,7 +756,8 @@ function createRamp(ramp: Ramp, art: SceneArt) {
     // Chevron (two angled bars) pointing up the slope.
     const z = length / 2 - .75 - n * .95, y = .04 + rise * (length / 2 - z) / length;
     for (const side of [-1, 1]) {
-      const bar = art.box(.95, .03, .2, "#ffffff"); bar.rotation.set(slope, side * .45, 0);
+      // Each bar slants inward toward the front, so the chevron points up the ramp.
+      const bar = art.box(.95, .03, .2, "#ffffff"); bar.rotation.set(slope, -side * .45, 0);
       bar.position.set(side * .4, y + .02, z); group.add(bar);
     }
   }
@@ -926,7 +961,8 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
     const object = createRamp(ramp, art);
     root.add(object); worldObjects.push(object);
   }
-  const drops = createDropField(root);
+  const boosters = createBoosterField(root, art);
+  for (const gap of GAPS) for (const object of createGap(gap, art)) { root.add(object); worldObjects.push(object); }
 
   for (const placement of MOVER_PLACEMENTS) {
     const mover = createMover(placement, art, outdoorResources);
@@ -968,5 +1004,5 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const bicycle = art.bicycle(brand, makeBrandPanelTexture(brand), texturedMaterial(brand.productImage, brand, brand.productName, .32 / .53));
   root.add(bicycle.group);
 
-  return { root, movers, drops, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
+  return { root, movers, boosters, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
 }

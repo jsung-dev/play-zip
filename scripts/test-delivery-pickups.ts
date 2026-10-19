@@ -1,38 +1,43 @@
 import assert from "node:assert/strict";
-import { OBSTACLE_PLACEMENTS } from "../data/delivery-game";
+import { DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "../data/delivery-game";
 import { DELIVERY_STOPS, ROAD_CLOSURE } from "../data/delivery-map";
-import { DROPS, RAMPS, collectDrops, rampHit } from "../components/delivery/delivery-pickups";
-import { jumpHeightAt, jumpDuration, RAMP_POWER, clearsObstacle, obstacleCenterX } from "../components/delivery/delivery-jump";
+import { BOOSTERS, GAPS, GAP_LENGTH, RAMPS, RAMP_MAX_SPEED, RAMP_MIN_SPEED, boosterHit, gapUnder, rampFlight, rampHit } from "../components/delivery/delivery-pickups";
+import { jumpDuration } from "../components/delivery/delivery-jump";
+import { MOVER_PLACEMENTS, moverPose } from "../components/delivery/delivery-movers";
 
-assert(DROPS.length > 100, "Enough drops to build combos");
-for (const d of DROPS) {
-  assert(d.distance > 95 && d.distance < 945, "Drops stay off the start and the final approach");
-  if (!d.branch) assert(d.distance < ROAD_CLOSURE.junctionDistance || d.distance > ROAD_CLOSURE.mergeEnd, "Main-road drops avoid the closed road");
-  for (const stop of DELIVERY_STOPS) assert(Math.abs(d.distance - stop.distance) > 6 || d.x > 0 === (stop.side === "left"), "Drops never sit in the alley mouth's lane");
-}
-// Ground pickup: riding straight through the first row collects it.
-const first = collectDrops(99, 101, 0, 0, "main", new Set());
-assert.equal(first.length, 1);
-assert.deepEqual(collectDrops(99, 101, 2.5, 0, "main", new Set()), [], "Other lanes are not collected");
-assert.deepEqual(collectDrops(99, 101, 0, 0, "main", new Set(first)), [], "A drop is collected once");
-// Air drops need a jump: the arc over the 118 plank is only reachable in the air.
-const arcIndex = DROPS.findIndex(d => d.distance > 115 && d.distance < 121 && d.y > 1.6);
-assert(arcIndex >= 0);
-const a = DROPS[arcIndex];
-assert.deepEqual(collectDrops(a.distance - .5, a.distance + .5, a.x, 0, "main", new Set()), [], "Air drops are out of reach on the ground");
-assert(collectDrops(a.distance - .5, a.distance + .5, a.x, a.y - .9, "main", new Set()).includes(arcIndex), "Jumping collects air drops");
-// Branch drops exist only on their branch.
-const left = DROPS.findIndex(d => d.branch === "left");
-assert.deepEqual(collectDrops(DROPS[left].distance - .5, DROPS[left].distance + .5, DROPS[left].x, 0, "right", new Set()).filter(i => i === left), []);
-// Ramps launch over the obstacle right after them.
-for (const ramp of RAMPS) {
-  assert(rampHit(ramp.distance - .4, ramp.distance + .4, (ramp.lane - 1) * 2.5, ramp.branch ?? "main", false), "Ramp launches on contact");
-  assert.equal(rampHit(ramp.distance - .4, ramp.distance + .4, (ramp.lane - 1) * 2.5, ramp.branch ?? "main", true), null, "No relaunch while airborne");
-  const air = jumpDuration(RAMP_POWER) * 20;
-  for (const o of OBSTACLE_PLACEMENTS.filter(o => (o.branch ?? undefined) === ramp.branch && o.distance > ramp.distance && o.distance < ramp.distance + air)) {
-    if (Math.abs(obstacleCenterX(o) - (ramp.lane - 1) * 2.5) > 2.6) continue;
-    const t = (o.distance - ramp.distance) / 20;
-    assert(clearsObstacle(o.kind, jumpHeightAt(t, RAMP_POWER)), `Ramp at ${ramp.distance} clears ${o.id}`);
+const top = DELIVERY_GAME_CONFIG.forwardSpeedPerSecond;
+// The gap really needs the ramp: a normal jump at top speed falls short, a ramp flight clears it.
+assert(jumpDuration() * top < GAP_LENGTH, "A normal jump cannot cross a collapsed road");
+assert(rampFlight(RAMP_MIN_SPEED) > GAP_LENGTH + 1.5, "A ramp flight always clears the gap with a margin");
+
+for (const [i, ramp] of RAMPS.entries()) {
+  const gap = GAPS[i], x = (ramp.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing, route = ramp.branch ?? "main";
+  assert(rampHit(ramp.distance - .4, ramp.distance + .4, x, route, false), "Ramp launches on contact");
+  assert.equal(rampHit(ramp.distance - .4, ramp.distance + .4, x + 2.5, route, false), null, "Only the ramp's lane launches");
+  assert(gapUnder(gap.start + 1, route, false), "Riding into the gap falls");
+  assert.equal(gapUnder(gap.start + 1, route, true), null, "Flying over does not fall");
+  if (ramp.branch) assert.equal(gapUnder(gap.start + 1, "main", false), null, "Detour gaps are not on the (closed) main road");
+  // The flight must not skip other hazards: nothing from the ramp to 8 m past landing.
+  const clearUntil = ramp.distance + rampFlight(RAMP_MAX_SPEED) + 8;
+  for (const o of OBSTACLE_PLACEMENTS.filter(o => o.branch === ramp.branch || (!o.branch && !ramp.branch)))
+    assert(o.distance < ramp.distance - 3 || o.distance > clearUntil, `${o.id} is jumped over by the ramp at ${ramp.distance}`);
+  for (const m of MOVER_PLACEMENTS) for (const t of [0, 1, 2, 3, 4]) {
+    const d = moverPose(m, t).distance;
+    if (!ramp.branch) assert(d < ramp.distance - 3 || d > clearUntil || moverPose(m, t).done, `${m.id} overlaps the ramp/gap at ${ramp.distance}`);
   }
+  // Clear of alleys and the fork split.
+  for (const stop of DELIVERY_STOPS) assert(Math.abs(ramp.distance - stop.distance) > 40, "Ramp clear of alley entrances");
+  if (!ramp.branch) assert(ramp.distance < ROAD_CLOSURE.junctionDistance - 40 || ramp.distance > ROAD_CLOSURE.mergeEnd + 10);
 }
-console.log(`Pickups: ${DROPS.length} drops, ground/air/branch rules, ${RAMPS.length} ramps clearing their obstacles verified.`);
+
+assert(BOOSTERS.length >= 4 && BOOSTERS.length <= 8, "A handful of boosters, not a trail");
+const taken = new Set<number>();
+for (const [i, b] of BOOSTERS.entries()) {
+  const x = (b.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing, route = b.branch ?? "main";
+  assert.equal(boosterHit(b.distance - .5, b.distance + .5, x, route, taken), i, "Riding through a booster collects it");
+  assert.equal(boosterHit(b.distance - .5, b.distance + .5, x + 2.5, route, taken), -1, "Other lanes miss it");
+  taken.add(i);
+  assert.equal(boosterHit(b.distance - .5, b.distance + .5, x, route, taken), -1, "Collected once");
+  for (const gap of GAPS) assert(b.distance < gap.start - 5 || b.distance > gap.end + 3 || b.branch !== gap.branch, "No booster inside a gap");
+}
+console.log(`Gaps need the ramp (normal jump ${(jumpDuration() * top).toFixed(1)} m < ${GAP_LENGTH} m < ramp ${rampFlight(RAMP_MIN_SPEED).toFixed(1)} m); ramps skip no hazards; ${BOOSTERS.length} boosters verified.`);

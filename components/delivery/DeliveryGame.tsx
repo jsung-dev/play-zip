@@ -14,7 +14,7 @@ import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTur
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
 import { clearsObstacle, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER } from "./delivery-jump";
-import { COMBO, collectDrops, rampHit } from "./delivery-pickups";
+import { BOOST, boosterHit, FALL_SECONDS, gapUnder, RAMP_MAX_SPEED, RAMP_MIN_SPEED, rampHit } from "./delivery-pickups";
 import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose } from "./delivery-movers";
 import { playSfx, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
 import styles from "./DeliveryGame.module.css";
@@ -49,9 +49,8 @@ type RuntimeState = {
   moverStarts: Record<string, number>;
   jumpPower: number;
   collected: Set<number>;
-  combo: number;
-  bestCombo: number;
-  comboTimer: number;
+  fallElapsed: number | null;
+  fallRespawn: number;
   boostRemaining: number;
 };
 
@@ -60,7 +59,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, jumpPower: 1, collected: new Set(), combo: 0, bestCombo: 0, comboTimer: 0, boostRemaining: 0 });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0 });
 
 function approach(value: number, target: number, maxDelta: number) {
   if (value < target) return Math.min(target, value + maxDelta);
@@ -203,8 +202,17 @@ export function DeliveryGame() {
       runtime.deliverySuccessRemaining = Math.max(0, runtime.deliverySuccessRemaining - deltaSeconds);
       runtime.clock += deltaSeconds;
       runtime.boostRemaining = Math.max(0, runtime.boostRemaining - deltaSeconds);
-      runtime.comboTimer = Math.max(0, runtime.comboTimer - deltaSeconds);
-      if (runtime.comboTimer === 0) runtime.combo = 0;
+      if (runtime.fallElapsed !== null) {
+        // Fell into a collapsed road: drop out of sight, then respawn before the gap.
+        runtime.fallElapsed += deltaSeconds;
+        if (runtime.fallElapsed >= FALL_SECONDS) {
+          Object.assign(runtime, { fallElapsed: null, position: runtime.fallRespawn, speed: 0, laneTarget: 1, laneX: 0, laneFromX: 0, laneStartedAt: timestamp, jumpElapsed: null, collisionId: null });
+          clearInputs();
+          setFrame({ ...runtime });
+        }
+        animationFrameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
       const boosting = runtime.boostRemaining > 0;
       if (runtime.jumpElapsed !== null) {
         runtime.jumpElapsed += deltaSeconds;
@@ -226,7 +234,7 @@ export function DeliveryGame() {
       const desiredSpeed = bothPressed
         ? 0
         : input.forward
-          ? DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? COMBO.boostSpeedFactor : 1)
+          ? DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1)
           : input.reverse
             ? -DELIVERY_GAME_CONFIG.reverseSpeedPerSecond
             : 0;
@@ -241,7 +249,8 @@ export function DeliveryGame() {
       const cappedSpeed = slowdownActive
         ? Math.sign(desiredSpeed) * Math.min(Math.abs(desiredSpeed), desiredSpeed >= 0 ? 11 : 4)
         : desiredSpeed;
-      runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
+      // A ramp flight keeps its launch speed: no throttle or brakes in the air.
+      if (!(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
       if (Math.abs(runtime.speed) < 0.012 && desiredSpeed === 0) runtime.speed = 0;
       // Inside an unserved delivery alley, brake automatically so the bike
       // stops on the pad and the quiz opens, even if the throttle is held.
@@ -354,24 +363,32 @@ export function DeliveryGame() {
         runtime.collisionCount += 1;
         runtime.slowdownUntil = timestamp + DELIVERY_GAME_CONFIG.collisionSlowdownSeconds * 1_000;
         obstaclePassUntilRef.current.set(id, timestamp + DELIVERY_GAME_CONFIG.obstaclePassThroughSeconds * 1_000);
-        runtime.combo = 0;
         runtime.boostRemaining = 0;
         playSfx("hit");
       };
       let jumpHeight = jumpHeightAt(runtime.jumpElapsed, runtime.jumpPower);
       if (!wasInDriveway && !runtime.driveway) {
-        // Ramps launch a big jump; drops along the way build the combo.
+        // The ramp is the only way over a collapsed road; it tops up speed so the flight always clears it.
         if (rampHit(previousPosition, runtime.position, runtime.laneX, runtime.detour, runtime.jumpElapsed !== null)) {
           runtime.jumpElapsed = 0; runtime.jumpPower = RAMP_POWER; jumpHeight = 0;
+          runtime.speed = Math.min(RAMP_MAX_SPEED, Math.max(runtime.speed, RAMP_MIN_SPEED));
           playSfx("ramp");
         }
-        for (const index of collectDrops(previousPosition, runtime.position, runtime.laneX, jumpHeight, runtime.detour, runtime.collected)) {
-          runtime.collected.add(index);
-          runtime.combo += 1;
-          runtime.bestCombo = Math.max(runtime.bestCombo, runtime.combo);
-          runtime.comboTimer = COMBO.windowSeconds;
-          playSfx("pickup", runtime.combo);
-          if (runtime.combo % COMBO.boostEvery === 0) { runtime.boostRemaining = COMBO.boostSeconds; playSfx("boost"); }
+        const gap = gapUnder(runtime.position, runtime.detour, runtime.jumpElapsed !== null);
+        if (gap) {
+          runtime.fallElapsed = 0; runtime.fallRespawn = gap.start - 16; runtime.speed = 0; runtime.boostRemaining = 0;
+          runtime.collisionCount += 1;
+          clearInputs();
+          playSfx("hit");
+          setFrame({ ...runtime });
+          animationFrameRef.current = window.requestAnimationFrame(tick);
+          return;
+        }
+        const booster = boosterHit(previousPosition, runtime.position, runtime.laneX, runtime.detour, runtime.collected);
+        if (booster >= 0) {
+          runtime.collected.add(booster);
+          runtime.boostRemaining = BOOST.seconds;
+          playSfx("boost");
         }
       }
       if (!wasInDriveway && !runtime.driveway && Math.abs(runtime.speed) > 0.01) {
@@ -533,6 +550,7 @@ export function DeliveryGame() {
         data-turn-choice={frame.turnChoice ? `${frame.turnChoice.stopIndex}:${frame.turnChoice.entryEnd}` : ""}
         data-collision-count={frame.collisionCount}
         data-jumping={frame.jumpElapsed !== null ? "true" : "false"}
+        data-falling={frame.fallElapsed !== null ? "true" : "false"}
         data-slowdown-active={frame.slowdownUntil > performance.now() ? "true" : "false"}
         data-stop-index={frame.stopIndex}
         data-stop-dwell={frame.stopDwell.toFixed(3)}
@@ -596,12 +614,11 @@ export function DeliveryGame() {
         </header>
 
         <div className={styles.playArea} data-control-hand={controlHand}>
-          {(status === "playing" || status === "quiz") && (
-            <div className={styles.rideStats} data-boosting={frame.boostRemaining > 0}>
-              <span className={styles.dropCount} data-drop-count={frame.collected.size}><i aria-hidden="true" />우유 {frame.collected.size}</span>
-              {frame.boostRemaining > 0
-                ? <strong className={styles.boostBadge}>부스트!</strong>
-                : frame.combo >= 3 && <strong key={frame.combo} className={styles.comboBadge}>콤보 ×{frame.combo}</strong>}
+          {status === "playing" && (frame.boostRemaining > 0 || frame.fallElapsed !== null) && (
+            <div className={styles.rideStats}>
+              {frame.fallElapsed !== null
+                ? <strong className={styles.fallBadge}>앗! 도로가 무너졌어요</strong>
+                : <strong className={styles.boostBadge}>우유 부스터!</strong>}
             </div>
           )}
           <DeliveryScene3D

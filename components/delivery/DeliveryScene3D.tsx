@@ -39,7 +39,7 @@ type SceneState = {
 
 type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "closureReached" | "travelDirection" | "turnChoice" | "completedStops";
 const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "closureReached", "travelDirection", "turnChoice", "completedStops"];
-export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; jumpPower: number; clock: number; moverStarts: Record<string, number>; collected: Set<number>; boostRemaining: number };
+export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; jumpPower: number; clock: number; moverStarts: Record<string, number>; collected: Set<number>; boostRemaining: number; fallElapsed: number | null };
 
 export function DeliveryScene3D({
   position,
@@ -200,7 +200,10 @@ export function DeliveryScene3D({
       const routeFrame = current.driveway ? getDrivewayFrame(current.driveway.stopIndex, current.driveway.progress, current.driveway) : mainFrame;
       world.horizon.position.set(routeFrame.position.x, 0, routeFrame.position.z);
       const bikePosition = routeFrame.position.clone().addScaledVector(routeFrame.lateral, current.driveway ? 0 : current.laneX);
-      world.bicycle.group.position.set(bikePosition.x, 0.08 + current.jumpHeight, bikePosition.z);
+      // Falling into a collapsed road: the bike sinks out of sight before the respawn.
+      const fall = live?.fallElapsed ?? null;
+      const sink = fall === null ? 0 : 9 * fall * fall;
+      world.bicycle.group.position.set(bikePosition.x, 0.08 + current.jumpHeight - sink, bikePosition.z);
       // Keep the contact shadow on the road while airborne.
       world.bicycle.groundShadow.position.y = .045 - current.jumpHeight / bikeScale;
       world.bicycle.groundShadow.scale.setScalar(1 - current.jumpHeight * .25);
@@ -291,7 +294,7 @@ export function DeliveryScene3D({
         }
       }
       world.destination.visible = current.position > 790;
-      world.drops.update(current.position, live?.collected, timestamp / 1000);
+      world.boosters.update(current.position, live?.collected, timestamp / 1000);
 
       // Moving hazards: shown at their start pose until woken, then follow their path.
       for (const mover of world.movers) {

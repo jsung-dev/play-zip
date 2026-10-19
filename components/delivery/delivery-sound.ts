@@ -1,6 +1,6 @@
 // Tiny synthesized sound set (no audio files, nothing to license) plus phone
 // vibration. One on/off switch for both, remembered on this device.
-type Sfx = "jump" | "land" | "hit" | "deliver" | "correct" | "pickup" | "boost" | "ramp";
+type Sfx = "jump" | "land" | "hit" | "deliver" | "correct" | "boost" | "ramp";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -41,22 +41,17 @@ function tone(frequency: number, endFrequency: number, start: number, length: nu
   osc.start(start); osc.stop(start + length + .02);
 }
 
-const VIBRATION: Record<Sfx, number | number[] | 0> = { jump: 12, land: 22, hit: 60, deliver: [30, 40, 30], correct: 20, pickup: 0, boost: [20, 30, 20], ramp: 30 };
+const VIBRATION: Record<Sfx, number | number[]> = { jump: 12, land: 22, hit: 60, deliver: [30, 40, 30], correct: 20, boost: [20, 30, 20], ramp: 30 };
 
-export function playSfx(name: Sfx, combo = 0) {
+export function playSfx(name: Sfx) {
   if (!enabled) return;
-  try { if (VIBRATION[name]) navigator.vibrate?.(VIBRATION[name]); } catch { /* unsupported (e.g. iPhone) */ }
+  try { navigator.vibrate?.(VIBRATION[name]); } catch { /* unsupported (e.g. iPhone) */ }
   if (!context || context.state !== "running") return;
   const now = context.currentTime;
   if (name === "jump") tone(380, 880, now, .16, "triangle", .22);
   else if (name === "land") tone(150, 60, now, .12, "sine", .3);
   else if (name === "hit") { tone(220, 70, now, .22, "square", .12); tone(110, 50, now, .25, "sine", .25); }
   else if (name === "deliver") { tone(1319, 1319, now, .25, "sine", .2); tone(1047, 1047, now + .22, .4, "sine", .2); }
-  else if (name === "pickup") {
-    // Pitch climbs a scale step with each combo, up to an octave.
-    const f = 784 * 2 ** ([0, 2, 4, 5, 7, 9, 11, 12][Math.min(combo, 8) - 1 || 0] / 12);
-    tone(f, f * 1.5, now, .09, "sine", .14);
-  }
   else if (name === "boost") { tone(300, 1200, now, .45, "sawtooth", .07); tone(600, 2400, now + .05, .4, "triangle", .1); }
   else if (name === "ramp") tone(260, 1100, now, .35, "triangle", .2);
   else { [523, 659, 784].forEach((f, n) => tone(f, f, now + n * .08, .2, "triangle", .16)); }

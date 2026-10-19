@@ -157,7 +157,6 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "obstacle-855", distance: 855, lane: 2, kind: "box" },
   // 점프용: 골목 진입·출구, 우회 구간, 시작 직후, 목적지 직전은 비워 둡니다.
   { id: "jump-118", distance: 118, lane: 1, kind: "plank" },
-  { id: "jump-295", distance: 295, lane: 0, kind: "plank", span: 3 },
   { id: "jump-705", distance: 705, lane: 0, kind: "crates", span: 2 },
   { id: "jump-210", distance: 210, lane: 0, kind: "crates", span: 2 },
   { id: "jump-320", distance: 320, lane: 1, kind: "crates", span: 2 },
@@ -166,13 +165,11 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "jump-920", distance: 920, lane: 1, kind: "crates", span: 2 },
   // 난이도 상향(2026-10): 큰길 추가분과 우회로 양쪽 구간.
   { id: "jump-132", distance: 132, lane: 1, kind: "crates", span: 2 },
-  { id: "jump-262", distance: 262, lane: 0, kind: "crates" },
   { id: "jump-760", distance: 760, lane: 0, kind: "crates", span: 2 },
-  { id: "jump-875", distance: 875, lane: 1, kind: "plank", span: 2 },
   { id: "jump-935", distance: 935, lane: 0, kind: "plank" },
+  { id: "jump-316", distance: 316, lane: 0, kind: "crates" },
   ...(["left", "right"] as const).flatMap((branch): ObstaclePlacement[] => [
     { id: `detour-${branch}-578`, distance: 578, lane: 1, kind: "crates", span: 2, branch },
-    { id: `detour-${branch}-603`, distance: 603, lane: 0, kind: "plank", span: 3, branch },
     { id: `detour-${branch}-626`, distance: 626, lane: 0, kind: "crates", branch },
   ]),
 ];
