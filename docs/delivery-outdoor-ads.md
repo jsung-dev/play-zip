@@ -5,7 +5,7 @@
 `data/delivery-outdoor-ads.ts` 한 파일에서 관리합니다.
 
 - `OUTDOOR_ADS`: 건물·옥상·돌출 간판·정류장의 고정 광고 13개.
-- `OVERHEAD_ADS`: 오버헤드 배너 9개(본길 7, 갈림길 좌·우 각 1). `DESTINATION_OVERHEAD_AD`는 975m 최종 목적지 배너. 4:1 규격이며 `image`만 바꾸면 교체됩니다. 기존 광고/건물 부지는 옮기지 않고 지주만 도로 밖에 둡니다.
+- `OVERHEAD_ADS`: 오버헤드 배너 6개(본길 3, 갈림길 좌·우 각 1, 목적지 1). `DESTINATION_OVERHEAD_AD`는 975m 최종 목적지 배너. 4:1 규격이며 `image`만 바꾸면 교체됩니다. 기존 광고/건물 부지는 옮기지 않고 지주만 도로 밖에 둡니다.
 - `BUS_AD_PANELS`: 기존 버스 5대의 좌우 측면 광고 10개. 버스 주행 경로/속도는 바꾸지 않았습니다.
 - `OUTDOOR_AD_FORMATS`: 규격과 캔버스 해상도.
 - `OUTDOOR_AD_STYLE`: 크림색 바탕, 진한 초록색 글씨/테두리, 기본 문구.

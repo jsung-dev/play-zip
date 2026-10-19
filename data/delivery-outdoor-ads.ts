@@ -55,13 +55,10 @@ const overhead = (distance: number, width: number, height: number, route?: "left
 // 골목 입구·출구, 갈림길 갈라짐(495~570m) 구간은 피해 도로 위에 일정 간격으로 둡니다.
 export const OVERHEAD_ADS: OverheadAdPlacement[] = [
   overhead(40, 12, 9),
-  overhead(148, 13, 9.4),
   overhead(318, 12, 9),
-  overhead(462, 14, 9.6),
   overhead(604, 11, 9, "left"),
   overhead(630, 11, 9, "right"),
   overhead(748, 13, 9.2),
-  overhead(918, 12, 9.4),
   DESTINATION_OVERHEAD_AD,
 ];
 
