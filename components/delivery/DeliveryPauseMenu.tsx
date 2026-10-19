@@ -1,6 +1,6 @@
 "use client";
 
-import { Hand, MapPin, Pause, Play, RotateCcw, Route } from "lucide-react";
+import { Hand, MapPin, Pause, Play, RotateCcw, Route, Volume2, VolumeX } from "lucide-react";
 import { DELIVERY_STOPS } from "@/data/delivery-map";
 import { DELIVERY_GAME_CONFIG } from "@/data/delivery-game";
 import { useDialogFocus } from "./DeliveryCampaign";
@@ -10,8 +10,8 @@ import styles from "./DeliveryNavigation.module.css";
 
 export type ControlHand = "right" | "left";
 
-export function DeliveryPauseMenu({ stopIndex, controlHand, onControlHand, onResume, onReplay, onRestart }: {
-  stopIndex: number; controlHand: ControlHand; onControlHand: (hand: ControlHand) => void; onResume: () => void; onReplay: () => void; onRestart: () => void;
+export function DeliveryPauseMenu({ stopIndex, controlHand, onControlHand, soundOn, onToggleSound, onResume, onReplay, onRestart }: {
+  stopIndex: number; controlHand: ControlHand; onControlHand: (hand: ControlHand) => void; soundOn: boolean; onToggleSound: () => void; onResume: () => void; onReplay: () => void; onRestart: () => void;
 }) {
   const ref = useDialogFocus();
   const next = DELIVERY_STOPS[stopIndex];
@@ -30,6 +30,9 @@ export function DeliveryPauseMenu({ stopIndex, controlHand, onControlHand, onRes
             </button>
           ))}
         </div>
+        <button type="button" className={styles.soundToggle} aria-pressed={soundOn} data-sound-toggle onClick={onToggleSound}>
+          {soundOn ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}<strong>소리·진동</strong><span>{soundOn ? "켜짐" : "꺼짐"}</span>
+        </button>
       </fieldset>
       <div className={shared.actions}>
         <button className={shared.primaryButton} type="button" onClick={onResume}><Play aria-hidden="true" />계속 배달하기</button>

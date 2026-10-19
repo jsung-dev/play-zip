@@ -11,6 +11,7 @@ import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { busTurnLaneClear, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { jumpHeightAt } from "./delivery-jump";
+import { moverPose } from "./delivery-movers";
 import styles from "./DeliveryGame.module.css";
 
 type SceneState = {
@@ -38,7 +39,7 @@ type SceneState = {
 
 type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "closureReached" | "travelDirection" | "turnChoice" | "completedStops";
 const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "closureReached", "travelDirection", "turnChoice", "completedStops"];
-export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null };
+export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; clock: number; moverStarts: Record<string, number> };
 
 export function DeliveryScene3D({
   position,
@@ -65,6 +66,7 @@ export function DeliveryScene3D({
   liveRef,
 }: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime } }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const speedLinesRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight });
   const [webglFailed, setWebglFailed] = useState(false);
   stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight };
@@ -115,7 +117,7 @@ export function DeliveryScene3D({
     {
       const culled: THREE.Object3D[] = [];
       scene.traverse((object) => { if (object instanceof THREE.Mesh && object.frustumCulled) { object.frustumCulled = false; culled.push(object); } });
-      const hidden = [...world.worldObjects, ...world.movingBuses.map((bus) => bus.group)].filter((object) => !object.visible);
+      const hidden = [...world.worldObjects, ...world.movingBuses.map((bus) => bus.group), ...world.movers.map((mover) => mover.group)].filter((object) => !object.visible);
       for (const object of hidden) object.visible = true;
       const warm = new THREE.WebGLRenderTarget(1, 1);
       renderer.setRenderTarget(warm); renderer.render(scene, camera); renderer.setRenderTarget(null); warm.dispose();
@@ -148,6 +150,8 @@ export function DeliveryScene3D({
       }
     };
 
+    let baseFov = camera.fov, shake = 0, shakeStrength = 0, speedLineOpacity = -1;
+    const shakeOffset = new THREE.Vector3();
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
       const width = Math.max(1, Math.round(bounds.width));
@@ -155,7 +159,7 @@ export function DeliveryScene3D({
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       // Preserve the roadside reading window on narrow phones as well.
-      camera.fov = portraitCameraFov(camera.aspect);
+      camera.fov = baseFov = portraitCameraFov(camera.aspect);
       camera.updateProjectionMatrix();
     };
     const resizeObserver = new ResizeObserver(resize);
@@ -199,7 +203,7 @@ export function DeliveryScene3D({
       world.bicycle.groundShadow.position.y = .045 - current.jumpHeight / bikeScale;
       world.bicycle.groundShadow.scale.setScalar(1 - current.jumpHeight * .25);
       const airborne = current.jumpHeight > 0;
-      if (wasAirborne && !airborne) landingElapsed = 0;
+      if (wasAirborne && !airborne) { landingElapsed = 0; shake = .18; shakeStrength = .08; }
       wasAirborne = airborne;
       if (!current.paused) landingElapsed += deltaSeconds;
       // Brief squash on landing only; the camera rail ignores jump height.
@@ -211,6 +215,7 @@ export function DeliveryScene3D({
       if (current.collisionId !== activeCollisionId) {
         activeCollisionId = current.collisionId;
         collisionElapsedMs = 0;
+        if (activeCollisionId) { shake = .3; shakeStrength = .2; }
       }
       if (activeCollisionId && current.playing && !current.paused) collisionElapsedMs += deltaSeconds * 1_000;
       const impactProgress = activeCollisionId ? Math.min(1, collisionElapsedMs / 420) : 1;
@@ -251,6 +256,12 @@ export function DeliveryScene3D({
       cameraTarget.y = DELIVERY_GAME_CONFIG.cameraHeight + forkView * 1.4;
       const followBlend = reduceMotion ? 1 : 1 - Math.exp(-9 * deltaSeconds);
       camera.position.lerp(cameraTarget, followBlend);
+      // Speed feel: the view widens a little near top speed, with streaks at the edges.
+      const rush = reduceMotion ? 0 : THREE.MathUtils.smoothstep(Math.abs(current.speed), 12, 20);
+      const fov = baseFov + rush * 5;
+      if (Math.abs(camera.fov - fov) > .01) { camera.fov += (fov - camera.fov) * Math.min(1, deltaSeconds * 4); camera.updateProjectionMatrix(); }
+      const lines = Math.round(rush * (current.paused ? 0 : 1) * 20) / 20;
+      if (lines !== speedLineOpacity && speedLinesRef.current) { speedLineOpacity = lines; speedLinesRef.current.style.opacity = String(lines * .55); }
       const lookTarget = cameraRail.clone().addScaledVector(routeFrame.tangent, 16 - forkView * 2 - drivewayMix * 7);
       lookTarget.y = 1.15;
       camera.lookAt(lookTarget);
@@ -276,6 +287,23 @@ export function DeliveryScene3D({
         }
       }
       world.destination.visible = current.position > 790;
+
+      // Moving hazards: shown at their start pose until woken, then follow their path.
+      for (const mover of world.movers) {
+        const started = live?.moverStarts[mover.placement.id];
+        const t = started === undefined || !live ? 0 : live.clock - started;
+        const pose = moverPose(mover.placement, t);
+        const relative = pose.distance - current.position;
+        mover.group.visible = !pose.done && relative > -38 && relative < 180;
+        if (!mover.group.visible) continue;
+        const frame = getRouteFrame(Math.min(DELIVERY_GAME_CONFIG.totalDistance, Math.max(0, pose.distance)));
+        const at = frame.position.addScaledVector(frame.lateral, pose.x);
+        mover.group.position.set(at.x, 0, at.z);
+        mover.group.rotation.y = frame.yaw;
+        if (mover.spin) mover.spin.rotation.x = t * 5 / .5;
+        if (mover.indicator) mover.indicator.visible = started !== undefined && t < 5 && Math.sin(t * 9) > 0;
+        mover.legs.forEach((leg, n) => { leg.position.y = .16 + (started === undefined ? 0 : Math.max(0, Math.sin(t * 12 + n * Math.PI / 2)) * .06); });
+      }
 
       camera.updateMatrixWorld();
       const guide = guidance.update(current, camera, canvas.clientHeight, highlightRemaining > 0, timestamp, current.playing || current.arriving);
@@ -328,7 +356,13 @@ export function DeliveryScene3D({
         }
       }
 
+      // Brief camera shake on landing and on hits; removed again after drawing.
+      shake = Math.max(0, shake - deltaSeconds);
+      const amount = reduceMotion || current.paused ? 0 : shakeStrength * shake / .3;
+      shakeOffset.set(Math.sin(timestamp * .061) * amount, Math.cos(timestamp * .047) * amount, 0);
+      camera.position.add(shakeOffset);
       renderer.render(scene, camera);
+      camera.position.sub(shakeOffset);
       animationFrame = window.requestAnimationFrame(animate);
     };
 
@@ -363,6 +397,7 @@ export function DeliveryScene3D({
   return (
     <section className={styles.scene3d} data-paused={paused ? "true" : "false"} aria-label="3D 배달 동네">
       <canvas ref={canvasRef} className={styles.sceneCanvas} aria-label="자전거 뒤에서 바라보는 3D 배달 도로" />
+      <div ref={speedLinesRef} className={styles.speedLines} aria-hidden="true" />
       <div className={styles.sceneVignette} aria-hidden="true" />
       {webglFailed && (
         <div className={styles.webglFallback} role="alert">

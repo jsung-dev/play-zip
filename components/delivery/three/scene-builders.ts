@@ -18,6 +18,7 @@ import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
 import { obstacleCenterX, obstacleSpan } from "../delivery-jump";
+import { MOVER_PLACEMENTS, type MoverPlacement } from "../delivery-movers";
 
 export type BikeRig = {
   group: THREE.Group;
@@ -41,8 +42,11 @@ export type ObstacleRig = {
   group: THREE.Group;
 };
 
+export type MoverRig = { placement: MoverPlacement; group: THREE.Group; spin?: THREE.Object3D; indicator?: THREE.Object3D; legs: THREE.Object3D[] };
+
 export type DeliveryWorld = {
   root: THREE.Group;
+  movers: MoverRig[];
   bicycle: BikeRig;
   worldObjects: THREE.Object3D[];
   movingBuses: MovingBusRig[];
@@ -606,6 +610,42 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
 }
 
 
+// Original, unbranded critters/props. Groups face the route; the scene moves them.
+function createMover(placement: MoverPlacement, art: SceneArt, resources: OutdoorAdResources): MoverRig {
+  if (placement.kind === "bus") {
+    const group = createBus({ id: `mover-${placement.id}`, distance: placement.distance, brandId: "green", mode: "moving", side: "right", speed: 8 }, art, resources);
+    // Left indicator at the front corner: blinks while the bus pulls out.
+    const indicator = new THREE.Mesh(new THREE.BoxGeometry(.32, .22, .1), new THREE.MeshBasicMaterial({ color: "#ffb33b", toneMapped: false }));
+    indicator.position.set(-1.2, .95, -3.06); group.add(indicator);
+    return { placement, group, indicator, legs: [] };
+  }
+  const group = new THREE.Group();
+  if (placement.kind === "ball") {
+    art.shadow(group, 1.2, 1.2);
+    const spin = new THREE.Group(); spin.position.y = .5;
+    spin.add(art.sphere(.5, "#ef6f6c"));
+    const band = new THREE.Mesh(new THREE.TorusGeometry(.502, .08, 8, 24), art.material("#fff6e4"));
+    band.rotation.y = Math.PI / 2; spin.add(band);
+    group.add(spin);
+    return { placement, group, spin, legs: [] };
+  }
+  // Cat walking along +x (across the road).
+  art.shadow(group, 1.3, .8);
+  const fur = "#f2a65a", cream = "#fff1dc";
+  art.put(group, art.box(.86, .36, .36, fur, .14), 0, .5, 0);
+  art.put(group, art.sphere(.22, fur), .5, .72, 0);
+  for (const z of [-.1, .1]) {
+    const ear = art.cylinder(0, .07, .16, fur); art.put(group, ear, .52, .95, z);
+    art.put(group, art.sphere(.035, "#3d4a46"), .69, .76, z * .8);
+  }
+  art.put(group, art.sphere(.07, cream), .7, .67, 0);
+  for (const x of [-.2, .05]) art.put(group, art.box(.08, .37, .38, "#d9853f"), x, .51, 0);
+  art.rod(group, [-.42, .55, 0], [-.66, .9, 0], .045, fur);
+  const legs = [-.28, .28].flatMap(x => [-.12, .12].map(z => art.put(group, art.box(.1, .32, .1, cream, .04), x, .16, z)));
+  group.scale.setScalar(1.25); // a touch larger than life so it reads from afar
+  return { placement, group, legs };
+}
+
 function createDestination(brand: DeliveryBrand, art: SceneArt) {
   const group = markDistance(new THREE.Group(), DELIVERY_GAME_CONFIG.totalDistance);
   group.userData.entranceLocal = [0, 1.64, 3.1];
@@ -642,6 +682,7 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const worldObjects: THREE.Object3D[] = [];
   const movingBuses: MovingBusRig[] = [];
   const obstacles: ObstacleRig[] = [];
+  const movers: MoverRig[] = [];
   const deliveryStops: DeliveryStopRig[] = [];
   const art = createSceneArt();
   const road = createRoadSurfaceMaterial();
@@ -718,6 +759,12 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
     root.add(obstacle.group);
   }
 
+  for (const placement of MOVER_PLACEMENTS) {
+    const mover = createMover(placement, art, outdoorResources);
+    mover.group.visible = false;
+    movers.push(mover); root.add(mover.group);
+  }
+
   for (const stop of DELIVERY_STOPS) {
     const { house, marker, rig } = createDeliveryStop(stop, art, brand, road);
     deliveryStops.push(rig);
@@ -752,5 +799,5 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const bicycle = art.bicycle(brand, makeBrandPanelTexture(brand), texturedMaterial(brand.productImage, brand, brand.productName, .32 / .53));
   root.add(bicycle.group);
 
-  return { root, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
+  return { root, movers, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
 }

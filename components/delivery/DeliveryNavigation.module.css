@@ -41,3 +41,7 @@
 .controlSetting button span { font-size: 11px; color: #6f8a73; }
 .controlSetting button[aria-checked="true"] { border-color: #6fae86; background: #e7f3e6; box-shadow: inset 0 0 0 1px #6fae86; }
 .controlSetting button:focus-visible { outline: 2px solid #305c49; outline-offset: 2px; }
+.controlSetting .soundToggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; margin-top: 8px; }
+.controlSetting .soundToggle svg { width: 18px; height: 18px; }
+.controlSetting .soundToggle span { font-size: 12px; }
+.controlSetting .soundToggle[aria-pressed="true"] { border-color: #6fae86; background: #e7f3e6; }

@@ -14,6 +14,8 @@ import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTur
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
 import { clearsObstacle, jumpHeightAt, JUMP_CONFIG, obstacleCenterX, obstacleHitHalfWidth } from "./delivery-jump";
+import { MOVER_PLACEMENTS, MOVER_SHAPE, moverPose } from "./delivery-movers";
+import { playSfx, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
 
@@ -42,6 +44,8 @@ type RuntimeState = {
   travelDirection: TravelDirection;
   turnChoice: TurnChoice | null;
   jumpElapsed: number | null;
+  clock: number;
+  moverStarts: Record<string, number>;
 };
 
 type DriveInput = {
@@ -49,7 +53,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {} });
 
 function approach(value: number, target: number, maxDelta: number) {
   if (value < target) return Math.min(target, value + maxDelta);
@@ -78,6 +82,13 @@ export function DeliveryGame() {
   const [controlHand, setControlHand] = useState<ControlHand>("right");
   useEffect(() => {
     try { if (localStorage.getItem("delivery-control-hand") === "left") setControlHand("left"); } catch { /* storage blocked: keep default */ }
+  }, []);
+  const [soundOn, setSoundOn] = useState(true);
+  useEffect(() => setSoundOn(soundEnabled()), []);
+  const toggleSound = useCallback(() => {
+    const next = !soundEnabled();
+    setSoundEnabled(next); setSoundOn(next);
+    if (next) unlockSound();
   }, []);
   const changeControlHand = useCallback((hand: ControlHand) => {
     setControlHand(hand);
@@ -118,6 +129,7 @@ export function DeliveryGame() {
 
   const startGame = useCallback(() => {
     if (!selectedBrand) return;
+    unlockSound();
     resetRuntime();
     setSessionKey((current) => current + 1);
     setStatus("playing");
@@ -138,6 +150,7 @@ export function DeliveryGame() {
     runtime.completedStops = [...runtime.completedStops, index];
     runtime.skippedStops = runtime.skippedStops.filter(stop => stop !== index);
     runtime.deliveryPulse += 1;
+    playSfx("deliver");
     runtime.deliverySuccessRemaining = DELIVERY_GAME_CONFIG.deliverySuccessSeconds;
     Object.assign(runtime, advanceDeliveryTargets(runtime));
     runtime.speed = 0;
@@ -166,6 +179,7 @@ export function DeliveryGame() {
     const runtime = runtimeRef.current;
     if (runtime.jumpElapsed !== null) return;
     runtime.jumpElapsed = 0;
+    playSfx("jump");
     setFrame({ ...runtime });
   }, [paused, status]);
 
@@ -179,9 +193,10 @@ export function DeliveryGame() {
       lastFrameRef.current = timestamp;
       // Advance feedback on game time, so pausing/backgrounding cannot skip it.
       runtime.deliverySuccessRemaining = Math.max(0, runtime.deliverySuccessRemaining - deltaSeconds);
+      runtime.clock += deltaSeconds;
       if (runtime.jumpElapsed !== null) {
         runtime.jumpElapsed += deltaSeconds;
-        if (runtime.jumpElapsed >= JUMP_CONFIG.seconds) runtime.jumpElapsed = null;
+        if (runtime.jumpElapsed >= JUMP_CONFIG.seconds) { runtime.jumpElapsed = null; playSfx("land"); }
       }
       const input = driveInputRef.current;
       if (input.forward !== input.reverse) runtime.travelDirection = input.reverse ? -1 : 1;
@@ -292,6 +307,7 @@ export function DeliveryGame() {
         runtime.jumpElapsed = null;
         Object.assign(runtime, advanceDeliveryTargets(runtime));
         clearInputs();
+        playSfx("deliver");
         setFrame({ ...runtime });
         setStatus("arriving");
         return;
@@ -318,8 +334,16 @@ export function DeliveryGame() {
 
       // An alley-to-main join bypasses that section of the main road; do not
       // sweep collisions across the entrance-to-exit route-coordinate jump.
+      const hit = (id: string) => {
+        runtime.speed *= 0.38;
+        runtime.collisionId = id;
+        runtime.collisionCount += 1;
+        runtime.slowdownUntil = timestamp + DELIVERY_GAME_CONFIG.collisionSlowdownSeconds * 1_000;
+        obstaclePassUntilRef.current.set(id, timestamp + DELIVERY_GAME_CONFIG.obstaclePassThroughSeconds * 1_000);
+        playSfx("hit");
+      };
+      const jumpHeight = jumpHeightAt(runtime.jumpElapsed);
       if (!wasInDriveway && !runtime.driveway && Math.abs(runtime.speed) > 0.01) {
-        const jumpHeight = jumpHeightAt(runtime.jumpElapsed);
         for (const obstacle of OBSTACLE_PLACEMENTS) {
           if (timestamp < (obstaclePassUntilRef.current.get(obstacle.id) ?? 0)) continue;
           const crossesObstacle = Math.min(previousPosition, runtime.position) <= obstacle.distance + DELIVERY_GAME_CONFIG.collisionHalfLength
@@ -333,14 +357,25 @@ export function DeliveryGame() {
             + getDetourOffset(obstacle.distance, runtime.detour);
           if (Math.abs(actualBikeX - obstacleCenterX(obstacle)) >= obstacleHitHalfWidth(obstacle)) continue;
           if (clearsObstacle(obstacle.kind, jumpHeight)) continue;
-
-          runtime.speed *= 0.38;
-          runtime.collisionId = obstacle.id;
-          runtime.collisionCount += 1;
-          runtime.slowdownUntil = timestamp + DELIVERY_GAME_CONFIG.collisionSlowdownSeconds * 1_000;
-          obstaclePassUntilRef.current.set(obstacle.id, timestamp + DELIVERY_GAME_CONFIG.obstaclePassThroughSeconds * 1_000);
+          hit(obstacle.id);
           break;
         }
+      }
+      // Moving hazards wake as the bike reaches them; a hit only slows, as above.
+      for (const mover of MOVER_PLACEMENTS) {
+        if (runtime.moverStarts[mover.id] === undefined) {
+          if (runtime.position < mover.trigger) continue;
+          runtime.moverStarts[mover.id] = runtime.clock;
+        }
+        // Waiting is always safe: a stopped bike is never hit by a mover.
+        if (runtime.driveway || Math.abs(runtime.speed) < .5 || timestamp < (obstaclePassUntilRef.current.get(mover.id) ?? 0)) continue;
+        const pose = moverPose(mover, runtime.clock - runtime.moverStarts[mover.id]), shape = MOVER_SHAPE[mover.kind];
+        if (pose.done || Math.abs(runtime.position - pose.distance) > shape.halfLength + DELIVERY_GAME_CONFIG.collisionHalfLength) continue;
+        // Narrower than the bike's static-obstacle box on purpose: grazing is forgiven.
+        if (Math.abs(runtime.laneX + getDetourOffset(pose.distance, runtime.detour) - pose.x) > shape.halfWidth + .7) continue;
+        if (shape.clearance !== null && jumpHeight > shape.clearance) continue;
+        hit(mover.id);
+        break;
       }
       if (runtime.collisionId && timestamp >= (obstaclePassUntilRef.current.get(runtime.collisionId) ?? 0)) {
         runtime.collisionId = null;
@@ -425,8 +460,14 @@ export function DeliveryGame() {
     if (status !== "playing" || paused) clearInputs();
   }, [clearInputs, paused, status]);
 
+  useEffect(() => {
+    if ((status === "playing" || status === "quiz") && !paused && soundOn) startMusic(); else stopMusic();
+    return stopMusic;
+  }, [paused, soundOn, status]);
+
   const togglePause = () => {
     clearInputs();
+    unlockSound();
     if (!paused) {
       runtimeRef.current.speed = 0;
       setFrame({ ...runtimeRef.current });
@@ -568,7 +609,7 @@ export function DeliveryGame() {
 
         {status === "ready" && <DeliveryBrandStart selected={selectedBrand} onSelect={setSelectedBrand} onStart={startGame} />}
 
-        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} controlHand={controlHand} onControlHand={changeControlHand} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
+        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} controlHand={controlHand} onControlHand={changeControlHand} soundOn={soundOn} onToggleSound={toggleSound} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
         {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} onRestart={returnToStart} />}

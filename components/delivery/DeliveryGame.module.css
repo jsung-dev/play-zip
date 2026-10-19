@@ -2255,3 +2255,16 @@
   .navigationCopy strong { font-size: 15px; }
   .navigationCopy > span { font-size: 11px; }
 }
+
+/* Speed streaks at the screen edges; opacity is driven by the 3D scene. */
+.speedLines {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: repeating-conic-gradient(from 0deg at 50% 42%, #ffffff00 0deg 5deg, #ffffffb0 5deg 5.6deg, #ffffff00 5.6deg 11deg);
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 42%, transparent 55%, #000 100%);
+  mask-image: radial-gradient(ellipse 60% 55% at 50% 42%, transparent 55%, #000 100%);
+  transition: opacity .25s linear;
+}
