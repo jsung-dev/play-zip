@@ -35,15 +35,32 @@ export function createSceneArt() {
   // A small neutral fill only for architecture; road, courier, ads and global
   // lighting retain their original response. No added lights or shadow passes.
   // Bypass cinematic desaturation for the reference sheet's pastel plaster.
-  const buildingMaterials = new Map<string, THREE.MeshLambertMaterial>();
-  const buildingBox = (w: number, h: number, d: number, color: string) => {
-    if (!buildingMaterials.has(color)) buildingMaterials.set(color, new THREE.MeshLambertMaterial({
-      color, emissive: color, emissiveIntensity: .42, toneMapped: false,
-    }));
-    const mesh = box(w, h, d, color);
-    mesh.material = buildingMaterials.get(color)!;
-    return mesh;
+  // One shared material for every facade colour: colours live in vertex colours,
+  // so a merged street block is one draw call instead of one per paint colour.
+  // The emissive fill (42% of the paint) matches the previous per-colour materials.
+  const buildingMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false });
+  buildingMaterial.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * 0.42;");
   };
+  buildingMaterial.customProgramCacheKey = () => "building-vertex-colour";
+  const paint = (geo: THREE.BufferGeometry, color: string, top = color) => {
+    const position = geo.attributes.position, bottomColor = new THREE.Color(color), topColor = new THREE.Color(top);
+    const colors = new Float32Array(position.count * 3);
+    for (let i = 0; i < position.count; i++) (position.getY(i) > 0 ? topColor : bottomColor).toArray(colors, i * 3);
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    return geo;
+  };
+  // `top` tints the upper face/edges, e.g. sky-lit glass or a lit shop interior.
+  // Paper-thin facade pieces (glass, curtains, slats) are only ever seen from the
+  // front, so they become one quad on the front face instead of a 12-triangle box.
+  const buildingBox = (w: number, h: number, d: number, color: string, top?: string) => new THREE.Mesh(
+    geometry(`building-box:${w}:${h}:${d}:${color}:${top ?? ""}`, () => paint(
+      d <= .03 ? new THREE.PlaneGeometry(w, h).translate(0, 0, d / 2) : new THREE.BoxGeometry(w, h, d), color, top)), buildingMaterial,
+  );
+  // Low-poly foliage for roofs and window boxes, in the same single batch.
+  const buildingBlob = (radius: number, color: string) => new THREE.Mesh(
+    geometry(`building-blob:${radius}:${color}`, () => paint(new THREE.IcosahedronGeometry(radius, radius > .45 ? 1 : 0), color)), buildingMaterial,
+  );
   const sphere = (radius: number, color: string) => new THREE.Mesh(
     geometry(`sphere:${radius}`, () => new THREE.SphereGeometry(radius, 16, 12)), material(color),
   );
@@ -70,6 +87,7 @@ export function createSceneArt() {
   gradient.addColorStop(1, "rgba(40,58,53,0)");
   ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
   const shadowMaterial = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowCanvas), transparent: true, depthWrite: false, toneMapped: false });
+  shadowMaterial.userData.mergeable = true; // flat, same height: safe to batch per street block
   const shadow = (group: THREE.Group, w: number, d: number, x = 0, z = 0) => {
     const mesh = new THREE.Mesh(geometry(`plane:${w}:${d}`, () => new THREE.PlaneGeometry(w, d)), shadowMaterial);
     mesh.rotation.x = -Math.PI / 2; put(group, mesh, x, .045, z);
@@ -97,22 +115,50 @@ export function createSceneArt() {
 
   const merge = (group: THREE.Group) => {
     group.updateMatrixWorld(true);
+    const batches = new Map<THREE.Material, { geometries: THREE.BufferGeometry[]; meshes: THREE.Mesh[] }>();
+    group.traverse((child) => {
+      if (!(child instanceof THREE.Mesh) || Array.isArray(child.material) || child.material.transparent && !child.material.userData.mergeable) return;
+      const batch = batches.get(child.material) ?? { geometries: [], meshes: [] };
+      const copy = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+      batch.geometries.push(copy.applyMatrix4(child.matrixWorld)); batch.meshes.push(child);
+      batches.set(child.material, batch);
+    });
+    for (const [mat, { geometries, meshes }] of batches) {
+      // Incompatible attribute sets cannot merge; keep those meshes as they were.
+      const combined = mergeGeometries(geometries, false);
+      if (combined) {
+        for (const mesh of meshes) mesh.removeFromParent();
+        group.add(new THREE.Mesh(combined, mat));
+      }
+      for (const source of geometries) source.dispose();
+    }
+    return group;
+  };
+  // Like merge, but skips animated sub-groups so they keep moving on their own.
+  const mergeStatic = (group: THREE.Group, animated: THREE.Object3D[] = []) => {
+    group.updateMatrixWorld(true);
+    const toLocal = group.matrixWorld.clone().invert();
     const batches = new Map<THREE.Material, THREE.BufferGeometry[]>();
     const sources: THREE.Mesh[] = [];
-    group.traverse((child) => {
-      if (!(child instanceof THREE.Mesh) || Array.isArray(child.material) || child.material.transparent) return;
-      const list = batches.get(child.material) ?? [];
-      const copy = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
-      list.push(copy.applyMatrix4(child.matrixWorld));
-      batches.set(child.material, list); sources.push(child);
-    });
+    const visit = (node: THREE.Object3D) => {
+      for (const child of node.children) {
+        if (animated.includes(child)) continue;
+        if (child instanceof THREE.Mesh && !Array.isArray(child.material) && !child.material.transparent) {
+          const copy = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+          const list = batches.get(child.material) ?? [];
+          list.push(copy.applyMatrix4(toLocal.clone().multiply(child.matrixWorld)));
+          batches.set(child.material, list); sources.push(child);
+        }
+        visit(child);
+      }
+    };
+    visit(group);
     for (const child of sources) child.removeFromParent();
     for (const [mat, list] of batches) {
       const combined = mergeGeometries(list, false);
       if (combined) group.add(new THREE.Mesh(combined, mat));
       for (const source of list) source.dispose();
     }
-    return group;
   };
 
   function windowOn(group: THREE.Group, x: number, y: number, z: number, width = .85, height = 1.15) {
@@ -150,7 +196,7 @@ export function createSceneArt() {
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
     if (street) {
-      const model = createStreetArchitecture(item, { box, buildingBox, put, shadow, merge });
+      const model = createStreetArchitecture(item, { box, buildingBox, buildingBlob, put, shadow, merge });
       model.scale.set(BUILDING_SCALE.width, BUILDING_SCALE.height, BUILDING_SCALE.depth);
       buildingTemplates.set(key, model);
       return place(model.clone());
@@ -391,7 +437,11 @@ export function createSceneArt() {
       put(rider, leg, side * .2, 1.54, .2); return leg;
     };
     const leftLeg = makeLeg(-1), rightLeg = makeLeg(1);
-    group.add(rider); group.scale.setScalar(.9);
+    group.add(rider);
+    // ~110 separate parts cost one draw call each; batch the static ones.
+    for (const part of [...wheels, pedal, leftLeg, rightLeg]) mergeStatic(part);
+    mergeStatic(group, [...wheels, pedal, leftLeg, rightLeg]);
+    group.scale.setScalar(.9);
     return { group, wheels, pedal, leftLeg, rightLeg, groundShadow };
   }
 
@@ -415,7 +465,7 @@ export function createSceneArt() {
     return merge(group);
   }
 
-  return { box, buildingBox, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, tree, lamp, shelter, bicycle, horizon };
+  return { box, buildingBox, buildingBlob, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, tree, lamp, shelter, bicycle, horizon };
 }
 
 export type SceneArt = ReturnType<typeof createSceneArt>;

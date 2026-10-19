@@ -6,7 +6,7 @@ import { BUILDING_SCALE, advertisementLayout, advertisementPanelCorners, adverti
 
 // World architecture only. Never used by driving, collision or camera code.
 export const STREET_BUILDINGS = {
-  heightMultiplier: 1.8,
+  heightMultiplier: 3, // lot envelope for 3–7 storey facades (ad sightlines re-checked by the planner)
   frontageMultiplier: 1.3,
   gapRatio: .15,
   sidewalkOuterEdge: 10.1,

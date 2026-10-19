@@ -10,6 +10,7 @@ import { TOWN_COLORS } from "./three/scene-art";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { busTurnLaneClear, type TravelDirection, type TurnChoice } from "./delivery-turns";
+import { jumpHeightAt } from "./delivery-jump";
 import styles from "./DeliveryGame.module.css";
 
 type SceneState = {
@@ -35,6 +36,10 @@ type SceneState = {
   jumpHeight: number;
 };
 
+type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "closureReached" | "travelDirection" | "turnChoice" | "completedStops";
+const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "closureReached", "travelDirection", "turnChoice", "completedStops"];
+export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null };
+
 export function DeliveryScene3D({
   position,
   speed,
@@ -57,7 +62,8 @@ export function DeliveryScene3D({
   completedStops,
   jumpHeight,
   deliveryBrand,
-}: SceneState & { deliveryBrand: DeliveryBrand }) {
+  liveRef,
+}: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime } }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight });
   const [webglFailed, setWebglFailed] = useState(false);
@@ -80,7 +86,7 @@ export function DeliveryScene3D({
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
@@ -104,6 +110,18 @@ export function DeliveryScene3D({
     scene.add(hemisphere, sun);
 
     const world = buildDeliveryWorld(scene, deliveryBrand);
+    // Upload every block once now (behind the start screen), so driving into a
+    // new street section never pays a first-draw GPU upload mid-ride.
+    {
+      const culled: THREE.Object3D[] = [];
+      scene.traverse((object) => { if (object instanceof THREE.Mesh && object.frustumCulled) { object.frustumCulled = false; culled.push(object); } });
+      const hidden = [...world.worldObjects, ...world.movingBuses.map((bus) => bus.group)].filter((object) => !object.visible);
+      for (const object of hidden) object.visible = true;
+      const warm = new THREE.WebGLRenderTarget(1, 1);
+      renderer.setRenderTarget(warm); renderer.render(scene, camera); renderer.setRenderTarget(null); warm.dispose();
+      for (const object of culled) object.frustumCulled = true;
+      for (const object of hidden) object.visible = false;
+    }
     const guidance = createRouteGuidance(world);
     let replaySeen = guidanceReplay, highlightRemaining = 0;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -150,8 +168,16 @@ export function DeliveryScene3D({
     };
     canvas.addEventListener("webglcontextlost", handleContextLost);
 
+    // Read motion straight from the game's runtime each frame instead of waiting
+    // for a React re-render, which can land a frame late and make the ride judder.
+    const frameState = { ...stateRef.current };
     const animate = (timestamp: number) => {
-      const current = stateRef.current;
+      const live = liveRef?.current;
+      const current = Object.assign(frameState, stateRef.current);
+      if (live) {
+        for (const key of LIVE_KEYS) (current as unknown as Record<LiveKeys, unknown>)[key] = live[key];
+        current.jumpHeight = jumpHeightAt(live.jumpElapsed);
+      }
       const deltaSeconds = Math.min((timestamp - lastTime) / 1_000, 0.05);
       lastTime = timestamp;
 
@@ -332,7 +358,7 @@ export function DeliveryScene3D({
       skyTexture.dispose();
       renderer.dispose();
     };
-  }, [deliveryBrand]);
+  }, [deliveryBrand, liveRef]);
 
   return (
     <section className={styles.scene3d} data-paused={paused ? "true" : "false"} aria-label="3D 배달 동네">

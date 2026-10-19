@@ -62,6 +62,7 @@ export function DeliveryGame() {
   const runtimeRef = useRef<RuntimeState>(makeRuntime());
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
+  const lastUiCommitRef = useRef(0);
   const joystickRef = useRef<DeliveryJoystickHandle>(null);
   const joystickDriveRef = useRef<JoystickDrive>(null);
   const pauseTouchHandledRef = useRef(false);
@@ -327,7 +328,12 @@ export function DeliveryGame() {
         runtime.collisionId = null;
       }
 
-      setFrame({ ...runtime });
+      // The 3D scene reads runtimeRef every frame; the HUD only needs ~12 updates/s.
+      // Re-rendering the whole game tree at 60fps cost phones frame time.
+      if (timestamp - lastUiCommitRef.current >= 80) {
+        lastUiCommitRef.current = timestamp;
+        setFrame({ ...runtime });
+      }
       animationFrameRef.current = window.requestAnimationFrame(tick);
     };
 
@@ -521,6 +527,7 @@ export function DeliveryGame() {
             turnChoice={frame.turnChoice}
             completedStops={frame.completedStops}
             jumpHeight={jumpHeightAt(frame.jumpElapsed)}
+            liveRef={runtimeRef}
           />
 
           <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />
