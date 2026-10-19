@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { DELIVERY_GAME_CONFIG } from "../data/delivery-game";
 import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE } from "../data/delivery-map";
-import { MOVER_PLACEMENTS, MOVER_SHAPE, moverPose } from "../components/delivery/delivery-movers";
+import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose } from "../components/delivery/delivery-movers";
 
 const lanes = [-1, 0, 1].map(n => n * DELIVERY_GAME_CONFIG.laneSpacing);
-for (const m of MOVER_PLACEMENTS) {
+for (const m of MOVER_PLACEMENTS.filter(m => moverCollides(m.kind))) {
   const start = moverPose(m, 0);
   assert(m.trigger < m.distance, `${m.id} wakes before the rider reaches it`);
   // Readable: visible at least ~1.5 s at top speed before it reaches the rider's path.
@@ -26,4 +26,9 @@ assert.equal(MOVER_SHAPE.bus.clearance, null, "A bus cannot be jumped");
 assert(MOVER_SHAPE.cat.clearance! < 1 && MOVER_SHAPE.ball.clearance! < 1, "Cat and ball can be jumped");
 const ball = MOVER_PLACEMENTS.find(m => m.kind === "ball")!;
 assert(moverPose(ball, 2).distance < moverPose(ball, 0).distance, "Ball rolls toward the rider");
+assert(moverPose(ball, 0).x > lanes[2] + 2 && lanes.every(x => [0, 1, 2, 3, 4].some(t => Math.abs(moverPose(ball, t).x - x) < 1.6)), "Ball rolls out from the kerb across the lanes");
+const ducks = MOVER_PLACEMENTS.find(m => m.kind === "ducks")!;
+assert(moverPose(ducks, 0).x > lanes[2] + 2 && moverPose(ducks, 12).done, "Ducks start on the kerb and finish crossing");
+assert(MOVER_SHAPE.ducks.clearance! < 1, "Ducks can be jumped");
+assert(MOVER_PLACEMENTS.filter(m => m.kind === "pigeons").every(m => !moverCollides(m.kind)), "Pigeons are scenery only");
 console.log("Movers: readable lead-in, clear of alleys/fork, cat crossing, bus merge, ball roll verified.");

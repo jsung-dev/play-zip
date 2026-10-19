@@ -1,7 +1,7 @@
 import { DELIVERY_GAME_CONFIG, type ObstaclePlacement } from "@/data/delivery-game";
 
 // One short hop. Parabolic height over a fixed air time; no double jump.
-export const JUMP_CONFIG = { height: 1.1, seconds: 0.68 } as const;
+export const JUMP_CONFIG = { height: 1.5, seconds: 0.75 } as const;
 
 // Height the bike must exceed to pass over each kind. Fences stay solid.
 export const OBSTACLE_CLEARANCE: Record<ObstaclePlacement["kind"], number | null> = {
@@ -12,10 +12,14 @@ export const OBSTACLE_CLEARANCE: Record<ObstaclePlacement["kind"], number | null
   crates: 0.5,
 };
 
-export function jumpHeightAt(elapsed: number | null) {
+// A ramp launches with more power: higher and longer than a tap jump.
+export const RAMP_POWER = 1.7;
+export const jumpDuration = (power = 1) => JUMP_CONFIG.seconds * (1 + (power - 1) * .6);
+
+export function jumpHeightAt(elapsed: number | null, power = 1) {
   if (elapsed === null) return 0;
-  const t = elapsed / JUMP_CONFIG.seconds;
-  return t <= 0 || t >= 1 ? 0 : 4 * JUMP_CONFIG.height * t * (1 - t);
+  const t = elapsed / jumpDuration(power);
+  return t <= 0 || t >= 1 ? 0 : 4 * JUMP_CONFIG.height * power * t * (1 - t);
 }
 
 export function clearsObstacle(kind: ObstaclePlacement["kind"], height: number) {

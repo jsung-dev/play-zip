@@ -39,7 +39,7 @@ type SceneState = {
 
 type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "closureReached" | "travelDirection" | "turnChoice" | "completedStops";
 const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "closureReached", "travelDirection", "turnChoice", "completedStops"];
-export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; clock: number; moverStarts: Record<string, number> };
+export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; jumpPower: number; clock: number; moverStarts: Record<string, number>; collected: Set<number>; boostRemaining: number };
 
 export function DeliveryScene3D({
   position,
@@ -180,9 +180,11 @@ export function DeliveryScene3D({
       const current = Object.assign(frameState, stateRef.current);
       if (live) {
         for (const key of LIVE_KEYS) (current as unknown as Record<LiveKeys, unknown>)[key] = live[key];
-        current.jumpHeight = jumpHeightAt(live.jumpElapsed);
+        current.jumpHeight = jumpHeightAt(live.jumpElapsed, live.jumpPower);
       }
-      const deltaSeconds = Math.min((timestamp - lastTime) / 1_000, 0.05);
+      // The first frame's timestamp can precede lastTime (set before the GPU
+      // warm-up); a negative step made the camera lerp overshoot wildly.
+      const deltaSeconds = Math.max(0, Math.min((timestamp - lastTime) / 1_000, 0.05));
       lastTime = timestamp;
 
       if (current.sessionKey !== renderedSession) {
@@ -203,11 +205,11 @@ export function DeliveryScene3D({
       world.bicycle.groundShadow.position.y = .045 - current.jumpHeight / bikeScale;
       world.bicycle.groundShadow.scale.setScalar(1 - current.jumpHeight * .25);
       const airborne = current.jumpHeight > 0;
-      if (wasAirborne && !airborne) { landingElapsed = 0; shake = .18; shakeStrength = .08; }
+      if (wasAirborne && !airborne) landingElapsed = 0;
       wasAirborne = airborne;
       if (!current.paused) landingElapsed += deltaSeconds;
       // Brief squash on landing only; the camera rail ignores jump height.
-      const squash = reduceMotion ? 0 : Math.sin(Math.min(1, landingElapsed / .18) * Math.PI) * .07;
+      const squash = reduceMotion ? 0 : Math.sin(Math.min(1, landingElapsed / .18) * Math.PI) * .04;
       world.bicycle.group.scale.set(bikeScale * (1 + squash * .5), bikeScale * (1 - squash), bikeScale * (1 + squash * .5));
       world.bicycle.group.rotation.y = routeFrame.yaw;
       const laneVelocity = (current.laneX - previousLaneX) / Math.max(deltaSeconds, 0.001);
@@ -215,7 +217,7 @@ export function DeliveryScene3D({
       if (current.collisionId !== activeCollisionId) {
         activeCollisionId = current.collisionId;
         collisionElapsedMs = 0;
-        if (activeCollisionId) { shake = .3; shakeStrength = .2; }
+        if (activeCollisionId) { shake = .25; shakeStrength = .05; }
       }
       if (activeCollisionId && current.playing && !current.paused) collisionElapsedMs += deltaSeconds * 1_000;
       const impactProgress = activeCollisionId ? Math.min(1, collisionElapsedMs / 420) : 1;
@@ -257,11 +259,13 @@ export function DeliveryScene3D({
       const followBlend = reduceMotion ? 1 : 1 - Math.exp(-9 * deltaSeconds);
       camera.position.lerp(cameraTarget, followBlend);
       // Speed feel: the view widens a little near top speed, with streaks at the edges.
-      const rush = reduceMotion ? 0 : THREE.MathUtils.smoothstep(Math.abs(current.speed), 12, 20);
-      const fov = baseFov + rush * 5;
-      if (Math.abs(camera.fov - fov) > .01) { camera.fov += (fov - camera.fov) * Math.min(1, deltaSeconds * 4); camera.updateProjectionMatrix(); }
-      const lines = Math.round(rush * (current.paused ? 0 : 1) * 20) / 20;
-      if (lines !== speedLineOpacity && speedLinesRef.current) { speedLineOpacity = lines; speedLinesRef.current.style.opacity = String(lines * .55); }
+      const boost = live && live.boostRemaining > 0 ? 1 : 0;
+      const rush = reduceMotion ? 0 : Math.max(boost, THREE.MathUtils.smoothstep(Math.abs(current.speed), 12, 20));
+      // Boost is the one deliberate rush: wider view and strong streaks.
+      const fov = baseFov + rush * 2.5 + (reduceMotion ? 0 : boost * 5);
+      if (Math.abs(camera.fov - fov) > .01) { camera.fov += (fov - camera.fov) * Math.min(1, deltaSeconds * 1.5); camera.updateProjectionMatrix(); }
+      const lines = Math.round((rush * .35 + boost * .4) * (current.paused ? 0 : 1) * 20) / 20;
+      if (lines !== speedLineOpacity && speedLinesRef.current) { speedLineOpacity = lines; speedLinesRef.current.style.opacity = String(lines); }
       const lookTarget = cameraRail.clone().addScaledVector(routeFrame.tangent, 16 - forkView * 2 - drivewayMix * 7);
       lookTarget.y = 1.15;
       camera.lookAt(lookTarget);
@@ -287,6 +291,7 @@ export function DeliveryScene3D({
         }
       }
       world.destination.visible = current.position > 790;
+      world.drops.update(current.position, live?.collected, timestamp / 1000);
 
       // Moving hazards: shown at their start pose until woken, then follow their path.
       for (const mover of world.movers) {
@@ -300,9 +305,7 @@ export function DeliveryScene3D({
         const at = frame.position.addScaledVector(frame.lateral, pose.x);
         mover.group.position.set(at.x, 0, at.z);
         mover.group.rotation.y = frame.yaw;
-        if (mover.spin) mover.spin.rotation.x = t * 5 / .5;
-        if (mover.indicator) mover.indicator.visible = started !== undefined && t < 5 && Math.sin(t * 9) > 0;
-        mover.legs.forEach((leg, n) => { leg.position.y = .16 + (started === undefined ? 0 : Math.max(0, Math.sin(t * 12 + n * Math.PI / 2)) * .06); });
+        mover.animate(started === undefined ? 0 : t, started !== undefined, timestamp / 1000);
       }
 
       camera.updateMatrixWorld();
@@ -356,10 +359,10 @@ export function DeliveryScene3D({
         }
       }
 
-      // Brief camera shake on landing and on hits; removed again after drawing.
+      // A small, slow nudge on hits only (fast jitter read as the ride rattling).
       shake = Math.max(0, shake - deltaSeconds);
-      const amount = reduceMotion || current.paused ? 0 : shakeStrength * shake / .3;
-      shakeOffset.set(Math.sin(timestamp * .061) * amount, Math.cos(timestamp * .047) * amount, 0);
+      const amount = reduceMotion || current.paused ? 0 : shakeStrength * Math.sin(shake / .25 * Math.PI);
+      shakeOffset.set(0, -amount, 0);
       camera.position.add(shakeOffset);
       renderer.render(scene, camera);
       camera.position.sub(shakeOffset);

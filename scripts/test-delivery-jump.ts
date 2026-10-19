@@ -29,10 +29,16 @@ const blocked: [number, number][] = [[0, 100], [ROAD_CLOSURE.junctionDistance - 
 for (const [i, stop] of DELIVERY_STOPS.entries()) {
   blocked.push([stop.distance - TURN_LANE.approach - TURN_LANE.taper, stop.distance + TURN_LANE.tail]);
   const exit = getDrivewayExitDistance(i);
-  blocked.push([exit - DRIVEWAY_ROUTE.passMargin, exit + TURN_LANE.approach + TURN_LANE.taper]);
+  // Only the merge itself; reversing back into an exit is rare, so obstacles may follow it.
+  blocked.push([exit - DRIVEWAY_ROUTE.passMargin, exit + 15]);
 }
-for (const o of OBSTACLE_PLACEMENTS.filter(o => o.id.startsWith("jump-"))) {
+for (const o of OBSTACLE_PLACEMENTS.filter(o => o.id.startsWith("jump-") || o.id.startsWith("detour-"))) {
   assert(o.kind !== "barrier");
+  if (o.branch) {
+    // Detour obstacles sit on the fully offset part of their branch only.
+    assert(o.distance > ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.rampMeters && o.distance < ROAD_CLOSURE.mergeStart, `${o.id} on the straight detour section`);
+    continue;
+  }
   for (const [from, to] of blocked) assert(o.distance < from || o.distance > to, `${o.id} sits in a reserved zone ${from}-${to}`);
 }
 assert(OBSTACLE_PLACEMENTS.filter(o => o.span === 3).length >= 2, "Has must-jump obstacles");

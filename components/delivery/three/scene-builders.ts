@@ -18,7 +18,8 @@ import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
 import { obstacleCenterX, obstacleSpan } from "../delivery-jump";
-import { MOVER_PLACEMENTS, type MoverPlacement } from "../delivery-movers";
+import { BALL_MOTION, MOVER_PLACEMENTS, type MoverPlacement } from "../delivery-movers";
+import { DROPS, RAMPS, type Ramp } from "../delivery-pickups";
 
 export type BikeRig = {
   group: THREE.Group;
@@ -42,11 +43,14 @@ export type ObstacleRig = {
   group: THREE.Group;
 };
 
-export type MoverRig = { placement: MoverPlacement; group: THREE.Group; spin?: THREE.Object3D; indicator?: THREE.Object3D; legs: THREE.Object3D[] };
+export type MoverRig = { placement: MoverPlacement; group: THREE.Group; animate: (t: number, moving: boolean, seconds: number) => void };
+
+export type DropField = { update: (position: number, collected: Set<number> | undefined, seconds: number) => void };
 
 export type DeliveryWorld = {
   root: THREE.Group;
   movers: MoverRig[];
+  drops: DropField;
   bicycle: BikeRig;
   worldObjects: THREE.Object3D[];
   movingBuses: MovingBusRig[];
@@ -610,40 +614,199 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
 }
 
 
-// Original, unbranded critters/props. Groups face the route; the scene moves them.
+// Original, unbranded critters/props. Groups face the route; the scene moves
+// them and calls animate(t, moving, seconds) every frame.
 function createMover(placement: MoverPlacement, art: SceneArt, resources: OutdoorAdResources): MoverRig {
   if (placement.kind === "bus") {
     const group = createBus({ id: `mover-${placement.id}`, distance: placement.distance, brandId: "green", mode: "moving", side: "right", speed: 8 }, art, resources);
     // Left indicator at the front corner: blinks while the bus pulls out.
     const indicator = new THREE.Mesh(new THREE.BoxGeometry(.32, .22, .1), new THREE.MeshBasicMaterial({ color: "#ffb33b", toneMapped: false }));
     indicator.position.set(-1.2, .95, -3.06); group.add(indicator);
-    return { placement, group, indicator, legs: [] };
+    return { placement, group, animate: (t, moving) => { indicator.visible = moving && t < 5 && Math.sin(t * 9) > 0; } };
   }
+  if (placement.kind === "ball") return createBeachBall(placement, art);
+  if (placement.kind === "ducks") return createDucks(placement, art);
+  if (placement.kind === "pigeons") return createPigeons(placement, art);
+  return createCat(placement, art);
+}
+
+function createDuck(art: SceneArt, scale: number, body: string) {
+  // Faces -x (the family walks right to left across the road).
+  const duck = new THREE.Group();
+  const torso = art.sphere(.26, body); torso.scale.set(1.25, .9, 1); torso.position.y = .3; duck.add(torso);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(.1, .2, 6), art.material(body)); tail.rotation.z = -Math.PI / 2.6; tail.position.set(.33, .38, 0); duck.add(tail);
+  art.put(duck, art.sphere(.16, body), -.24, .56, 0);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(.06, .16, 6), art.material("#f39a3d")); beak.rotation.z = Math.PI / 2; beak.position.set(-.42, .53, 0); duck.add(beak);
+  for (const z of [-.08, .08]) art.put(duck, art.sphere(.028, "#2f3a37"), -.33, .62, z);
+  const feet = [-.07, .07].map(z => art.put(duck, art.box(.12, .03, .07, "#f39a3d"), -.02, .02, z));
+  duck.scale.setScalar(scale);
+  return { duck, feet };
+}
+
+function createDucks(placement: MoverPlacement, art: SceneArt): MoverRig {
   const group = new THREE.Group();
-  if (placement.kind === "ball") {
-    art.shadow(group, 1.2, 1.2);
-    const spin = new THREE.Group(); spin.position.y = .5;
-    spin.add(art.sphere(.5, "#ef6f6c"));
-    const band = new THREE.Mesh(new THREE.TorusGeometry(.502, .08, 8, 24), art.material("#fff6e4"));
-    band.rotation.y = Math.PI / 2; spin.add(band);
-    group.add(spin);
-    return { placement, group, spin, legs: [] };
+  art.shadow(group, 2.6, .8);
+  const family = [createDuck(art, 1.35, "#fff8ec"), ...[.62, .58, .55].map(scale => createDuck(art, scale, "#f6d65a"))];
+  family.forEach(({ duck }, n) => { duck.position.x = n === 0 ? -.6 : .2 + n * .5; group.add(duck); });
+  return { placement, group, animate: (t, moving, seconds) => {
+    family.forEach(({ duck, feet }, n) => {
+      const step = moving ? t * 11 + n * 1.3 : seconds * 2 + n;
+      duck.rotation.x = Math.sin(step) * (moving ? .12 : .03);
+      duck.position.y = moving ? Math.abs(Math.sin(step)) * .03 : 0;
+      feet.forEach((foot, side) => { foot.position.y = .02 + (moving ? Math.max(0, Math.sin(step + side * Math.PI)) * .05 : 0); });
+    });
+  } };
+}
+
+function createPigeons(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group();
+  const birds = Array.from({ length: 9 }, (_, n) => {
+    const bird = new THREE.Group();
+    const body = art.sphere(.13, n % 3 ? "#9aa5ad" : "#b9c2c8"); body.scale.set(1.5, 1, 1); bird.add(body);
+    art.put(bird, art.sphere(.08, "#6f7f8a"), .17, .09, 0);
+    const wings = [-1, 1].map(side => { const wing = art.box(.22, .02, .2, "#87939b"); wing.position.set(-.02, .04, side * .12); bird.add(wing); return wing; });
+    // Scattered across the three lanes, a different flight path for each bird.
+    const home = new THREE.Vector3(((n * 37) % 9 - 4) * .8, .13, ((n * 53) % 7 - 3) * .7);
+    bird.position.copy(home); bird.rotation.y = n * 1.7; group.add(bird);
+    return { bird, wings, home, away: new THREE.Vector3((n % 2 ? 1 : -1) * (3 + n % 4), 7 + n % 3 * 2, -4 - n % 5) };
+  });
+  return { placement, group, animate: (t, moving, seconds) => {
+    birds.forEach(({ bird, wings, home, away }, n) => {
+      const f = moving ? THREE.MathUtils.smoothstep(t, 0, 2.6) : 0;
+      bird.position.lerpVectors(home, home.clone().add(away), f);
+      const flap = moving ? Math.sin(seconds * 30 + n) * .9 : 0;
+      wings.forEach((wing, side) => { wing.rotation.x = (side ? 1 : -1) * flap; });
+      if (!moving) bird.position.y = home.y + Math.max(0, Math.sin(seconds * 3 + n * 2)) * .03; // pecking
+    });
+  } };
+}
+
+// Milk drops share one instanced mesh: ~130 pickups for a single draw call.
+function createDropField(root: THREE.Group): DropField {
+  const profile = Array.from({ length: 13 }, (_, n) => {
+    const a = n / 12 * Math.PI;
+    // Teardrop: round bottom, pointed top.
+    return new THREE.Vector2(Math.sin(a) * .26 * (1 - n / 12 * .55), -Math.cos(a) * .26 + (n / 12) ** 2 * .22);
+  });
+  const geometry = new THREE.LatheGeometry(profile, 14);
+  const material = new THREE.MeshLambertMaterial({ color: "#f7fcff", emissive: "#a8dcff", emissiveIntensity: .45 });
+  const mesh = new THREE.InstancedMesh(geometry, material, DROPS.length);
+  mesh.frustumCulled = false; // instances span the whole route
+  const homes = DROPS.map(drop => {
+    const frame = getRouteFrame(drop.distance, drop.branch ?? "main");
+    return frame.position.addScaledVector(frame.lateral, drop.x).setY(drop.y);
+  });
+  const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), scale = new THREE.Vector3(), place = new THREE.Vector3();
+  root.add(mesh);
+  return { update: (position, collected, seconds) => {
+    DROPS.forEach((drop, n) => {
+      const relative = drop.distance - position;
+      const show = !collected?.has(n) && relative > -15 && relative < 130;
+      rotation.setFromAxisAngle(up, seconds * 2.4 + n * .5);
+      place.copy(homes[n]); place.y += Math.sin(seconds * 3 + n * .7) * .08;
+      matrix.compose(place, rotation, scale.setScalar(show ? 1 : 0));
+      mesh.setMatrixAt(n, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  } };
+}
+
+// Orange launch ramp with white chevrons and corner flags; its high end is the launch point.
+function createRamp(ramp: Ramp, art: SceneArt) {
+  const group = markDistance(new THREE.Group(), ramp.distance), rise = .8, length = 3.2;
+  const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(length, 0), new THREE.Vector2(length, rise)]);
+  const wedge = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: false }), art.material("#ff9a3c"));
+  wedge.rotation.y = Math.PI / 2; wedge.position.set(-1.1, .02, length / 2); group.add(wedge);
+  const slope = Math.atan2(rise, length);
+  for (let n = 0; n < 3; n++) {
+    // Chevron (two angled bars) pointing up the slope.
+    const z = length / 2 - .75 - n * .95, y = .04 + rise * (length / 2 - z) / length;
+    for (const side of [-1, 1]) {
+      const bar = art.box(.95, .03, .2, "#ffffff"); bar.rotation.set(slope, side * .45, 0);
+      bar.position.set(side * .4, y + .02, z); group.add(bar);
+    }
   }
-  // Cat walking along +x (across the road).
-  art.shadow(group, 1.3, .8);
-  const fur = "#f2a65a", cream = "#fff1dc";
-  art.put(group, art.box(.86, .36, .36, fur, .14), 0, .5, 0);
-  art.put(group, art.sphere(.22, fur), .5, .72, 0);
+  for (const side of [-1, 1]) {
+    art.put(group, art.cylinder(.035, .035, 1.3, "#f4f1e8"), side * 1.15, .85, -length / 2);
+    const flag = art.box(.02, .3, .42, "#ef5b5b"); art.put(group, flag, side * 1.15, 1.35, -length / 2 + .22);
+  }
+  art.shadow(group, 2.8, 3.8);
+  group.position.x = (ramp.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
+  placeOnRoute(group, ramp.distance - length / 2, ramp.branch);
+  return group;
+}
+
+function createBeachBall(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group(), { radius, toward, across } = BALL_MOTION;
+  const shadow = art.shadow(group, radius * 2.4, radius * 2.4);
+  // Six bright panels with white caps, painted per vertex so the spin reads clearly.
+  const geometry = new THREE.SphereGeometry(radius, 24, 16);
+  const panels = ["#ef5b5b", "#fff6e4", "#3fa7e0", "#fff6e4", "#f6c445", "#fff6e4"].map(c => new THREE.Color(c)), cap = new THREE.Color("#ffffff");
+  const position = geometry.attributes.position, colors = new Float32Array(position.count * 3);
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+    const panel = Math.floor(((Math.atan2(z, x) + Math.PI) / (Math.PI * 2)) * 6) % 6;
+    (Math.abs(y) > radius * .88 ? cap : panels[panel]).toArray(colors, i * 3);
+  }
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const ball = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  group.add(ball);
+  // Rolling: moving toward the rider (+z locally) and across (-x).
+  const velocity = new THREE.Vector3(-across, 0, toward), axis = new THREE.Vector3(0, 1, 0).cross(velocity).normalize(), speed = velocity.length();
+  return { placement, group, animate: (t, moving) => {
+    const hop = moving ? Math.abs(Math.sin(t * 4.2)) * .22 : 0;
+    ball.position.y = radius + hop;
+    ball.quaternion.setFromAxisAngle(axis, speed * t / radius);
+    shadow.scale.setScalar(1 - hop * .8);
+  } };
+}
+
+function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
+  // Faces +x (it walks across the road). Rounded parts, cream belly and muzzle,
+  // jointed legs and a swaying tail; slightly larger than life so it reads.
+  const group = new THREE.Group(), fur = "#f0a052", dark = "#c8742f", cream = "#fff1dc", pink = "#f4a3a8", ink = "#2f3a37";
+  art.shadow(group, 1.25, .7);
+  const body = new THREE.Group(); body.position.y = .42; group.add(body);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.19, .5, 6, 14), art.material(fur));
+  torso.rotation.z = Math.PI / 2; body.add(torso);
+  const belly = new THREE.Mesh(new THREE.CapsuleGeometry(.15, .38, 6, 12), art.material(cream));
+  belly.rotation.z = Math.PI / 2; belly.position.y = -.06; body.add(belly);
+  for (const x of [-.18, 0, .18]) {
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(.19, .025, 6, 16, Math.PI * .9), art.material(dark));
+    stripe.rotation.set(0, Math.PI / 2, Math.PI * .05); stripe.position.set(x, .005, 0); body.add(stripe);
+  }
+  const head = new THREE.Group(); head.position.set(.42, .2, 0); body.add(head);
+  head.add(art.sphere(.2, fur));
   for (const z of [-.1, .1]) {
-    const ear = art.cylinder(0, .07, .16, fur); art.put(group, ear, .52, .95, z);
-    art.put(group, art.sphere(.035, "#3d4a46"), .69, .76, z * .8);
+    art.put(head, art.sphere(.08, cream), .13, -.06, z * .7);
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(.075, .16, 4), art.material(fur)); ear.position.set(.02, .2, z); ear.rotation.y = Math.PI / 4; head.add(ear);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(.04, .1, 4), art.material(pink)); inner.position.set(.05, .19, z); inner.rotation.y = Math.PI / 4; head.add(inner);
+    art.put(head, art.sphere(.035, ink), .17, .05, z * .75);
+    art.put(head, art.sphere(.012, "#ffffff"), .2, .065, z * .7);
   }
-  art.put(group, art.sphere(.07, cream), .7, .67, 0);
-  for (const x of [-.2, .05]) art.put(group, art.box(.08, .37, .38, "#d9853f"), x, .51, 0);
-  art.rod(group, [-.42, .55, 0], [-.66, .9, 0], .045, fur);
-  const legs = [-.28, .28].flatMap(x => [-.12, .12].map(z => art.put(group, art.box(.1, .32, .1, cream, .04), x, .16, z)));
-  group.scale.setScalar(1.25); // a touch larger than life so it reads from afar
-  return { placement, group, legs };
+  art.put(head, art.sphere(.03, pink), .21, -.02, 0);
+  const legs = [[.22, .11], [.22, -.11], [-.22, .11], [-.22, -.11]].map(([x, z]) => {
+    const hip = new THREE.Group(); hip.position.set(x, -.12, z); body.add(hip);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(.045, .2, 4, 8), art.material(fur)); leg.position.y = -.14; hip.add(leg);
+    art.put(hip, art.sphere(.055, cream), 0, -.28, 0);
+    return hip;
+  });
+  const tail: THREE.Group[] = [];
+  let joint: THREE.Object3D = body;
+  for (let n = 0; n < 5; n++) {
+    const segment = new THREE.Group(); segment.position.set(n ? -.1 : -.42, n ? .02 : .08, 0); joint.add(segment);
+    art.put(segment, art.sphere(.05 - n * .004, n === 4 ? dark : fur), -.05, 0, 0);
+    tail.push(segment); joint = segment;
+  }
+  group.scale.setScalar(1.3);
+  return { placement, group, animate: (t, moving, seconds) => {
+    const stride = moving ? t * 9 : 0;
+    // Diagonal pairs swing together, like a real walk.
+    legs.forEach((hip, n) => { hip.rotation.z = moving ? Math.sin(stride + (n === 0 || n === 3 ? 0 : Math.PI)) * .5 : 0; });
+    body.position.y = .42 + (moving ? Math.abs(Math.sin(stride)) * .025 : 0);
+    head.rotation.z = moving ? Math.sin(stride * 2) * .05 : Math.sin(seconds * 1.5) * .08;
+    tail.forEach((segment, n) => { segment.rotation.z = .35 + Math.sin(seconds * 3 - n * .6) * .18; segment.rotation.y = Math.sin(seconds * 2 - n * .5) * .15; });
+  } };
 }
 
 function createDestination(brand: DeliveryBrand, art: SceneArt) {
@@ -753,11 +916,17 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
 
   for (const placement of OBSTACLE_PLACEMENTS) {
     const obstacle = createObstacle(placement);
-    placeOnRoute(obstacle.group, placement.distance);
+    placeOnRoute(obstacle.group, placement.distance, placement.branch);
     obstacles.push(obstacle);
     worldObjects.push(obstacle.group);
     root.add(obstacle.group);
   }
+
+  for (const ramp of RAMPS) {
+    const object = createRamp(ramp, art);
+    root.add(object); worldObjects.push(object);
+  }
+  const drops = createDropField(root);
 
   for (const placement of MOVER_PLACEMENTS) {
     const mover = createMover(placement, art, outdoorResources);
@@ -799,5 +968,5 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const bicycle = art.bicycle(brand, makeBrandPanelTexture(brand), texturedMaterial(brand.productImage, brand, brand.productName, .32 / .53));
   root.add(bicycle.group);
 
-  return { root, movers, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
+  return { root, movers, drops, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
 }

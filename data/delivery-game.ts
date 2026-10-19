@@ -39,6 +39,8 @@ export type ObstaclePlacement = {
   kind: "cones" | "barrier" | "box" | "plank" | "crates";
   // Lanes covered to the right of `lane`; 3 blocks the whole road (jump only).
   span?: 1 | 2 | 3;
+  // Placed on a detour branch instead of the main road.
+  branch?: "left" | "right";
 };
 
 export const DELIVERY_BRANDS: Record<BrandId, DeliveryBrand> = {
@@ -162,6 +164,17 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "jump-410", distance: 410, lane: 0, kind: "plank", span: 3 },
   { id: "jump-840", distance: 840, lane: 0, kind: "plank", span: 3 },
   { id: "jump-920", distance: 920, lane: 1, kind: "crates", span: 2 },
+  // 난이도 상향(2026-10): 큰길 추가분과 우회로 양쪽 구간.
+  { id: "jump-132", distance: 132, lane: 1, kind: "crates", span: 2 },
+  { id: "jump-262", distance: 262, lane: 0, kind: "crates" },
+  { id: "jump-760", distance: 760, lane: 0, kind: "crates", span: 2 },
+  { id: "jump-875", distance: 875, lane: 1, kind: "plank", span: 2 },
+  { id: "jump-935", distance: 935, lane: 0, kind: "plank" },
+  ...(["left", "right"] as const).flatMap((branch): ObstaclePlacement[] => [
+    { id: `detour-${branch}-578`, distance: 578, lane: 1, kind: "crates", span: 2, branch },
+    { id: `detour-${branch}-603`, distance: 603, lane: 0, kind: "plank", span: 3, branch },
+    { id: `detour-${branch}-626`, distance: 626, lane: 0, kind: "crates", branch },
+  ]),
 ];
 
 // 광고 브랜드/옥외 광고 설정은 data/delivery-outdoor-ads.ts에서 독립 관리합니다.

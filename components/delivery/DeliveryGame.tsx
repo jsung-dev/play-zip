@@ -13,8 +13,9 @@ import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progr
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTurn, enterTurnLane, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
-import { clearsObstacle, jumpHeightAt, JUMP_CONFIG, obstacleCenterX, obstacleHitHalfWidth } from "./delivery-jump";
-import { MOVER_PLACEMENTS, MOVER_SHAPE, moverPose } from "./delivery-movers";
+import { clearsObstacle, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER } from "./delivery-jump";
+import { COMBO, collectDrops, rampHit } from "./delivery-pickups";
+import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose } from "./delivery-movers";
 import { playSfx, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
@@ -46,6 +47,12 @@ type RuntimeState = {
   jumpElapsed: number | null;
   clock: number;
   moverStarts: Record<string, number>;
+  jumpPower: number;
+  collected: Set<number>;
+  combo: number;
+  bestCombo: number;
+  comboTimer: number;
+  boostRemaining: number;
 };
 
 type DriveInput = {
@@ -53,7 +60,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {} });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, jumpPower: 1, collected: new Set(), combo: 0, bestCombo: 0, comboTimer: 0, boostRemaining: 0 });
 
 function approach(value: number, target: number, maxDelta: number) {
   if (value < target) return Math.min(target, value + maxDelta);
@@ -179,6 +186,7 @@ export function DeliveryGame() {
     const runtime = runtimeRef.current;
     if (runtime.jumpElapsed !== null) return;
     runtime.jumpElapsed = 0;
+    runtime.jumpPower = 1;
     playSfx("jump");
     setFrame({ ...runtime });
   }, [paused, status]);
@@ -194,9 +202,13 @@ export function DeliveryGame() {
       // Advance feedback on game time, so pausing/backgrounding cannot skip it.
       runtime.deliverySuccessRemaining = Math.max(0, runtime.deliverySuccessRemaining - deltaSeconds);
       runtime.clock += deltaSeconds;
+      runtime.boostRemaining = Math.max(0, runtime.boostRemaining - deltaSeconds);
+      runtime.comboTimer = Math.max(0, runtime.comboTimer - deltaSeconds);
+      if (runtime.comboTimer === 0) runtime.combo = 0;
+      const boosting = runtime.boostRemaining > 0;
       if (runtime.jumpElapsed !== null) {
         runtime.jumpElapsed += deltaSeconds;
-        if (runtime.jumpElapsed >= JUMP_CONFIG.seconds) { runtime.jumpElapsed = null; playSfx("land"); }
+        if (runtime.jumpElapsed >= jumpDuration(runtime.jumpPower)) { runtime.jumpElapsed = null; playSfx("land"); }
       }
       const input = driveInputRef.current;
       if (input.forward !== input.reverse) runtime.travelDirection = input.reverse ? -1 : 1;
@@ -214,7 +226,7 @@ export function DeliveryGame() {
       const desiredSpeed = bothPressed
         ? 0
         : input.forward
-          ? DELIVERY_GAME_CONFIG.forwardSpeedPerSecond
+          ? DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? COMBO.boostSpeedFactor : 1)
           : input.reverse
             ? -DELIVERY_GAME_CONFIG.reverseSpeedPerSecond
             : 0;
@@ -223,11 +235,11 @@ export function DeliveryGame() {
         ? DELIVERY_GAME_CONFIG.directionChangeDecelerationPerSecond
         : desiredSpeed === 0
           ? DELIVERY_GAME_CONFIG.decelerationPerSecond
-          : DELIVERY_GAME_CONFIG.accelerationPerSecond;
+          : DELIVERY_GAME_CONFIG.accelerationPerSecond * (boosting ? 2 : 1);
 
       const slowdownActive = timestamp < runtime.slowdownUntil;
       const cappedSpeed = slowdownActive
-        ? Math.sign(desiredSpeed) * Math.min(Math.abs(desiredSpeed), desiredSpeed >= 0 ? 7.5 : 3.5)
+        ? Math.sign(desiredSpeed) * Math.min(Math.abs(desiredSpeed), desiredSpeed >= 0 ? 11 : 4)
         : desiredSpeed;
       runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
       if (Math.abs(runtime.speed) < 0.012 && desiredSpeed === 0) runtime.speed = 0;
@@ -335,14 +347,33 @@ export function DeliveryGame() {
       // An alley-to-main join bypasses that section of the main road; do not
       // sweep collisions across the entrance-to-exit route-coordinate jump.
       const hit = (id: string) => {
-        runtime.speed *= 0.38;
+        // A softer bump than before (was 38%): with more obstacles the old
+        // penalty made the ride feel like it kept jolting to a halt.
+        runtime.speed *= 0.6;
         runtime.collisionId = id;
         runtime.collisionCount += 1;
         runtime.slowdownUntil = timestamp + DELIVERY_GAME_CONFIG.collisionSlowdownSeconds * 1_000;
         obstaclePassUntilRef.current.set(id, timestamp + DELIVERY_GAME_CONFIG.obstaclePassThroughSeconds * 1_000);
+        runtime.combo = 0;
+        runtime.boostRemaining = 0;
         playSfx("hit");
       };
-      const jumpHeight = jumpHeightAt(runtime.jumpElapsed);
+      let jumpHeight = jumpHeightAt(runtime.jumpElapsed, runtime.jumpPower);
+      if (!wasInDriveway && !runtime.driveway) {
+        // Ramps launch a big jump; drops along the way build the combo.
+        if (rampHit(previousPosition, runtime.position, runtime.laneX, runtime.detour, runtime.jumpElapsed !== null)) {
+          runtime.jumpElapsed = 0; runtime.jumpPower = RAMP_POWER; jumpHeight = 0;
+          playSfx("ramp");
+        }
+        for (const index of collectDrops(previousPosition, runtime.position, runtime.laneX, jumpHeight, runtime.detour, runtime.collected)) {
+          runtime.collected.add(index);
+          runtime.combo += 1;
+          runtime.bestCombo = Math.max(runtime.bestCombo, runtime.combo);
+          runtime.comboTimer = COMBO.windowSeconds;
+          playSfx("pickup", runtime.combo);
+          if (runtime.combo % COMBO.boostEvery === 0) { runtime.boostRemaining = COMBO.boostSeconds; playSfx("boost"); }
+        }
+      }
       if (!wasInDriveway && !runtime.driveway && Math.abs(runtime.speed) > 0.01) {
         for (const obstacle of OBSTACLE_PLACEMENTS) {
           if (timestamp < (obstaclePassUntilRef.current.get(obstacle.id) ?? 0)) continue;
@@ -355,7 +386,8 @@ export function DeliveryGame() {
             : Math.max(0, Math.min(1, (obstacle.distance - previousPosition) / stepDistance));
           const actualBikeX = previousLaneX + (runtime.laneX - previousLaneX) * progressAcrossStep
             + getDetourOffset(obstacle.distance, runtime.detour);
-          if (Math.abs(actualBikeX - obstacleCenterX(obstacle)) >= obstacleHitHalfWidth(obstacle)) continue;
+          const obstacleX = obstacleCenterX(obstacle) + getDetourOffset(obstacle.distance, obstacle.branch ?? "main");
+          if (Math.abs(actualBikeX - obstacleX) >= obstacleHitHalfWidth(obstacle)) continue;
           if (clearsObstacle(obstacle.kind, jumpHeight)) continue;
           hit(obstacle.id);
           break;
@@ -368,7 +400,7 @@ export function DeliveryGame() {
           runtime.moverStarts[mover.id] = runtime.clock;
         }
         // Waiting is always safe: a stopped bike is never hit by a mover.
-        if (runtime.driveway || Math.abs(runtime.speed) < .5 || timestamp < (obstaclePassUntilRef.current.get(mover.id) ?? 0)) continue;
+        if (!moverCollides(mover.kind) || runtime.driveway || Math.abs(runtime.speed) < .5 || timestamp < (obstaclePassUntilRef.current.get(mover.id) ?? 0)) continue;
         const pose = moverPose(mover, runtime.clock - runtime.moverStarts[mover.id]), shape = MOVER_SHAPE[mover.kind];
         if (pose.done || Math.abs(runtime.position - pose.distance) > shape.halfLength + DELIVERY_GAME_CONFIG.collisionHalfLength) continue;
         // Narrower than the bike's static-obstacle box on purpose: grazing is forgiven.
@@ -564,6 +596,14 @@ export function DeliveryGame() {
         </header>
 
         <div className={styles.playArea} data-control-hand={controlHand}>
+          {(status === "playing" || status === "quiz") && (
+            <div className={styles.rideStats} data-boosting={frame.boostRemaining > 0}>
+              <span className={styles.dropCount} data-drop-count={frame.collected.size}><i aria-hidden="true" />우유 {frame.collected.size}</span>
+              {frame.boostRemaining > 0
+                ? <strong className={styles.boostBadge}>부스트!</strong>
+                : frame.combo >= 3 && <strong key={frame.combo} className={styles.comboBadge}>콤보 ×{frame.combo}</strong>}
+            </div>
+          )}
           <DeliveryScene3D
             position={frame.position}
             speed={frame.speed}
@@ -585,7 +625,7 @@ export function DeliveryGame() {
             travelDirection={frame.travelDirection}
             turnChoice={frame.turnChoice}
             completedStops={frame.completedStops}
-            jumpHeight={jumpHeightAt(frame.jumpElapsed)}
+            jumpHeight={jumpHeightAt(frame.jumpElapsed, frame.jumpPower)}
             liveRef={runtimeRef}
           />
 
