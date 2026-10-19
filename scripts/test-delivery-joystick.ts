@@ -9,9 +9,9 @@ for (const [x, y] of [[0, 0], [.1, -.1], [-.2, .2]]) {
 }
 state = sampleJoystick(0, -1, state);
 assert.equal(state.drive, "forward");
-state = sampleJoystick(0, -.22, state);
-assert.equal(state.drive, "forward", "Hysteresis prevents throttle jitter");
 state = sampleJoystick(0, -.15, state);
+assert.equal(state.drive, "forward", "Hysteresis keeps driving when the thumb drifts back");
+state = sampleJoystick(0, -.08, state);
 assert.equal(state.drive, null, "Returning to the dead zone releases the throttle");
 state = sampleJoystick(0, 1, state);
 assert.equal(state.drive, "reverse");

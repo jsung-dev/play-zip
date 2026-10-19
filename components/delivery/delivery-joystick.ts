@@ -9,10 +9,12 @@ export type JoystickSample = {
 
 // Normalised thumb travel. Steering re-arms independently of the vertical axis,
 // so returning straight ahead permits another lane change without stopping.
+// Wider ring and a low release point, like most mobile driving games: once the
+// throttle is on, a thumb drifting back toward the centre keeps driving.
 export const JOYSTICK_CONFIG = {
-  travelRatio: .30,
-  driveEngage: .28,
-  driveRelease: .17,
+  travelRatio: .46,
+  driveEngage: .24,
+  driveRelease: .1,
   laneEngage: .62,
   laneRelease: .26,
 } as const;

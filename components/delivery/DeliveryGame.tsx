@@ -7,7 +7,7 @@ import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, getDrivewayExitDistance, getDrivewayDeliveryInterval, getRouteFrame, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
-import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
+import { DeliveryPauseMenu, type ControlHand } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTurn, enterTurnLane, type TravelDirection, type TurnChoice } from "./delivery-turns";
@@ -74,6 +74,15 @@ export function DeliveryGame() {
   const [paused, setPaused] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
   const [guidanceReplay, setGuidanceReplay] = useState(0);
+  // Which thumb steers; the other half of the screen is the jump area.
+  const [controlHand, setControlHand] = useState<ControlHand>("right");
+  useEffect(() => {
+    try { if (localStorage.getItem("delivery-control-hand") === "left") setControlHand("left"); } catch { /* storage blocked: keep default */ }
+  }, []);
+  const changeControlHand = useCallback((hand: ControlHand) => {
+    setControlHand(hand);
+    try { localStorage.setItem("delivery-control-hand", hand); } catch { /* not persisted */ }
+  }, []);
 
   const syncDriveInput = useCallback(() => {
     const next = {
@@ -504,7 +513,7 @@ export function DeliveryGame() {
           <span className={styles.screenReaderOnly} role="status" aria-live="polite" aria-atomic="true">{navigation.instruction}. {navigation.destination}</span>
         </header>
 
-        <div className={styles.playArea}>
+        <div className={styles.playArea} data-control-hand={controlHand}>
           <DeliveryScene3D
             position={frame.position}
             speed={frame.speed}
@@ -533,24 +542,24 @@ export function DeliveryGame() {
           <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />
           {status === "playing" && !paused && (
             <button
-              className={styles.jumpButton}
+              className={styles.jumpZone}
               type="button"
-              aria-label="점프"
-              data-jump-button
+              aria-label="점프 (이 쪽 화면 아무 곳이나 탭)"
+              data-jump-zone
               data-airborne={frame.jumpElapsed !== null}
-              // Fires on touch-down; its own pointer, so the joystick finger keeps steering.
+              // Its own pointer target, so the steering thumb is never interrupted.
               onPointerDown={(event) => { event.preventDefault(); jump(); }}
               onClick={(event) => { if (event.detail === 0) jump(); }}
               onContextMenu={(event) => event.preventDefault()}
             >
-              <ChevronsUp aria-hidden="true" />
+              <span className={styles.jumpButton} data-jump-button aria-hidden="true"><ChevronsUp /></span>
             </button>
           )}
         </div>
 
         {status === "ready" && <DeliveryBrandStart selected={selectedBrand} onSelect={setSelectedBrand} onStart={startGame} />}
 
-        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
+        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} controlHand={controlHand} onControlHand={changeControlHand} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
         {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} onRestart={returnToStart} />}
