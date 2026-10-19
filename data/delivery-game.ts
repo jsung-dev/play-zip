@@ -140,6 +140,7 @@ export const DELIVERY_GAME_CONFIG = {
   drivewaySideOffset: 18,
   drivewayForwardOffset: 17,
   drivewayDeliveryDepth: 8,
+  deliveryAutoBrakePerSecond: 9,
 } as const;
 
 // 장애물은 첫 100m 연습 구간 이후에만 두고, 목적지 전 구간은 비워 둡니다.
@@ -157,6 +158,11 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "jump-295", distance: 295, lane: 0, kind: "plank", span: 3 },
   { id: "jump-705", distance: 705, lane: 0, kind: "crates", span: 2 },
   { id: "jump-745", distance: 745, lane: 0, kind: "plank", span: 3 },
+  { id: "jump-210", distance: 210, lane: 0, kind: "crates", span: 2 },
+  { id: "jump-320", distance: 320, lane: 1, kind: "crates", span: 2 },
+  { id: "jump-410", distance: 410, lane: 0, kind: "plank", span: 3 },
+  { id: "jump-725", distance: 725, lane: 2, kind: "plank" },
+  { id: "jump-840", distance: 840, lane: 1, kind: "plank", span: 2 },
   { id: "jump-920", distance: 920, lane: 1, kind: "crates", span: 2 },
 ];
 

@@ -216,6 +216,15 @@ export function DeliveryGame() {
         : desiredSpeed;
       runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
       if (Math.abs(runtime.speed) < 0.012 && desiredSpeed === 0) runtime.speed = 0;
+      // Inside an unserved delivery alley, brake automatically so the bike
+      // stops on the pad and the quiz opens, even if the throttle is held.
+      const pendingStop = runtime.driveway && !runtime.completedStops.includes(runtime.driveway.stopIndex) ? runtime.driveway : null;
+      if (pendingStop && runtime.speed !== 0) {
+        const zone = getDrivewayDeliveryInterval(pendingStop.stopIndex);
+        const ahead = ((zone.start + zone.end) / 2 - pendingStop.progress) * Math.sign(runtime.speed);
+        const cap = Math.sqrt(2 * DELIVERY_GAME_CONFIG.deliveryAutoBrakePerSecond * Math.max(0, ahead));
+        if (ahead >= 0 && Math.abs(runtime.speed) > cap) runtime.speed = Math.sign(runtime.speed) * cap;
+      }
       const previousPosition = runtime.position;
       const wasInDriveway = runtime.driveway !== null;
       if (runtime.driveway) {
