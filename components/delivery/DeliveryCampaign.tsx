@@ -125,7 +125,7 @@ export function DeliveryBrandQuiz({ brand, stopIndex, address, onCorrect }: {
   </div>;
 }
 
-export function DeliveryPurchaseAd({ brand, completedDeliveries, freshness, stars, onRestart }: { brand: DeliveryBrand; completedDeliveries: number; freshness: number; stars: 1 | 2 | 3; onRestart: () => void }) {
+export function DeliveryPurchaseAd({ brand, completedDeliveries, hits, stars, onRestart }: { brand: DeliveryBrand; completedDeliveries: number; hits: number; stars: 1 | 2 | 3; onRestart: () => void }) {
   const [preview, setPreview] = useState(false);
   const ref = useDialogFocus();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -135,9 +135,9 @@ export function DeliveryPurchaseAd({ brand, completedDeliveries, freshness, star
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.purchaseCard}`} style={brandStyle(brand)} role="dialog" aria-modal="true" aria-labelledby="delivery-complete-title" data-purchase-ad={brand.id} data-purchase-preview={preview} data-campaign-screen="complete">
       <div className={styles.deliveryReceipt}><span><PackageCheck aria-hidden="true" /></span><h2 id="delivery-complete-title">배달 완료!</h2></div>
       <p className={styles.purchaseDestination}>{DELIVERY_GAME_CONFIG.destinationName}</p>
-      <div className={styles.runStars} data-stars={stars} aria-label={`별 ${stars}개, 우유 신선도 ${Math.round(freshness * 100)}%`}>
+      <div className={styles.runStars} data-stars={stars} aria-label={`별 ${stars}개, 부딪힘 ${hits}번`}>
         {[1, 2, 3].map(n => <i key={n} data-on={n <= stars} aria-hidden="true">★</i>)}
-        <span>우유 신선도 {Math.round(freshness * 100)}%{stars < 3 ? " · 더 빨리, 덜 부딪히면 별 3개!" : " · 완벽한 배달!"}</span>
+        <span>부딪힘 {hits}번{stars < 3 ? " · 덜 부딪히고 모두 배달하면 별 3개!" : " · 완벽한 배달!"}</span>
       </div>
       <div className={styles.completionStats}><span data-completion-count><House aria-hidden="true" />배달 {completedDeliveries} / {DELIVERY_STOPS.length + 1} 완료</span><span><MapPin aria-hidden="true" />{DELIVERY_GAME_CONFIG.totalDistance.toLocaleString("ko-KR")}m 도착</span></div>
       <div className={styles.purchaseCreative}>

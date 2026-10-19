@@ -32,8 +32,7 @@ for (const [i, stop] of DELIVERY_STOPS.entries()) {
   // Only the merge itself; reversing back into an exit is rare, so obstacles may follow it.
   blocked.push([exit - DRIVEWAY_ROUTE.passMargin, exit + 15]);
 }
-for (const o of OBSTACLE_PLACEMENTS.filter(o => o.id.startsWith("jump-") || o.id.startsWith("detour-"))) {
-  assert(o.kind !== "barrier");
+for (const o of OBSTACLE_PLACEMENTS) {
   if (o.branch) {
     // Detour obstacles sit on the fully offset part of their branch only.
     assert(o.distance > ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.rampMeters && o.distance < ROAD_CLOSURE.mergeStart, `${o.id} on the straight detour section`);

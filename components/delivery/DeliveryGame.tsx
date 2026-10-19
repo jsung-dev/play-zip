@@ -14,9 +14,9 @@ import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTur
 import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
 import type { JoystickDrive } from "./delivery-joystick";
 import { clearsObstacle, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER } from "./delivery-jump";
-import { FRESHNESS, freshnessLeft, sectionEntered, starsFor } from "./delivery-freshness";
+import { sectionEntered, starsFor } from "./delivery-course";
 import { BOOST, boosterHit, FALL_SECONDS, gapUnder, RAMP_MAX_SPEED, RAMP_MIN_SPEED, rampHit } from "./delivery-pickups";
-import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose } from "./delivery-movers";
+import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose, snapToLane, TIMED } from "./delivery-movers";
 import { playSfx, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
@@ -48,11 +48,11 @@ type RuntimeState = {
   jumpElapsed: number | null;
   clock: number;
   moverStarts: Record<string, number>;
+  moverTargets: Record<string, number>;
   jumpPower: number;
   collected: Set<number>;
   fallElapsed: number | null;
   fallRespawn: number;
-  usedSeconds: number;
   toast: { text: string; kind: "good" | "bad" | "info"; until: number; id: number } | null;
   cleared: Set<string>;
   boostRemaining: number;
@@ -63,7 +63,7 @@ type DriveInput = {
   reverse: boolean;
 };
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, usedSeconds: 0, toast: null, cleared: new Set() });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
 
 let toastId = 0;
 // Short on-screen callouts (praise, penalties, section names); the latest wins.
@@ -211,7 +211,6 @@ export function DeliveryGame() {
       // Advance feedback on game time, so pausing/backgrounding cannot skip it.
       runtime.deliverySuccessRemaining = Math.max(0, runtime.deliverySuccessRemaining - deltaSeconds);
       runtime.clock += deltaSeconds;
-      runtime.usedSeconds += deltaSeconds;
       if (runtime.toast && runtime.clock > runtime.toast.until) runtime.toast = null;
       runtime.boostRemaining = Math.max(0, runtime.boostRemaining - deltaSeconds);
       if (runtime.fallElapsed !== null) {
@@ -379,8 +378,7 @@ export function DeliveryGame() {
         runtime.slowdownUntil = timestamp + DELIVERY_GAME_CONFIG.collisionSlowdownSeconds * 1_000;
         obstaclePassUntilRef.current.set(id, timestamp + DELIVERY_GAME_CONFIG.obstaclePassThroughSeconds * 1_000);
         runtime.boostRemaining = 0;
-        runtime.usedSeconds += FRESHNESS.hitPenalty;
-        showToast(runtime, `앗! −${FRESHNESS.hitPenalty}초`, "bad");
+        showToast(runtime, "앗! 부딪혔어요", "bad");
         playSfx("hit");
       };
       // Praise once per hazard when a jump carries the bike over it.
@@ -401,8 +399,7 @@ export function DeliveryGame() {
         const gap = gapUnder(runtime.position, runtime.detour, runtime.jumpElapsed !== null);
         if (gap) {
           runtime.fallElapsed = 0; runtime.fallRespawn = gap.start - 16; runtime.speed = 0; runtime.boostRemaining = 0;
-          runtime.usedSeconds += FRESHNESS.fallPenalty;
-          showToast(runtime, `도로가 무너졌어요 −${FRESHNESS.fallPenalty}초`, "bad", 1.6);
+          showToast(runtime, "도로가 무너졌어요!", "bad", 1.6);
           runtime.collisionCount += 1;
           clearInputs();
           playSfx("hit");
@@ -440,16 +437,20 @@ export function DeliveryGame() {
       }
       // Moving hazards wake as the bike reaches them; a hit only slows, as above.
       for (const mover of MOVER_PLACEMENTS) {
-        if (runtime.moverStarts[mover.id] === undefined) {
-          if (runtime.position < mover.trigger) continue;
+        if (!TIMED.has(mover.kind) && runtime.moverStarts[mover.id] === undefined) {
+          if (runtime.position < mover.trigger || runtime.driveway || (mover.branch && mover.branch !== runtime.detour)) continue;
           runtime.moverStarts[mover.id] = runtime.clock;
+          runtime.moverTargets[mover.id] = snapToLane(runtime.laneX);
         }
+        if (mover.branch && mover.branch !== runtime.detour) continue;
         // Waiting is always safe: a stopped bike is never hit by a mover.
         if (!moverCollides(mover.kind) || runtime.driveway || Math.abs(runtime.speed) < .5 || timestamp < (obstaclePassUntilRef.current.get(mover.id) ?? 0)) continue;
-        const pose = moverPose(mover, runtime.clock - runtime.moverStarts[mover.id]), shape = MOVER_SHAPE[mover.kind];
-        if (pose.done || Math.abs(runtime.position - pose.distance) > shape.halfLength + DELIVERY_GAME_CONFIG.collisionHalfLength) continue;
+        const pose = moverPose(mover, runtime.clock, runtime.moverStarts[mover.id], runtime.moverTargets[mover.id]), shape = MOVER_SHAPE[mover.kind];
+        if (pose.done || !pose.live || Math.abs(runtime.position - pose.distance) > shape.halfLength + DELIVERY_GAME_CONFIG.collisionHalfLength) continue;
+        // Branch movers use lane-relative x; main-road ones compare in main-road coordinates.
+        const bikeX = mover.branch ? runtime.laneX : runtime.laneX + getDetourOffset(pose.distance, runtime.detour);
         // Narrower than the bike's static-obstacle box on purpose: grazing is forgiven.
-        if (Math.abs(runtime.laneX + getDetourOffset(pose.distance, runtime.detour) - pose.x) > shape.halfWidth + .7) continue;
+        if (Math.abs(bikeX - pose.x) > shape.halfWidth + .7) continue;
         if (shape.clearance !== null && jumpHeight > shape.clearance) { praise(mover.id); continue; }
         hit(mover.id);
         break;
@@ -556,7 +557,6 @@ export function DeliveryGame() {
   const totalDeliveries = DELIVERY_STOPS.length + 1;
   // Count completed handoffs, including the final destination after its animation.
   const completedDeliveries = completedDeliveryCount(frame.completedStops, status === "completed");
-  const freshness = freshnessLeft(frame.usedSeconds);
   const canPause = status === "playing" || status === "arriving";
   const navigation = getDeliveryNavigation(frame, status === "arriving");
   const NavigationIcon = { forward: ArrowUp, left: ArrowLeft, right: ArrowRight, reverse: ArrowDown, fork: GitFork, stop: Pause, delivery: PackageCheck, complete: Check }[navigation.direction];
@@ -638,10 +638,6 @@ export function DeliveryGame() {
               {Array.from({ length: totalDeliveries }, (_, index) => <i key={index} data-state={index < completedDeliveries ? "complete" : "pending"} />)}
             </div>
           </div>
-          <div className={navStyles.freshness} data-freshness-level={freshness >= .5 ? "high" : freshness >= .25 ? "mid" : "low"}>
-            <span>우유 신선도</span>
-            <div role="progressbar" aria-label="우유 신선도" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(freshness * 100)}><i style={{ width: `${freshness * 100}%` }} /></div>
-          </div>
           </div>
           <span className={styles.screenReaderOnly} role="status" aria-live="polite" aria-atomic="true">{navigation.instruction}. {navigation.destination}</span>
         </header>
@@ -702,7 +698,7 @@ export function DeliveryGame() {
         {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} controlHand={controlHand} onControlHand={changeControlHand} soundOn={soundOn} onToggleSound={toggleSound} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
-        {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} freshness={freshness} stars={starsFor(freshness, completedDeliveries, totalDeliveries)} onRestart={returnToStart} />}
+        {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} hits={frame.collisionCount} stars={starsFor(frame.collisionCount, completedDeliveries, totalDeliveries)} onRestart={returnToStart} />}
       </section>
     </main>
   );

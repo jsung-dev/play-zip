@@ -19,7 +19,7 @@ import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
 import { obstacleCenterX, obstacleSpan } from "../delivery-jump";
-import { BALL_MOTION, MOVER_PLACEMENTS, type MoverPlacement } from "../delivery-movers";
+import { DROP, MOVER_PLACEMENTS, type MoverPlacement, type MoverPose } from "../delivery-movers";
 import { BOOSTERS, GAPS, RAMPS, type Gap, type Ramp } from "../delivery-pickups";
 
 export type BikeRig = {
@@ -44,7 +44,7 @@ export type ObstacleRig = {
   group: THREE.Group;
 };
 
-export type MoverRig = { placement: MoverPlacement; group: THREE.Group; animate: (t: number, moving: boolean, seconds: number) => void };
+export type MoverRig = { placement: MoverPlacement; group: THREE.Group; animate: (t: number, moving: boolean, seconds: number, pose: MoverPose) => void };
 
 export type BoosterField = { update: (position: number, collected: Set<number> | undefined, seconds: number) => void };
 
@@ -607,8 +607,11 @@ function createMover(placement: MoverPlacement, art: SceneArt, resources: Outdoo
     indicator.position.set(-1.2, .95, -3.06); group.add(indicator);
     return { placement, group, animate: (t, moving) => { indicator.visible = moving && t < 5 && Math.sin(t * 9) > 0; } };
   }
-  if (placement.kind === "ball") return createBeachBall(placement, art);
   if (placement.kind === "ducks") return createDucks(placement, art);
+  if (placement.kind === "boom") return createBoomGate(placement, art);
+  if (placement.kind === "slider") return createSlider(placement, art);
+  if (placement.kind === "dropper") return createDropper(placement, art);
+  if (placement.kind === "drum") return createDrum(placement, art);
   if (placement.kind === "pigeons") return createPigeons(placement, art);
   return createCat(placement, art);
 }
@@ -627,11 +630,16 @@ function createDuck(art: SceneArt, scale: number, body: string) {
 }
 
 function createDucks(placement: MoverPlacement, art: SceneArt): MoverRig {
-  const group = new THREE.Group();
-  art.shadow(group, 2.6, .8);
-  const family = [createDuck(art, 1.35, "#fff8ec"), ...[.62, .58, .55].map(scale => createDuck(art, scale, "#f6d65a"))];
-  family.forEach(({ duck }, n) => { duck.position.x = n === 0 ? -.6 : .2 + n * .5; group.add(duck); });
-  return { placement, group, animate: (t, moving, seconds) => {
+  const group = new THREE.Group(), facing = new THREE.Group(); group.add(facing);
+  art.shadow(facing, 4, .8);
+  // Mother leads five ducklings: a line ~3.6 m long to time a gap around.
+  const family = [createDuck(art, 1.45, "#fff8ec"), ...[.66, .62, .6, .58, .55].map(scale => createDuck(art, scale, "#ffd84a"))];
+  family.forEach(({ duck }, n) => { duck.position.x = n === 0 ? -1.5 : -.8 + n * .55; facing.add(duck); });
+  let lastX = 0;
+  return { placement, group, animate: (t, moving, seconds, pose) => {
+    // Built facing -x; turn around when walking the other way.
+    if (Math.abs(pose.x - lastX) > .001) facing.rotation.y = pose.x > lastX ? Math.PI : 0;
+    lastX = pose.x;
     family.forEach(({ duck, feet }, n) => {
       const step = moving ? t * 11 + n * 1.3 : seconds * 2 + n;
       duck.rotation.x = Math.sin(step) * (moving ? .12 : .03);
@@ -754,29 +762,65 @@ function createRamp(ramp: Ramp, art: SceneArt) {
   return group;
 }
 
-function createBeachBall(placement: MoverPlacement, art: SceneArt): MoverRig {
-  const group = new THREE.Group(), { radius, toward, across } = BALL_MOTION;
-  const shadow = art.shadow(group, radius * 2.4, radius * 2.4);
-  // Six bright panels with white caps, painted per vertex so the spin reads clearly.
-  const geometry = new THREE.SphereGeometry(radius, 24, 16);
-  const panels = ["#ef5b5b", "#fff6e4", "#3fa7e0", "#fff6e4", "#f6c445", "#fff6e4"].map(c => new THREE.Color(c)), cap = new THREE.Color("#ffffff");
-  const position = geometry.attributes.position, colors = new Float32Array(position.count * 3);
-  for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
-    const panel = Math.floor(((Math.atan2(z, x) + Math.PI) / (Math.PI * 2)) * 6) % 6;
-    (Math.abs(y) > radius * .88 ? cap : panels[panel]).toArray(colors, i * 3);
+// Railway-style boom gate: striped arm over the whole road, posts on both kerbs,
+// red lamps that flash while the arm is down.
+function createBoomGate(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group(), half = DELIVERY_GAME_CONFIG.roadWidth / 2 + .9;
+  for (const side of [-1, 1]) {
+    art.put(group, art.box(.45, 1.5, .45, "#f4f1e8", .08), side * half, .75, 0);
+    art.put(group, art.box(.6, .12, .6, "#3f4d4b", .04), side * half, .06, 0);
   }
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const ball = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
-  group.add(ball);
-  // Rolling: moving toward the rider (+z locally) and across (-x).
-  const velocity = new THREE.Vector3(-across, 0, toward), axis = new THREE.Vector3(0, 1, 0).cross(velocity).normalize(), speed = velocity.length();
-  return { placement, group, animate: (t, moving) => {
-    const hop = moving ? Math.abs(Math.sin(t * 4.2)) * .22 : 0;
-    ball.position.y = radius + hop;
-    ball.quaternion.setFromAxisAngle(axis, speed * t / radius);
-    shadow.scale.setScalar(1 - hop * .8);
+  const lamps = [-1, 1].map(side => {
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(.16, 12, 10), new THREE.MeshBasicMaterial({ color: "#ff3b3b", toneMapped: false }));
+    lamp.position.set(side * half, 1.65, .15); group.add(lamp); return lamp;
+  });
+  const pivot = new THREE.Group(); pivot.position.set(-half, 1.0, 0); group.add(pivot);
+  const length = half * 2 - .3;
+  for (let n = 0; n < 10; n++) art.put(pivot, art.box(length / 10 + .01, .18, .14, n % 2 ? "#ffffff" : "#ff4d5a", .05), (n + .5) * length / 10, 0, 0);
+  return { placement, group, animate: (_t, _moving, seconds, pose) => {
+    pivot.rotation.z = pose.lift * Math.PI * .45;
+    lamps.forEach((lamp, n) => { lamp.visible = pose.lift < .9 && Math.sin(seconds * 9 + n * Math.PI) > 0; });
   } };
+}
+
+// A red-and-white barrier on castors that sweeps across all three lanes.
+function createSlider(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group();
+  art.shadow(group, 2.8, 1.1);
+  art.put(group, art.box(2.3, .9, .3, "#ff4d5a", .1), 0, .85, 0);
+  for (const x of [-.8, -.4, 0, .4, .8]) { const stripe = art.box(.2, .88, .32, "#ffffff", .04); stripe.rotation.z = -.55; art.put(group, stripe, x, .85, .005); }
+  for (const x of [-.9, .9]) { art.put(group, art.box(.12, .5, .12, "#3f4d4b"), x, .3, 0); art.put(group, art.cylinder(.12, .12, .1, "#3f4d4b"), x, .1, 0); }
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(.13, 12, 10), new THREE.MeshBasicMaterial({ color: "#ffb33b", toneMapped: false }));
+  lamp.position.set(0, 1.42, 0); group.add(lamp);
+  return { placement, group, animate: (_t, _moving, seconds) => { lamp.visible = Math.sin(seconds * 8) > 0; } };
+}
+
+// A parcel dropped from above into the rider's lane. The shadow appears and
+// grows first, so a quick lane change or a jump avoids it; then it rests there.
+function createDropper(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group();
+  const shadow = art.shadow(group, 1.8, 1.6);
+  const parcel = new THREE.Group(); group.add(parcel);
+  art.put(parcel, art.box(1.3, .95, 1.1, "#f0b273", .06), 0, .48, 0);
+  art.put(parcel, art.box(.2, .97, 1.12, "#fff3c4", .02), 0, .48, 0);
+  art.put(parcel, art.box(1.32, .2, .2, "#fff3c4", .02), 0, .97, 0);
+  return { placement, group, animate: (_t, moving, _seconds, pose) => {
+    parcel.visible = moving; shadow.visible = moving;
+    parcel.position.y = pose.y;
+    parcel.rotation.z = pose.y > .05 ? pose.y * .12 : 0;
+    shadow.scale.setScalar(.4 + .6 * (1 - pose.y / DROP.height));
+  } };
+}
+
+// A blue milk drum on its side, rolling toward the rider.
+function createDrum(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group();
+  art.shadow(group, 1.3, 1);
+  const roll = new THREE.Group(); roll.position.y = .42; group.add(roll);
+  const body = art.cylinder(.42, .42, 1, "#3fa7e0"); body.rotation.z = Math.PI / 2; roll.add(body);
+  for (const x of [-.3, .3]) { const band = art.cylinder(.44, .44, .1, "#ffffff"); band.rotation.z = Math.PI / 2; band.position.x = x; roll.add(band); }
+  const cap = art.cylinder(.2, .2, .06, "#1f6fa8"); cap.rotation.z = Math.PI / 2; cap.position.x = .53; roll.add(cap);
+  return { placement, group, animate: (t, moving) => { roll.rotation.x = moving ? -Math.min(26, 7 * t) / .42 : 0; } };
 }
 
 function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
@@ -817,7 +861,11 @@ function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
     tail.push(segment); joint = segment;
   }
   group.scale.setScalar(1.3);
-  return { placement, group, animate: (t, moving, seconds) => {
+  let lastX = 0;
+  return { placement, group, animate: (t, moving, seconds, pose) => {
+    // Built facing +x; turn around at each kerb.
+    if (Math.abs(pose.x - lastX) > .001) group.children.forEach(child => { child.rotation.y = pose.x < lastX ? Math.PI : 0; });
+    lastX = pose.x;
     const stride = moving ? t * 9 : 0;
     // Diagonal pairs swing together, like a real walk.
     legs.forEach((hip, n) => { hip.rotation.z = moving ? Math.sin(stride + (n === 0 || n === 3 ? 0 : Math.PI)) * .5 : 0; });

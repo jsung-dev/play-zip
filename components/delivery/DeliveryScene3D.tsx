@@ -10,7 +10,7 @@ import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { busTurnLaneClear, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { jumpHeightAt } from "./delivery-jump";
-import { moverPose } from "./delivery-movers";
+import { moverPose, TIMED } from "./delivery-movers";
 import styles from "./DeliveryGame.module.css";
 
 type SceneState = {
@@ -38,7 +38,7 @@ type SceneState = {
 
 type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "closureReached" | "travelDirection" | "turnChoice" | "completedStops";
 const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "closureReached", "travelDirection", "turnChoice", "completedStops"];
-export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; jumpPower: number; clock: number; moverStarts: Record<string, number>; collected: Set<number>; boostRemaining: number; fallElapsed: number | null };
+export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; jumpPower: number; clock: number; moverStarts: Record<string, number>; moverTargets: Record<string, number>; collected: Set<number>; boostRemaining: number; fallElapsed: number | null };
 
 export function DeliveryScene3D({
   position,
@@ -320,19 +320,19 @@ export function DeliveryScene3D({
       world.destination.visible = current.position > 790;
       world.boosters.update(current.position, live?.collected, timestamp / 1000);
 
-      // Moving hazards: shown at their start pose until woken, then follow their path.
+      // Moving hazards: timed ones run on the game clock; triggered ones wait at their start pose.
       for (const mover of world.movers) {
-        const started = live?.moverStarts[mover.placement.id];
-        const t = started === undefined || !live ? 0 : live.clock - started;
-        const pose = moverPose(mover.placement, t);
+        const id = mover.placement.id, clock = live?.clock ?? 0, started = live?.moverStarts[id];
+        const pose = moverPose(mover.placement, clock, started, live?.moverTargets[id]);
         const relative = pose.distance - current.position;
         mover.group.visible = !pose.done && relative > -38 && relative < 180;
         if (!mover.group.visible) continue;
-        const frame = getRouteFrame(Math.min(DELIVERY_GAME_CONFIG.totalDistance, Math.max(0, pose.distance)));
+        const frame = getRouteFrame(Math.min(DELIVERY_GAME_CONFIG.totalDistance, Math.max(0, pose.distance)), mover.placement.branch ?? "main");
         const at = frame.position.addScaledVector(frame.lateral, pose.x);
         mover.group.position.set(at.x, 0, at.z);
         mover.group.rotation.y = frame.yaw;
-        mover.animate(started === undefined ? 0 : t, started !== undefined, timestamp / 1000);
+        const timed = TIMED.has(mover.placement.kind);
+        mover.animate(timed ? clock : started === undefined ? 0 : clock - started, timed || started !== undefined, timestamp / 1000, pose);
       }
 
       camera.updateMatrixWorld();

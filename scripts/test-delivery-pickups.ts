@@ -21,9 +21,9 @@ for (const [i, ramp] of RAMPS.entries()) {
   const clearUntil = ramp.distance + rampFlight(RAMP_MAX_SPEED) + 8;
   for (const o of OBSTACLE_PLACEMENTS.filter(o => o.branch === ramp.branch || (!o.branch && !ramp.branch)))
     assert(o.distance < ramp.distance - 3 || o.distance > clearUntil, `${o.id} is jumped over by the ramp at ${ramp.distance}`);
-  for (const m of MOVER_PLACEMENTS) for (const t of [0, 1, 2, 3, 4]) {
-    const d = moverPose(m, t).distance;
-    if (!ramp.branch) assert(d < ramp.distance - 3 || d > clearUntil || moverPose(m, t).done, `${m.id} overlaps the ramp/gap at ${ramp.distance}`);
+  for (const m of MOVER_PLACEMENTS.filter(m => (m.branch ?? undefined) === ramp.branch)) for (const t of [0, 1, 2, 3, 4, 6, 8]) {
+    const pose = moverPose(m, t, 0);
+    assert(pose.distance < ramp.distance - 3 || pose.distance > clearUntil || pose.done, `${m.id} overlaps the ramp/gap at ${ramp.distance}`);
   }
   // Clear of alleys and the fork split.
   for (const stop of DELIVERY_STOPS) assert(Math.abs(ramp.distance - stop.distance) > 40, "Ramp clear of alley entrances");

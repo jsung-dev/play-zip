@@ -1,34 +1,38 @@
 import assert from "node:assert/strict";
 import { DELIVERY_GAME_CONFIG } from "../data/delivery-game";
 import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE } from "../data/delivery-map";
-import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose } from "../components/delivery/delivery-movers";
+import { BOOM_CYCLE, DROP, MOVER_PLACEMENTS, MOVER_SHAPE, TIMED, moverCollides, moverPose, snapToLane } from "../components/delivery/delivery-movers";
 
 const lanes = [-1, 0, 1].map(n => n * DELIVERY_GAME_CONFIG.laneSpacing);
+const find = (kind: string) => MOVER_PLACEMENTS.find(m => m.kind === kind)!;
 for (const m of MOVER_PLACEMENTS.filter(m => moverCollides(m.kind))) {
-  const start = moverPose(m, 0);
-  assert(m.trigger < m.distance, `${m.id} wakes before the rider reaches it`);
-  // Readable: visible at least ~1.5 s at top speed before it reaches the rider's path.
-  assert(start.distance - m.trigger >= 25, `${m.id} needs a visible lead-in`);
-  assert(!start.done, `${m.id} starts on screen`);
-  // Never parked inside an alley approach or the detour fork.
-  for (const stop of DELIVERY_STOPS) assert(Math.abs(start.distance - stop.distance) > TURN_LANE.approach / 2, `${m.id} clear of ${stop.id} entrance`);
-  assert(start.distance < ROAD_CLOSURE.junctionDistance - 50 || start.distance > ROAD_CLOSURE.mergeEnd + 5, `${m.id} clear of the fork`);
+  // Triggered hazards wake far enough ahead to be read (≥ 1.4 s at top speed).
+  if (!TIMED.has(m.kind)) assert(m.distance - m.trigger >= 28, `${m.id} needs a visible lead-in`);
+  for (const stop of DELIVERY_STOPS) assert(Math.abs(m.distance - stop.distance) > TURN_LANE.approach / 2, `${m.id} clear of ${stop.id} entrance`);
+  if (!m.branch) assert(m.distance < ROAD_CLOSURE.junctionDistance - 50 || m.distance > ROAD_CLOSURE.mergeEnd + 5, `${m.id} clear of the fork`);
 }
-const cat = MOVER_PLACEMENTS.find(m => m.kind === "cat")!;
-assert(moverPose(cat, 0).x < lanes[0] - 2, "Cat starts on the kerb, off the lanes");
-assert(lanes.every(x => [0, 1, 2, 3, 4, 5, 6].some(t => Math.abs(moverPose(cat, t).x - x) < .6)), "Cat crosses every lane");
-assert(moverPose(cat, 7).done, "Cat leaves the road");
-const bus = MOVER_PLACEMENTS.find(m => m.kind === "bus")!;
-assert(moverPose(bus, 1).x > lanes[2] + 2, "Bus waits at the kerb while its indicator blinks");
-assert(Math.abs(moverPose(bus, 6).x - lanes[2]) < .01, "Bus settles into the right lane only");
-assert(moverPose(bus, 30).x > lanes[2] + 2, "Bus leaves the lanes again before later obstacles");
-assert.equal(MOVER_SHAPE.bus.clearance, null, "A bus cannot be jumped");
-assert(MOVER_SHAPE.cat.clearance! < 1 && MOVER_SHAPE.ball.clearance! < 1, "Cat and ball can be jumped");
-const ball = MOVER_PLACEMENTS.find(m => m.kind === "ball")!;
-assert(moverPose(ball, 2).distance < moverPose(ball, 0).distance, "Ball rolls toward the rider");
-assert(moverPose(ball, 0).x > lanes[2] + 2 && lanes.every(x => [0, 1, 2, 3, 4].some(t => Math.abs(moverPose(ball, t).x - x) < 1.6)), "Ball rolls out from the kerb across the lanes");
-const ducks = MOVER_PLACEMENTS.find(m => m.kind === "ducks")!;
-assert(moverPose(ducks, 0).x > lanes[2] + 2 && moverPose(ducks, 12).done, "Ducks start on the kerb and finish crossing");
-assert(MOVER_SHAPE.ducks.clearance! < 1, "Ducks can be jumped");
+// Timed hazards keep moving whatever the rider does: they must be timed, not out-waited by luck.
+const cat = find("cat"), ducks = find("ducks");
+for (const m of [cat, ducks]) {
+  const xs = Array.from({ length: 200 }, (_, n) => moverPose(m, n * .1).x);
+  assert(Math.min(...xs) < lanes[0] - 2 && Math.max(...xs) > lanes[2] + 2, `${m.id} paces kerb to kerb`);
+  assert(lanes.every(x => xs.some(v => Math.abs(v - x) < .3)), `${m.id} crosses every lane`);
+}
+const boom = find("boom"), period = BOOM_CYCLE.down + BOOM_CYCLE.rise + BOOM_CYCLE.up + BOOM_CYCLE.lower;
+const open = Array.from({ length: 100 }, (_, n) => moverPose(boom, n * period / 100).live).filter(live => !live).length;
+assert(open > 30 && open < 70, "Boom gate is open roughly half the time");
+assert(MOVER_SHAPE.boom.clearance! < 1.5, "A down boom can be jumped");
+const slider = find("slider"), sweep = Array.from({ length: 80 }, (_, n) => moverPose(slider, n * .05).x);
+assert(lanes.every(x => sweep.some(v => Math.abs(v - x) < .4)), "Slider sweeps all three lanes");
+assert.equal(MOVER_SHAPE.slider.clearance, null, "The sliding barrier cannot be jumped");
+// Falling parcel lands in the lane captured at wake-up, and only hits near the ground.
+const drop = find("dropper");
+assert.equal(moverPose(drop, 10, 10, snapToLane(2.3)).x, lanes[2]);
+assert(!moverPose(drop, 10.3, 10, 0).live && moverPose(drop, 10 + DROP.seconds, 10, 0).live);
+const bus = find("bus");
+assert(moverPose(bus, 1, 0).x > lanes[2] + 2, "Bus waits at the kerb while its indicator blinks");
+assert(Math.abs(moverPose(bus, 6, 0).x - lanes[2]) < .01, "Bus settles into the right lane only");
+assert(moverPose(bus, 30, 0).x > lanes[2] + 2, "Bus leaves the lanes again before later obstacles");
+for (const drum of MOVER_PLACEMENTS.filter(m => m.kind === "drum")) assert(moverPose(drum, 3, 0).distance < drum.distance && drum.lane !== 1, "Drums roll toward the rider in the side lanes");
 assert(MOVER_PLACEMENTS.filter(m => m.kind === "pigeons").every(m => !moverCollides(m.kind)), "Pigeons are scenery only");
-console.log("Movers: readable lead-in, clear of alleys/fork, cat crossing, bus merge, ball roll verified.");
+console.log("Movers: timed cat/ducks/boom/slider, aimed parcel, drums, bus verified.");

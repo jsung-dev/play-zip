@@ -190,7 +190,7 @@
   .purchaseProduct img, .purchaseProduct [role="img"] { height: 108px; }
 }
 
-/* Run result: stars from milk freshness (this run only, not a reward). */
+/* Run result: stars from bumps and deliveries (this run only, not a reward). */
 .runStars { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; gap: 4px 6px; margin: 8px 0 2px; }
 .runStars i { font-style: normal; font-size: 34px; line-height: 1; color: #e3e6dd; text-shadow: 0 2px 0 #ffffff; }
 .runStars i[data-on="true"] { color: #ffc93c; text-shadow: 0 2px 6px #ffb3006b; animation: starPop .4s cubic-bezier(.2, 1.6, .4, 1) backwards; }

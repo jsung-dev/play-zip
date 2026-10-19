@@ -145,32 +145,29 @@ export const DELIVERY_GAME_CONFIG = {
   deliveryAutoBrakePerSecond: 9,
 } as const;
 
-// 장애물은 첫 100m 연습 구간 이후에만 두고, 목적지 전 구간은 비워 둡니다.
 export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
-  { id: "obstacle-145", distance: 145, lane: 0, kind: "cones" },
-  { id: "obstacle-245", distance: 245, lane: 2, kind: "barrier" },
-  { id: "obstacle-350", distance: 350, lane: 1, kind: "box" },
-  { id: "obstacle-455", distance: 455, lane: 0, kind: "cones" },
-  { id: "obstacle-560", distance: 560, lane: 2, kind: "box" },
-  { id: "obstacle-665", distance: 665, lane: 1, kind: "barrier" },
-  { id: "obstacle-770", distance: 770, lane: 0, kind: "cones" },
-  { id: "obstacle-855", distance: 855, lane: 2, kind: "box" },
-  // 점프용: 골목 진입·출구, 우회 구간, 시작 직후, 목적지 직전은 비워 둡니다.
-  { id: "jump-118", distance: 118, lane: 1, kind: "plank" },
-  { id: "jump-705", distance: 705, lane: 0, kind: "crates", span: 2 },
-  { id: "jump-210", distance: 210, lane: 0, kind: "crates", span: 2 },
-  { id: "jump-320", distance: 320, lane: 1, kind: "crates", span: 2 },
-  { id: "jump-410", distance: 410, lane: 0, kind: "plank", span: 3 },
-  { id: "jump-840", distance: 840, lane: 0, kind: "plank", span: 3 },
-  { id: "jump-920", distance: 920, lane: 1, kind: "crates", span: 2 },
-  // 난이도 상향(2026-10): 큰길 추가분과 우회로 양쪽 구간.
-  { id: "jump-760", distance: 760, lane: 0, kind: "crates", span: 2 },
-  { id: "jump-935", distance: 935, lane: 0, kind: "plank" },
-  { id: "jump-316", distance: 316, lane: 0, kind: "crates" },
-  ...(["left", "right"] as const).flatMap((branch): ObstaclePlacement[] => [
-    { id: `detour-${branch}-578`, distance: 578, lane: 1, kind: "crates", span: 2, branch },
-    { id: `detour-${branch}-626`, distance: 626, lane: 0, kind: "crates", branch },
-  ]),
+  // 2026-10 재설계: 구간마다 한 가지 패턴, 패턴끼리는 겹치지 않게. 골목 진입·합류,
+  // 갈림길, 붕괴 도로 비행 구간, 시작 직후, 목적지 직전은 비워 둡니다.
+  // 1구간 점프 연습: 전 차선 판자 → 두 차선 상자 → 한 차선 콘.
+  { id: "s1-plank-108", distance: 108, lane: 0, kind: "plank", span: 3 },
+  { id: "s1-crates-122", distance: 122, lane: 1, kind: "crates", span: 2 },
+  { id: "s1-cones-134", distance: 134, lane: 0, kind: "cones" },
+  // 2구간 지그재그: 오른쪽 두 차선 → 왼쪽 두 차선을 연달아 막음.
+  { id: "s2-crates-202", distance: 202, lane: 1, kind: "crates", span: 2 },
+  { id: "s2-barrier-215", distance: 215, lane: 0, kind: "barrier" },
+  { id: "s2-crates-215", distance: 215, lane: 1, kind: "crates" },
+  // 3구간: 차단기(움직임) 뒤 양쪽 콘이 가운데 점프대로 몰아 줌.
+  { id: "s3-cones-272-0", distance: 272, lane: 0, kind: "cones" },
+  { id: "s3-cones-272-2", distance: 272, lane: 2, kind: "cones" },
+  // 5구간 연속 허들: 착지 직후 다시 점프해야 하는 간격.
+  { id: "s5-plank-402", distance: 402, lane: 0, kind: "plank", span: 3 },
+  { id: "s5-plank-419", distance: 419, lane: 0, kind: "plank", span: 3 },
+  // 6구간 우회로: 착지 뒤 한 차선 상자.
+  ...(["left", "right"] as const).map((branch): ObstaclePlacement => ({ id: `s6-${branch}-crates-626`, distance: 626, lane: branch === "left" ? 0 : 2, kind: "crates", branch })),
+  // 7구간 버스: 버스가 3차선을 막는 동안 1·2차선 상자와 1차선 콘.
+  { id: "s7-crates-700", distance: 700, lane: 0, kind: "crates", span: 2 },
+  { id: "s7-cones-748", distance: 748, lane: 0, kind: "cones" },
+  { id: "s7-crates-762", distance: 762, lane: 0, kind: "crates", span: 2 },
 ];
 
 // 광고 브랜드/옥외 광고 설정은 data/delivery-outdoor-ads.ts에서 독립 관리합니다.
