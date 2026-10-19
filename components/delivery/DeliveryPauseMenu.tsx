@@ -17,28 +17,30 @@ export function DeliveryPauseMenu({ stopIndex, controlHand, onControlHand, sound
   const next = DELIVERY_STOPS[stopIndex];
   return <div className={shared.overlay}>
     <article ref={ref} tabIndex={-1} className={`${shared.campaignCard} ${styles.pauseCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-pause-title" aria-label="게임 일시정지">
-      <span className={styles.pauseSymbol}><Pause aria-hidden="true" /></span>
-      <h2 id="delivery-pause-title">잠시 멈췄어요</h2>
-      <p className={styles.pauseHint}>준비되면 배달을 이어가세요.</p>
-      <div className={styles.pauseDestination}><MapPin aria-hidden="true" /><div><span>{next ? `배달 ${stopIndex + 1} / ${DELIVERY_STOPS.length}` : "마지막 배달"}</span><strong>{next?.address ?? DELIVERY_GAME_CONFIG.destinationName}</strong></div></div>
-      <fieldset className={styles.controlSetting}>
-        <legend><Hand aria-hidden="true" />조작 설정</legend>
-        <div role="radiogroup" aria-label="조작 손 방향">
-          {([["right", "오른손 이동", "왼손 점프"], ["left", "왼손 이동", "오른손 점프"]] as const).map(([hand, move, jump]) => (
-            <button key={hand} type="button" role="radio" aria-checked={controlHand === hand} data-control-hand-option={hand} onClick={() => onControlHand(hand)}>
-              <strong>{move}</strong><span>{jump}</span>
-            </button>
-          ))}
+      <div className={styles.pauseHead}><span className={styles.pauseSymbol}><Pause aria-hidden="true" /></span><h2 id="delivery-pause-title">잠시 멈췄어요</h2></div>
+      <p className={styles.pauseDestination}><MapPin aria-hidden="true" /><span>{next ? `다음 배달 ${stopIndex + 1}/${DELIVERY_STOPS.length}` : "마지막 배달"}</span><strong>{next?.address ?? DELIVERY_GAME_CONFIG.destinationName}</strong></p>
+      <div className={styles.settings}>
+        <div className={styles.settingRow}>
+          <span className={styles.settingLabel}><Hand aria-hidden="true" />이동하는 손</span>
+          <div className={styles.segmented} role="radiogroup" aria-label="이동하는 손">
+            {([["right", "오른손"], ["left", "왼손"]] as const).map(([hand, label]) => (
+              <button key={hand} type="button" role="radio" aria-checked={controlHand === hand} data-control-hand-option={hand} onClick={() => onControlHand(hand)}>{label}</button>
+            ))}
+          </div>
         </div>
-        <button type="button" className={styles.soundToggle} aria-pressed={soundOn} data-sound-toggle onClick={onToggleSound}>
-          {soundOn ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}<strong>소리·진동</strong><span>{soundOn ? "켜짐" : "꺼짐"}</span>
+        <p className={styles.settingHint}>{controlHand === "right" ? "왼쪽" : "오른쪽"} 화면을 탭하면 점프해요</p>
+        <button type="button" className={styles.settingRow} aria-pressed={soundOn} data-sound-toggle onClick={onToggleSound}>
+          <span className={styles.settingLabel}>{soundOn ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}소리·진동</span>
+          <span className={styles.switch} aria-hidden="true"><i /></span>
         </button>
-      </fieldset>
+      </div>
       <div className={shared.actions}>
         <button className={shared.primaryButton} type="button" onClick={onResume}><Play aria-hidden="true" />계속 배달하기</button>
-        <button className={shared.secondaryButton} type="button" onClick={onReplay} data-guidance-replay><Route aria-hidden="true" />길 안내 다시 보기</button>
-        <button className={shared.textButton} type="button" onClick={onRestart}><RotateCcw aria-hidden="true" />처음으로</button>
-        <PlatformReturnLink confirmLeave />
+        <div className={shared.buttonRow}>
+          <button className={shared.secondaryButton} type="button" onClick={onReplay} data-guidance-replay><Route aria-hidden="true" />길 안내</button>
+          <button className={shared.secondaryButton} type="button" onClick={onRestart}><RotateCcw aria-hidden="true" />처음으로</button>
+        </div>
+        <PlatformReturnLink confirmLeave label="게임 나가기" />
       </div>
     </article>
   </div>;

@@ -1,23 +1,26 @@
-/* Only the start, quiz and completion dialogs use these shared tokens. */
+/* Shared look for the start, quiz, result and pause dialogs:
+   white card, dome illustration on top, mint/green accents. */
 .overlay {
   --ui-paper: #fff;
-  --ui-ink: #142e2a;
+  --ui-ink: #173a30;
+  --ui-title: #0f5e44;
   --ui-body: #52665f;
-  --ui-green: #007f5f;
-  --ui-mint: #e6fbf2;
-  --ui-pink: #ffe9ef;
-  --ui-berry: #8f2449;
-  --ui-border: #d3e3dc;
+  --ui-green: #0f7a57;
+  --ui-mint: #eefaf5;
+  --ui-mint-line: #cfeee1;
+  --ui-pick: #3cbf8e;
+  --ui-border: #e2ebe7;
+  --ui-wrong: #c23b55;
   position: absolute;
   inset: 0;
   z-index: 80;
   display: grid;
   place-items: center;
-  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  padding: max(12px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom));
   overflow: hidden;
-  background: rgb(20 46 42 / 12%);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  background: linear-gradient(#ffffff00, #ffffff40);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
 }
 
 .campaignCard {
@@ -29,12 +32,11 @@
   overscroll-behavior: contain;
   touch-action: pan-y;
   scrollbar-width: thin;
-  scrollbar-color: #b9d5c9 transparent;
-  padding: 22px 18px;
-  border: 1px solid var(--ui-border);
-  border-radius: 24px;
+  scrollbar-color: var(--ui-mint-line) transparent;
+  padding: 16px 18px 18px;
+  border-radius: 30px;
   background: var(--ui-paper);
-  box-shadow: 0 14px 44px rgb(20 46 42 / 15%);
+  box-shadow: 0 18px 50px rgb(23 58 48 / 18%);
   color: var(--ui-ink);
   text-align: center;
   font-size: 16px;
@@ -43,158 +45,150 @@
   overflow-wrap: anywhere;
   isolation: isolate;
 }
-
 .campaignCard:focus { outline: none; }
-.campaignCard h1, .campaignCard h2, .campaignCard p, .campaignCard dl { margin: 0; }
-.campaignCard h1, .campaignCard h2 { font-weight: 850; letter-spacing: -.045em; text-wrap: balance; }
-.campaignCard h2 { font-size: 28px; line-height: 1.3; }
+.campaignCard h1, .campaignCard h2, .campaignCard h3, .campaignCard p, .campaignCard dl { margin: 0; }
+.campaignCard h1, .campaignCard h2 { color: var(--ui-title); font-weight: 900; letter-spacing: -.05em; text-wrap: balance; }
 .campaignCard svg { flex-shrink: 0; width: 22px; height: 22px; stroke-width: 2.2; }
 .campaignCard button, .campaignCard a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.campaignCard button:focus-visible, .campaignCard a:focus-visible, .brandChoice:has(input:focus-visible) {
-  outline: 3px solid var(--ui-green);
-  outline-offset: 3px;
-}
+.campaignCard button:focus-visible, .campaignCard a:focus-visible, .brandChoice:has(input:focus-visible) { outline: 3px solid var(--ui-green); outline-offset: 3px; }
 .campaignCard img { display: block; object-fit: contain; }
-/* Keep failed-image text readable too; the shared asset fallback stays intact. */
 .campaignCard [role="img"] b { font-size: 15px; }
 .campaignCard [role="img"] small { font-size: 13px; }
 
-.eyebrow { color: var(--ui-green); font-size: 14px; font-weight: 750; }
-.campaignCard .startTitle { margin: 8px 0 18px; font-size: 30px; line-height: 1.2; }
-.startTitle span { display: block; margin-bottom: 4px; color: var(--ui-berry); font-size: 26px; }
+.campaignCard .hero { display: block; width: min(100%, 300px); height: auto; margin: 0 auto 6px; }
+.eyebrow { color: var(--ui-green); font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.campaignCard .sparkTitle { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 16px; font-size: 30px; line-height: 1.25; }
+.sparkTitle svg { width: 26px; height: 26px; }
+
+/* Milk cards: radio on the start screen, answer buttons in the quiz. */
 .brandSelector { min-width: 0; margin: 0; padding: 0; border: 0; }
-.brandSelector legend { width: 100%; margin-bottom: 14px; padding: 0; color: var(--ui-body); font-size: 16px; font-weight: 600; }
-.brandChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.brandChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .brandChoice {
   position: relative;
   display: flex;
   min-width: 0;
+  min-height: 52px;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 28px 4px 12px;
-  border: 2px solid #e1e9e5;
-  border-radius: 16px;
+  gap: 6px;
+  margin: 0;
+  padding: 30px 4px 12px;
+  border: 2px solid var(--ui-border);
+  border-radius: 18px;
   background: var(--ui-paper);
+  color: var(--ui-ink);
+  font: inherit;
+  font-size: 16px;
   cursor: pointer;
   touch-action: manipulation;
+  transition: transform .12s, border-color .12s, background-color .12s;
 }
-.brandChoice[data-selected="true"] { border-color: var(--ui-green); background: var(--ui-mint); }
+.brandChoice:active { transform: scale(.97); }
+.brandChoice[data-selected="true"] { border-color: var(--ui-pick); background: var(--ui-mint); }
+.brandChoice[data-wrong="true"] { border-color: var(--ui-wrong); background: #fff3f5; animation: shake .35s; }
 .brandChoice input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.choiceCheck { position: absolute; top: 7px; right: 7px; display: grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid #a8bdb3; border-radius: 50%; }
+.choiceCheck { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #c5d6cf; border-radius: 50%; background: #fff; }
 .brandChoice[data-selected="true"] .choiceCheck { border-color: var(--ui-green); background: var(--ui-green); color: #fff; }
-.choiceCheck svg { width: 14px; height: 14px; stroke-width: 3; }
-.choiceProduct { width: 100%; height: 108px; margin-bottom: 4px; }
-.brandChoice strong { font-size: 16px; font-weight: 800; letter-spacing: -.04em; line-height: 1.5; }
-.brandChoice small { color: var(--ui-body); font-size: 13px; line-height: 1.5; }
+.brandChoice[data-wrong="true"] .choiceCheck { border-color: var(--ui-wrong); background: var(--ui-wrong); color: #fff; }
+.campaignCard .choiceCheck svg { width: 15px; height: 15px; stroke-width: 3.2; }
+.choiceProduct { width: 100%; height: 104px; }
+.brandChoice strong { font-size: 16px; font-weight: 850; letter-spacing: -.04em; line-height: 1.4; }
+@keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
 
-.campaignCard .missionCard { display: grid; grid-template-columns: .8fr 1.2fr; gap: 10px; margin-top: 18px; padding: 14px 10px; border-radius: 16px; background: var(--ui-mint); text-align: left; }
-.missionCard > div { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; align-items: center; column-gap: 6px; }
-.missionCard > div + div { padding-left: 10px; border-left: 1px solid #b9dfcf; }
-.missionCard svg { color: var(--ui-green); grid-row: span 2; }
-.missionCard dt { color: var(--ui-body); font-size: 13px; }
-.missionCard dd { margin: 2px 0 0; font-size: 15px; font-weight: 750; line-height: 1.45; }
-.campaignCard .startGuide { margin: 14px 0 16px; color: var(--ui-body); font-size: 15px; }
-.actions { display: grid; gap: 10px; width: 100%; }
+.campaignCard .missionCard { display: grid; grid-template-columns: 1fr 1fr; margin-top: 14px; padding: 12px 6px; border: 1px solid var(--ui-mint-line); border-radius: 18px; background: var(--ui-mint); text-align: left; }
+.missionCard > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; column-gap: 6px; padding: 0 6px; }
+.missionCard > div + div { border-left: 1px solid var(--ui-mint-line); }
+.campaignCard .missionCard svg { grid-row: span 2; width: 44px; height: 37px; }
+.missionCard dt { color: var(--ui-green); font-size: 13px; font-weight: 700; }
+.missionCard dd { margin: 0; font-size: 15px; font-weight: 850; line-height: 1.35; letter-spacing: -.03em; }
+
+.actions { display: grid; gap: 10px; width: 100%; margin-top: 16px; }
+.buttonRow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .campaignCard .primaryButton, .campaignCard .secondaryButton, .actions [data-platform-return], .campaignCard .textButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  min-height: 52px;
+  min-height: 54px;
   margin: 0;
-  padding: 12px;
-  border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  padding: 10px 12px;
+  border: 2px solid var(--ui-mint-line);
+  border-radius: 18px;
   background: var(--ui-paper);
   color: var(--ui-green);
   font: inherit;
   font-size: 17px;
-  font-weight: 750;
-  line-height: 1.5;
+  font-weight: 850;
+  line-height: 1.4;
+  letter-spacing: -.03em;
   text-decoration: none;
   cursor: pointer;
 }
-.campaignCard .primaryButton { min-height: 56px; border-color: var(--ui-green); background: var(--ui-green); color: #fff; font-size: 18px; }
-.campaignCard .primaryButton:disabled { border-color: #d1ded7; background: #e6ebe8; color: var(--ui-body); cursor: not-allowed; opacity: 1; box-shadow: none; }
+.campaignCard .primaryButton { min-height: 58px; border-color: var(--ui-green); background: var(--ui-green); color: #fff; font-size: 19px; box-shadow: 0 6px 0 #0a5a40; }
+.campaignCard .primaryButton:not(:disabled):active { transform: translateY(3px); box-shadow: 0 3px 0 #0a5a40; }
+.campaignCard .primaryButton:disabled { border-color: #dfe7e3; background: #eef2f0; color: var(--ui-body); box-shadow: none; cursor: not-allowed; }
 .actions [data-platform-return] svg { width: 22px; height: 22px; }
-.campaignCard .secondaryButton { border-color: #a6cdbd; }
-.purchaseCard .actions [data-platform-return] { background: var(--ui-mint); border-color: var(--ui-mint); }
-.campaignCard .textButton { min-height: 44px; border-color: transparent; font-size: 15px; }
-.notice { display: block; color: var(--ui-body); font-size: 13px; font-weight: 400; line-height: 1.5; }
-.startCard > .notice { margin-top: 16px; }
+.campaignCard .textButton { border-color: transparent; background: var(--ui-mint); }
+.notice { display: block; margin-top: 12px; color: var(--ui-body); font-size: 13px; line-height: 1.45; }
 
-.quizHeading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
-.quizHeading > span { color: var(--ui-green); font-size: 26px; font-weight: 850; letter-spacing: -.04em; }
-.quizHeading > strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-.quizProgress { display: flex; gap: 5px; height: 7px; margin-bottom: 18px; }
-.quizProgress span { flex: 1; border-radius: 99px; background: #e0ebe5; }
-.quizProgress [data-reached="true"] { background: var(--ui-green); }
-.campaignCard .quizAddress { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; border-radius: 14px; background: var(--ui-mint); font-size: 15px; font-weight: 650; }
-.quizAddress svg { color: var(--ui-green); width: 18px; height: 18px; }
-.quizProduct { display: grid; place-items: center; width: 146px; height: 130px; margin: 16px auto; border-radius: 50%; background: color-mix(in srgb, var(--product-tint) 18%, white); }
-.quizProduct > img, .quizProduct > [role="img"] { width: 100px; height: 120px; }
-.campaignCard .campaignHint { margin: 12px 0 18px; color: var(--ui-body); font-size: 15px; }
-.quizAnswers { display: grid; gap: 10px; }
-.quizAnswers button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 12px; border: 1px solid #c3d5cc; border-radius: 16px; background: var(--ui-paper); color: var(--ui-ink); text-align: left; font-size: 17px; }
-.quizAnswers strong { font-size: inherit; font-weight: 750; }
-.quizAnswers svg { margin-left: auto; width: 20px; height: 20px; color: var(--ui-body); }
-.answerNumber { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--ui-mint); color: var(--ui-green); font-size: 14px; font-weight: 750; }
-.quizAnswers button[data-wrong="true"] { border-color: #b73e57; background: #fff3f5; }
-.quizFeedback > p { display: flex; align-items: flex-start; gap: 8px; padding-top: 12px; color: #9d2c42; font-size: 14px; text-align: left; }
-.quizFeedback svg { width: 20px; height: 20px; margin-top: 2px; }
-.campaignCard .pauseNote { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; padding: 12px 10px; border-radius: 16px; background: var(--ui-mint); color: var(--ui-body); text-align: left; font-size: 13px; }
-.pauseNote svg { color: var(--ui-green); }
+/* Quiz */
+.quizProgress { display: flex; justify-content: center; gap: 6px; margin: 6px 0 10px; }
+.quizProgress span { width: 26px; height: 7px; border-radius: 99px; background: #dceee6; }
+.quizProgress [data-reached="true"] { background: var(--ui-pick); }
+.campaignCard .quizTitle { font-size: 25px; line-height: 1.3; }
+.campaignCard .quizAddress { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 8px 0 14px; color: var(--ui-body); font-size: 14px; font-weight: 650; }
+.campaignCard .quizAddress svg { width: 17px; height: 17px; color: #e5484d; }
+.quizFeedback { min-height: 24px; margin-top: 12px; color: var(--ui-body); font-size: 14px; }
+.quizFeedback strong { color: var(--ui-wrong); font-size: 15px; }
 
-.deliveryReceipt { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.deliveryReceipt > span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--ui-mint); color: var(--ui-green); }
-.deliveryReceipt svg { width: 29px; height: 29px; }
-.campaignCard .purchaseDestination { margin-top: 8px; color: var(--ui-body); font-size: 16px; font-weight: 600; }
-.completionStats { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 12px 0 18px; }
-.completionStats > span { display: flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 99px; background: var(--ui-mint); color: var(--ui-green); font-size: 13px; font-weight: 650; }
-.completionStats svg { width: 16px; height: 16px; }
-.purchaseCreative { padding: 14px 14px 16px; margin-bottom: 16px; border: 1px solid #f4bfd0; border-radius: 18px; background: var(--ui-pink); color: var(--ui-berry); }
-.adBadge { display: block; margin-bottom: 6px; text-align: left; font-size: 13px; font-weight: 700; }
-.purchaseLogo { width: 180px; height: 54px; margin: 0 auto 8px; }
-.purchaseCreative h2 { font-size: 26px; line-height: 1.35; white-space: pre-line; }
-.purchaseProduct { display: grid; place-items: center; margin: 12px auto 8px; }
-.purchaseProduct img, .purchaseProduct [role="img"] { width: 116px; height: 128px; }
-.purchaseCreative > strong { font-size: 18px; font-weight: 800; }
-.purchaseCreative > p { margin-top: 4px; color: var(--ui-body); font-size: 15px; }
-.purchasePreview { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 16px; background: var(--ui-mint); text-align: left; font-size: 15px; }
-.purchasePreview > svg { color: var(--ui-green); }
-.purchasePreview p { margin-top: 6px; color: var(--ui-body); }
+/* Result */
+.runStars { display: flex; justify-content: center; gap: 6px; margin: -4px 0 10px; }
+.campaignCard .runStars svg { width: 46px; height: 46px; fill: #e4e9e5; stroke: none; }
+.campaignCard .runStars svg[data-on="true"] { fill: #ffc93c; filter: drop-shadow(0 3px 4px #f5a5004d); animation: starPop .45s cubic-bezier(.2, 1.6, .4, 1) backwards; }
+.runStars svg:nth-child(2) { animation-delay: .12s; } .runStars svg:nth-child(3) { animation-delay: .24s; }
+@keyframes starPop { from { transform: scale(.2) rotate(-30deg); opacity: 0; } }
+.completionStats { display: flex; justify-content: center; gap: 6px; }
+.completionStats > span { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 99px; background: var(--ui-mint); color: var(--ui-green); font-size: 14px; font-weight: 800; }
+.campaignCard .completionStats svg { width: 16px; height: 16px; }
+.campaignCard .starHint { margin-top: 8px; color: var(--ui-body); font-size: 14px; }
+.purchaseCreative { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; margin-top: 14px; padding: 12px 14px 12px 8px; border: 2px solid color-mix(in srgb, var(--product-tint) 45%, white); border-radius: 20px; background: color-mix(in srgb, var(--product-tint) 14%, white); text-align: left; }
+.purchaseProduct img, .purchaseProduct [role="img"] { width: 96px; height: 104px; }
+.adBadge { display: inline-block; margin-bottom: 4px; padding: 1px 8px; border-radius: 99px; background: #fff; color: #7a3a4f; font-size: 13px; font-weight: 800; }
+.purchaseCreative h3 { color: #6e2a43; font-size: 17px; font-weight: 900; line-height: 1.35; letter-spacing: -.04em; white-space: pre-line; }
+.purchaseCreative h3:focus { outline: none; }
+.purchaseCreative p { margin-top: 4px; color: #5d4950; font-size: 13px; font-weight: 650; }
 
 @media (hover: hover) {
-  .campaignCard .primaryButton:not(:disabled):hover { background: #006c51; }
-  .brandChoice:hover, .quizAnswers button:not([data-wrong="true"]):hover, .actions [data-platform-return]:hover, .campaignCard .secondaryButton:hover { background: var(--ui-mint); }
+  .campaignCard .primaryButton:not(:disabled):hover { background: #0c6a4b; }
+  .brandChoice:not([data-selected="true"]):not([data-wrong="true"]):hover, .actions [data-platform-return]:hover, .campaignCard .secondaryButton:hover { background: var(--ui-mint); }
 }
 
 @media (max-width: 359px) {
-  .campaignCard { padding: 20px 14px; }
+  .campaignCard { padding-inline: 12px; }
   .brandChoices { gap: 5px; }
+  .campaignCard .sparkTitle { font-size: 25px; white-space: nowrap; }
+  .sparkTitle svg { display: none; }
+  .brandChoice { padding-inline: 2px; }
+  .brandChoice strong { font-size: 14px; letter-spacing: -.07em; white-space: nowrap; }
+  .campaignCard .quizTitle { font-size: 22px; }
   .missionCard > div { grid-template-columns: minmax(0, 1fr); }
-  .missionCard svg { display: none; }
-  .campaignCard h2 { font-size: 26px; }
-  .completionStats > span { padding-inline: 7px; }
+  .campaignCard .missionCard svg { display: none; }
 }
 
-/* On short screens trim illustration/spacing, never type or touch targets. */
+/* Short screens: trim illustration and spacing, never type or touch targets. */
 @media (max-height: 720px) {
-  .campaignCard { padding-block: 18px; }
-  .campaignCard .startTitle { margin-bottom: 14px; }
-  .choiceProduct { height: 88px; }
-  .quizProduct { width: 126px; height: 102px; margin-block: 12px; }
-  .quizProduct > img, .quizProduct > [role="img"] { height: 94px; }
-  .purchaseProduct img, .purchaseProduct [role="img"] { height: 108px; }
+  .campaignCard .hero { width: 220px; }
+  .choiceProduct { height: 84px; }
+  .campaignCard .sparkTitle { margin-bottom: 12px; }
 }
 
-/* Run result: stars from bumps and deliveries (this run only, not a reward). */
-.runStars { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; gap: 4px 6px; margin: 8px 0 2px; }
-.runStars i { font-style: normal; font-size: 34px; line-height: 1; color: #e3e6dd; text-shadow: 0 2px 0 #ffffff; }
-.runStars i[data-on="true"] { color: #ffc93c; text-shadow: 0 2px 6px #ffb3006b; animation: starPop .4s cubic-bezier(.2, 1.6, .4, 1) backwards; }
-.runStars i:nth-child(2) { animation-delay: .12s; } .runStars i:nth-child(3) { animation-delay: .24s; }
-.runStars span { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: #4f7a63; }
-@keyframes starPop { from { transform: scale(.2) rotate(-30deg); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .runStars i { animation: none; } }
+@media (max-height: 660px) {
+  .campaignCard .hero { width: 150px; margin-bottom: 0; }
+  .choiceProduct { height: 70px; }
+  .brandChoice { padding-top: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runStars svg, .brandChoice[data-wrong="true"] { animation: none; }
+}

@@ -82,7 +82,7 @@ async function checkReturn(label) {
     const r = link.getBoundingClientRect(), card = link.parentElement.getBoundingClientRect();
     return {href:link.href,count:document.querySelectorAll("[data-platform-return]").length,width:r.width,height:r.height,left:r.left,right:r.right,bottom:r.bottom,visible:r.top>=Math.max(card.top,0)&&r.bottom<=Math.min(card.bottom,innerHeight),pageOverflow:document.documentElement.scrollWidth>innerWidth,text:link.textContent.trim()};
   });
-  assert.equal(bounds.href, home); assert.equal(bounds.count, 1); assert.equal(bounds.text, "플랫폼으로");
+  assert.equal(bounds.href, home); assert.equal(bounds.count, 1); assert.equal(bounds.text, "뒤로 가기");
   assert(bounds.height >= 44 && bounds.width >= 44, label + " touch size");
   assert(!bounds.pageOverflow && bounds.visible, label + " visibility: " + JSON.stringify(bounds));
   results.push({ label, ...bounds });

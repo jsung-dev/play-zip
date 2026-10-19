@@ -225,7 +225,7 @@ try {
   assert.equal(await evaluate('document.querySelector("input:checked")'),null,'restart resets selection');
   for(const brand of ['seoul','delicious']){
     await start(brand);await arriveQuiz(0);
-    assert(await evaluate('document.querySelector("[data-brand-quiz] img").src.includes("/'+brand+'/")'));
+    assert(await evaluate('document.querySelector("[data-brand-quiz] [data-quiz-answer=\\"'+brand+'\\"] img").src.includes("/'+brand+'/")'));
     await touch(`[data-quiz-answer="${brand}"]`);await until(async()=>(await state()).status==='playing','alternate brand answer');
     await finish();assert.equal(await evaluate('document.querySelector("[data-purchase-ad]").dataset.purchaseAd'),brand);
     assert(await run(name=>document.querySelector('[data-purchase-ad]').textContent.includes(name),DELIVERY_BRANDS[brand].productName));

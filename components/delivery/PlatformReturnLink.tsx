@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { PLATFORM_HOME_URL } from "@/data/platform-navigation";
 import styles from "./DeliveryGame.module.css";
 
-export function PlatformReturnLink({ confirmLeave = false }: { confirmLeave?: boolean }) {
+export function PlatformReturnLink({ confirmLeave = false, label = "뒤로 가기" }: { confirmLeave?: boolean; label?: string }) {
   return (
     <a
       className={styles.platformReturn}
@@ -19,7 +19,7 @@ export function PlatformReturnLink({ confirmLeave = false }: { confirmLeave?: bo
       }}
     >
       <ArrowLeft aria-hidden="true" />
-      플랫폼으로
+      {label}
     </a>
   );
 }
