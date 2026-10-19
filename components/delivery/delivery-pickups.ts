@@ -23,7 +23,8 @@ export const RAMPS: Ramp[] = [
   { distance: 283, lane: 1 },
   { distance: 590, lane: 1, branch: "left" },
   { distance: 590, lane: 1, branch: "right" },
-  { distance: 864, lane: 1 },
+  // 세 번째 골목 출구(858m)에서 38m 떨어뜨림: 나오자마자 점프대가 나오지 않게.
+  { distance: 896, lane: 1 },
 ];
 // Each gap opens just past its ramp; the whole road (all lanes) has fallen in.
 export const GAPS: Gap[] = RAMPS.map(ramp => ({ start: ramp.distance + 1, end: ramp.distance + 1 + GAP_LENGTH, branch: ramp.branch }));
@@ -34,7 +35,7 @@ export const BOOSTERS: Booster[] = [
   { distance: 618, lane: 2, branch: "left" },
   { distance: 618, lane: 0, branch: "right" },
   { distance: 735, lane: 0 },
-  { distance: 897, lane: 2 },
+  { distance: 884, lane: 2 },
 ];
 
 /** Index of the booster the bike passed through this frame, if any. Coordinates are lane-relative. */

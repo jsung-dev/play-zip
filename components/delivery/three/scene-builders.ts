@@ -14,7 +14,7 @@ import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtr
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
 import { applyRoadSurfaceUV, createRoadSurfaceMaterial, createRestrictedSurfaceMaterial, ROAD_SURFACE } from "./road-surface";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
-import { BUS_AD_PANELS, DESTINATION_OVERHEAD_AD } from "@/data/delivery-outdoor-ads";
+import { BUS_AD_PANELS, OVERHEAD_ADS } from "@/data/delivery-outdoor-ads";
 import { createOutdoorAdResources, type OutdoorAdResources } from "./outdoor-ad-material";
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { buildStreetLayout, STREET_BUILDINGS, streetTransform, advertisementSightlines } from "./street-layout";
@@ -612,6 +612,9 @@ function createMover(placement: MoverPlacement, art: SceneArt, resources: Outdoo
   if (placement.kind === "slider") return createSlider(placement, art);
   if (placement.kind === "dropper") return createDropper(placement, art);
   if (placement.kind === "drum") return createDrum(placement, art);
+  if (placement.kind === "geyser") return createGeyser(placement, art);
+  if (placement.kind === "lanegate") return createLaneGate(placement, art);
+  if (placement.kind === "cart") return createCart(placement, art);
   if (placement.kind === "pigeons") return createPigeons(placement, art);
   return createCat(placement, art);
 }
@@ -795,20 +798,102 @@ function createSlider(placement: MoverPlacement, art: SceneArt): MoverRig {
   return { placement, group, animate: (_t, _moving, seconds) => { lamp.visible = Math.sin(seconds * 8) > 0; } };
 }
 
-// A parcel dropped from above into the rider's lane. The shadow appears and
-// grows first, so a quick lane change or a jump avoids it; then it rests there.
+// Something dropped from above: a parcel, a flowerpot or a watermelon. Its
+// shadow appears and grows first, so a quick lane change or a jump avoids it;
+// then it rests where it landed.
 function createDropper(placement: MoverPlacement, art: SceneArt): MoverRig {
   const group = new THREE.Group();
   const shadow = art.shadow(group, 1.8, 1.6);
-  const parcel = new THREE.Group(); group.add(parcel);
-  art.put(parcel, art.box(1.3, .95, 1.1, "#f0b273", .06), 0, .48, 0);
-  art.put(parcel, art.box(.2, .97, 1.12, "#fff3c4", .02), 0, .48, 0);
-  art.put(parcel, art.box(1.32, .2, .2, "#fff3c4", .02), 0, .97, 0);
+  const thing = new THREE.Group(); group.add(thing);
+  if (placement.look === "pot") {
+    art.put(thing, art.cylinder(.55, .38, .62, "#d9733f"), 0, .31, 0);
+    art.put(thing, art.cylinder(.62, .62, .12, "#e8895a"), 0, .66, 0);
+    art.put(thing, art.sphere(.5, "#5fbf6a"), 0, 1.0, 0);
+    for (const [x, z, c] of [[-.3, .1, "#ff6fa8"], [.28, -.12, "#ffd23d"], [.05, .3, "#ff6fa8"]] as const) art.put(thing, art.sphere(.16, c), x, 1.32, z);
+  } else if (placement.look === "melon") {
+    const melon = art.sphere(.62, "#4fb85f"); melon.scale.set(1.15, .95, 1); art.put(thing, melon, 0, .6, 0);
+    for (const rot of [0, Math.PI / 3, -Math.PI / 3]) {
+      const stripe = new THREE.Mesh(new THREE.TorusGeometry(.62, .035, 6, 24), art.material("#2f8f45"));
+      stripe.scale.set(1.15, .95, 1); stripe.rotation.set(0, rot, 0); stripe.position.y = .6; thing.add(stripe);
+    }
+    art.put(thing, art.cylinder(.05, .06, .16, "#7a5a2b"), 0, 1.2, 0);
+  } else {
+    art.put(thing, art.box(1.3, .95, 1.1, "#f0b273", .06), 0, .48, 0);
+    art.put(thing, art.box(.2, .97, 1.12, "#fff3c4", .02), 0, .48, 0);
+    art.put(thing, art.box(1.32, .2, .2, "#fff3c4", .02), 0, .97, 0);
+  }
   return { placement, group, animate: (_t, moving, _seconds, pose) => {
-    parcel.visible = moving; shadow.visible = moving;
-    parcel.position.y = pose.y;
-    parcel.rotation.z = pose.y > .05 ? pose.y * .12 : 0;
+    thing.visible = moving; shadow.visible = moving;
+    thing.position.y = pose.y;
+    thing.rotation.z = pose.y > .05 ? pose.y * .12 : 0;
+    thing.rotation.y = placement.look === "melon" && pose.y > .05 ? pose.y * .5 : 0;
     shadow.scale.setScalar(.4 + .6 * (1 - pose.y / DROP.height));
+  } };
+}
+
+// A manhole in one lane: the cover rattles and puffs (warning), then a column of
+// steam blasts up. Three side by side, on staggered timers, make a rolling wave.
+function createGeyser(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group();
+  art.put(group, art.cylinder(.78, .78, .04, "#3f4d4b"), 0, .02, 0);
+  const cover = art.cylinder(.6, .6, .06, "#8a9a96"); art.put(group, cover, 0, .07, 0);
+  const steam = new THREE.MeshBasicMaterial({ color: "#f2fbff", transparent: true, opacity: .8, toneMapped: false, depthWrite: false });
+  const plume = new THREE.Mesh(new THREE.CylinderGeometry(.5, .72, 3, 14, 1, true), steam); group.add(plume);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(.85, 14, 10), steam); group.add(cap);
+  const puffs = [0, 1, 2].map(n => { const puff = new THREE.Mesh(new THREE.SphereGeometry(.22, 10, 8), steam); group.add(puff); return puff; });
+  return { placement, group, animate: (_t, _moving, seconds, pose) => {
+    const blast = pose.lift, warn = pose.y;
+    plume.visible = cap.visible = blast > .02;
+    plume.scale.set(1, Math.max(.01, blast), 1); plume.position.y = 1.5 * blast;
+    cap.position.y = 3 * blast + .2; cap.scale.setScalar(.6 + .4 * blast);
+    cover.position.y = .07 + (warn > 0 ? Math.abs(Math.sin(seconds * 40)) * .05 * warn : 0) + blast * .12;
+    cover.rotation.z = warn > 0 ? Math.sin(seconds * 37) * .08 * warn : 0;
+    puffs.forEach((puff, n) => {
+      puff.visible = warn > 0 && blast < .1;
+      const f = (seconds * 1.4 + n / 3) % 1;
+      puff.position.set((n - 1) * .25, .25 + f * 1.1 * warn, 0); puff.scale.setScalar(.5 + f * warn);
+    });
+  } };
+}
+
+// One barrier arm over one lane, with a red/green lamp. Three of these on
+// staggered timers: read the lamps and slip through whichever lane is open.
+function createLaneGate(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group(), half = DELIVERY_GAME_CONFIG.laneSpacing / 2 - .08;
+  art.put(group, art.box(.4, 1.6, .4, "#f4f1e8", .08), -half, .8, 0);
+  art.put(group, art.box(.5, .1, .5, "#3f4d4b", .04), -half, .05, 0);
+  art.put(group, art.box(.14, .55, .14, "#f4f1e8", .04), half, .28, 0);
+  const lamp = (color: string) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.15, 12, 10), new THREE.MeshBasicMaterial({ color, toneMapped: false })); m.position.set(-half, 1.78, .1); group.add(m); return m; };
+  const red = lamp("#ff3b3b"), green = lamp("#3be07a");
+  const pivot = new THREE.Group(); pivot.position.set(-half, 1.0, 0); group.add(pivot);
+  const length = half * 2;
+  for (let n = 0; n < 6; n++) art.put(pivot, art.box(length / 6 + .01, .18, .14, n % 2 ? "#ffffff" : "#ff4d5a", .05), (n + .5) * length / 6, 0, 0);
+  return { placement, group, animate: (_t, _moving, seconds, pose) => {
+    pivot.rotation.z = pose.lift * Math.PI * .45;
+    const closed = pose.lift < .35;
+    red.visible = closed || (pose.lift < .9 && Math.sin(seconds * 14) > 0); // flickers as it moves
+    green.visible = !closed && pose.lift >= .9;
+  } };
+}
+
+// A runaway shopping cart full of milk crates, racing kerb to kerb.
+function createCart(placement: MoverPlacement, art: SceneArt): MoverRig {
+  const group = new THREE.Group(), facing = new THREE.Group(); group.add(facing);
+  art.shadow(facing, 1.6, 1.2);
+  const body = new THREE.Group(); body.position.y = .12; facing.add(body);
+  art.put(body, art.box(1.2, .06, .8, "#cfd8d6", .02), 0, .3, 0);
+  for (const [x, z, w, d] of [[0, .4, 1.2, .05], [0, -.4, 1.2, .05], [.6, 0, .05, .8], [-.6, 0, .05, .8]] as const) art.put(body, art.box(w, .5, d, "#e8eeec", .02), x, .56, z);
+  art.put(body, art.box(.08, .08, .9, "#3f4d4b", .02), -.7, .98, 0);
+  art.put(body, art.box(.06, .7, .06, "#3f4d4b"), -.66, .66, .4); art.put(body, art.box(.06, .7, .06, "#3f4d4b"), -.66, .66, -.4);
+  for (const [x, c] of [[-.25, "#38b6ff"], [.25, "#ff6fa8"]] as const) art.put(body, art.box(.42, .36, .6, c, .04), x, .55, 0);
+  art.put(body, art.box(.4, .3, .55, "#ffb02e", .04), 0, .88, 0);
+  const wheels = [[.45, .35], [.45, -.35], [-.45, .35], [-.45, -.35]].map(([x, z]) => { const w = art.cylinder(.12, .12, .08, "#3f4d4b"); w.rotation.x = Math.PI / 2; art.put(body, w, x, .0, z); return w; });
+  let lastX = 0, dir = 1;
+  return { placement, group, animate: (t, moving, _seconds, pose) => {
+    if (Math.abs(pose.x - lastX) > .001) dir = pose.x > lastX ? 1 : -1;
+    lastX = pose.x; facing.rotation.y = dir > 0 ? 0 : Math.PI;
+    wheels.forEach(w => { w.rotation.y = moving ? t * 22 : 0; });
+    body.rotation.z = moving ? Math.sin(t * 17) * .03 : 0; body.position.y = .12 + (moving ? Math.abs(Math.sin(t * 17)) * .03 : 0);
   } };
 }
 
@@ -962,8 +1047,10 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
     root.add(ad);
     worldObjects.push(ad);
   }
-  const overhead = createOverheadAdvertisement(DESTINATION_OVERHEAD_AD, art, outdoorResources);
-  root.add(overhead); worldObjects.push(overhead);
+  for (const placement of OVERHEAD_ADS) {
+    const overhead = createOverheadAdvertisement(placement, art, outdoorResources);
+    root.add(overhead); worldObjects.push(overhead);
+  }
 
   for (const placement of BUS_PLACEMENTS) {
     const bus = createBus(placement, art, outdoorResources);

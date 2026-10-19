@@ -87,9 +87,7 @@ async function fixture(values) {
   }, values);
 }
 async function start(brand) {
-  await touch(`label:has(input[value="${brand}"])`);
-  assert.equal(await evaluate('document.querySelector("input:checked").value'),brand);
-  await touch('[data-campaign-screen="start"] button');
+  await touch(`[data-brand-choice="${brand}"]`);
   await until(async()=>(await state()).status==="playing","start game");
   assert.equal((await state()).brand,brand);
 }
@@ -156,7 +154,6 @@ try {
   await send("Page.enable");await send("Runtime.enable");await send("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:5});
   await load();
   if (from === 'captures') {
-    await touch('label:has(input[value="mongle"])');
     // One real touch-pan check in addition to the layout/scroll bounds checks.
     await size(335,568);
     await run(()=>{document.querySelector('[data-campaign-screen]').scrollTop=0;});
@@ -178,16 +175,10 @@ try {
     console.log('Three production UI captures saved: '+out);
   } else {
   if (from === 'start') {
-  assert.equal(await evaluate('document.querySelector("input:checked")'),null);
-  assert(await evaluate('document.querySelector("[data-campaign-screen] button").disabled'));
-  await contrast("start-unselected");
-  for(const brand of ['seoul','delicious','mongle']){
-    await touch(`label:has(input[value="${brand}"])`);
-    assert.equal(await evaluate('document.querySelectorAll("label[data-selected=true]").length'),1);
-    assert.equal(await evaluate('document.querySelector("input:checked").value'),brand);
-  }
+  assert.equal(await evaluate('document.querySelectorAll("[data-brand-choice]").length'),3,'three milk choices');
+  assert.equal((await state()).status,'ready');
   for(const [w,h] of sizes)await checkLayout('start',w,h);
-  await contrast('start-selected');
+  await contrast('start');
   }
   await size(390,844); await start('mongle');
   if (from === 'start') {
@@ -222,7 +213,7 @@ try {
   await contrast('purchase-preview');await screenshot('purchase-preview-390');
   await touch('button[class*="textButton"]');assert.equal(await evaluate('document.querySelector("[data-purchase-preview]").dataset.purchasePreview'),'false');
   await touch('button[class*="secondaryButton"]');assert.equal((await state()).status,'ready');assert.equal((await state()).position,0);assert.equal((await state()).passed,0);
-  assert.equal(await evaluate('document.querySelector("input:checked")'),null,'restart resets selection');
+  assert.equal(await evaluate('document.querySelectorAll("[data-brand-choice]").length'),3,'restart returns to the milk choice');
   for(const brand of ['seoul','delicious']){
     await start(brand);await arriveQuiz(0);
     assert(await evaluate('document.querySelector("[data-brand-quiz] [data-quiz-answer=\\"'+brand+'\\"] img").src.includes("/'+brand+'/")'));

@@ -24,10 +24,10 @@ for (const o of OBSTACLE_PLACEMENTS) {
   assert(o.lane + (o.span ?? 1) - 1 <= 2, `${o.id} stays on the three through lanes`);
 }
 
-// Jump obstacles avoid start, alley approaches/exits, the detour and the final approach.
-const blocked: [number, number][] = [[0, 100], [ROAD_CLOSURE.junctionDistance - 60, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
+// Jump obstacles avoid the start, the last 30 m before each alley, alley exits, the detour and the final approach.
+const blocked: [number, number][] = [[0, 70], [ROAD_CLOSURE.junctionDistance - 60, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
 for (const [i, stop] of DELIVERY_STOPS.entries()) {
-  blocked.push([stop.distance - TURN_LANE.approach - TURN_LANE.taper, stop.distance + TURN_LANE.tail]);
+  blocked.push([stop.distance - 30, stop.distance + TURN_LANE.tail]);
   const exit = getDrivewayExitDistance(i);
   // Only the merge itself; reversing back into an exit is rare, so obstacles may follow it.
   blocked.push([exit - DRIVEWAY_ROUTE.passMargin, exit + 15]);

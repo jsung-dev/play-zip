@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { OUTDOOR_ADS, OUTDOOR_AD_FORMATS, DESTINATION_OVERHEAD_AD } from "../data/delivery-outdoor-ads";
+import { OUTDOOR_ADS, OUTDOOR_AD_FORMATS, OVERHEAD_ADS } from "../data/delivery-outdoor-ads";
 import { createSceneArt } from "../components/delivery/three/scene-art";
 import { createOutdoorAdResources } from "../components/delivery/three/outdoor-ad-material";
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "../components/delivery/three/outdoor-ad-model";
@@ -36,24 +36,26 @@ for (const ad of OUTDOOR_ADS) {
     }
   }
 }
-const ad=DESTINATION_OVERHEAD_AD, overhead=createOverheadAdvertisement(ad,art,resources), frame=getRouteFrame(ad.distance);
+for(const ad of OVERHEAD_ADS){
+const overhead=createOverheadAdvertisement(ad,art,resources), frame=getRouteFrame(ad.distance,ad.route??"main");
 assert(overhead.position.distanceTo(frame.position)<1e-8&&overhead.rotation.y===frame.yaw);
 const panel=overhead.getObjectByName(`outdoor-ad:${ad.id}`) as THREE.Mesh;
 assert.equal(panel.scale.x/panel.scale.y,4);
 assert.equal((panel.material as THREE.Material).userData.state,"fallback");
 assert.equal(panel.material,resources.material({id:"shared-banner",format:"banner",image:null}),"Overhead shares existing banner texture/material");
-assert(overhead.userData.clearance>7,"Open span above camera and vehicles");
-assert(ad.supportSpan/2-.325>7.8,"Support feet outside riding and bus lanes");
+assert(overhead.userData.clearance>7,`${ad.id}: open span above camera and vehicles`);
+assert(ad.supportSpan/2-.325>(ad.route?4.6:7.8),"Support feet outside riding (and main-road bus) lanes");
 for(const side of [-1,1]){
   const p=frame.position.clone().addScaledVector(frame.lateral,side*ad.supportSpan/2);
   const footprint=rectangle(p,frame.yaw,-.325,.325,-.695,.055);
-  for(const lot of buildStreetLayout())assert(!polygonsOverlap(footprint,lot.footprint),`Gantry support cannot intrude into ${lot.id}`);
+  for(const lot of buildStreetLayout())assert(!polygonsOverlap(footprint,lot.footprint),`${ad.id}: gantry support cannot intrude into ${lot.id}`);
 }
 overhead.position.set(0,0,0);overhead.rotation.set(0,0,0);overhead.updateMatrixWorld(true);
 // A ray along each lane below the banner must not hit any support/frame.
 const raycaster=new THREE.Raycaster();
-for(const x of [-6.1,-2.5,0,2.5,6.1])for(const y of [.5,2.5,5.7]){
+for(const x of ad.route?[-4.2,-2.5,0,2.5,4.2]:[-6.1,-2.5,0,2.5,6.1])for(const y of [.5,2.5,5.7]){
   raycaster.set(new THREE.Vector3(x,y,5),new THREE.Vector3(0,0,-1));
-  assert.equal(raycaster.intersectObject(overhead,true).length,0,"Road/camera corridor remains open");
+  assert.equal(raycaster.intersectObject(overhead,true).length,0,`${ad.id}: road/camera corridor remains open`);
 }
-console.log(`Verified ${OUTDOOR_ADS.length} existing ads and one 4:1 overhead banner: fallback, shared material, support clearance, unobstructed riding.`);
+}
+console.log(`Verified ${OUTDOOR_ADS.length} existing ads and ${OVERHEAD_ADS.length} 4:1 overhead banners: fallback, shared material, support clearance, unobstructed riding.`);

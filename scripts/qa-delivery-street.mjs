@@ -85,11 +85,7 @@ try {
       try { if (await evaluate(`(() => { const el = document.querySelector('[data-game-status]'); const c = document.querySelector('canvas'); return !!el && Object.keys(el).some(k => k.startsWith('__reactFiber$')) && !!c && c.getBoundingClientRect().height > 180 && getComputedStyle(el).display === 'grid'; })()`)) break; } catch {}
     }
     for (let n = 0; n < 30; n++) {
-      await evaluate(`document.querySelector('input[value="${brand === 'seoul' ? 'mongle' : 'seoul'}"]')?.click()`);
-      await delay(100);
-      await evaluate(`document.querySelector('input[value="${brand}"]')?.click()`);
-      await delay(150);
-      await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('배달 출발'))?.click()`);
+      await evaluate(`document.querySelector('[data-brand-choice="${brand}"]')?.click()`);
       await delay(300);
       if (await evaluate(`document.querySelector('[data-game-status]').dataset.gameStatus === 'playing'`)) break;
     }

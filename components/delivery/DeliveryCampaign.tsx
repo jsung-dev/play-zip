@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, ArrowRight, Check, House, MapPin, RotateCcw, ShoppingBag, X } from "lucide-react";
+import { ArrowLeft, House, MapPin, RotateCcw, ShoppingBag, X } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
 import { DELIVERY_BRAND_CHOICES, DELIVERY_QUIZ_QUESTIONS, PURCHASE_AD, type DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS } from "@/data/delivery-map";
@@ -40,55 +40,37 @@ export function useDialogFocus() {
   return ref;
 }
 
-export function DeliveryBrandStart({ selected, onSelect, onStart }: {
-  selected: DeliveryChoiceId | null;
-  onSelect: (id: DeliveryChoiceId) => void;
-  onStart: () => void;
-}) {
+export function DeliveryBrandStart({ onStart }: { onStart: (id: DeliveryChoiceId) => void }) {
   const ref = useDialogFocus();
   return <div className={styles.overlay}>
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.startCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-start-title" data-campaign-screen="start">
       <DeliveryHero className={styles.hero} />
       <p className={styles.eyebrow}>동네 배달</p>
       <h1 id="delivery-start-title" className={styles.sparkTitle}><Spark />우유를 골라 주세요<Spark flip /></h1>
-      <DeliveryBrandSelector selected={selected} onSelect={onSelect} />
+      <p className={styles.startHint}>고르면 바로 출발해요!</p>
+      <div className={styles.brandChoices}>
+        {DELIVERY_BRAND_CHOICES.map(id => <button key={id} type="button" className={styles.brandChoice} style={brandStyle(DELIVERY_BRANDS[id])} data-brand-choice={id} onClick={() => onStart(id)}>
+          <MilkCard id={id} />
+        </button>)}
+      </div>
       <dl className={styles.missionCard}>
         <div><HouseArt /><dt>경유 배달</dt><dd>동네 {stopCountLabel}</dd></div>
         <div><ApartmentArt /><dt>마지막 목적지</dt><dd>{DELIVERY_GAME_CONFIG.destinationName}</dd></div>
       </dl>
-      <div className={styles.actions}>
-        <button className={styles.primaryButton} type="button" disabled={!selected} onClick={onStart}>배달 출발! <ArrowRight aria-hidden="true" /></button>
-        <PlatformReturnLink />
-      </div>
+      <div className={styles.actions}><PlatformReturnLink /></div>
       <small className={styles.notice}>테스트용 디자인 · 공식 광고가 아니며 실제 구매로 연결되지 않아요</small>
     </article>
   </div>;
 }
 
-/** One milk carton card; used as a radio on the start screen and as an answer in the quiz. */
-function MilkCard({ id, selected, wrong }: { id: DeliveryChoiceId; selected: boolean; wrong?: boolean }) {
+/** One milk carton card; a start button on the first screen, an answer button in the quiz. */
+function MilkCard({ id, wrong }: { id: DeliveryChoiceId; wrong?: boolean }) {
   const brand = DELIVERY_BRANDS[id];
   return <>
-    <span className={styles.choiceCheck} aria-hidden="true">{selected && <Check />}{wrong && <X />}</span>
+    {wrong && <span className={styles.choiceCheck} aria-hidden="true"><X /></span>}
     <BrandImage className={styles.choiceProduct} brand={brand} kind="product" alt="" />
     <strong>{brand.name}</strong>
   </>;
-}
-
-export function DeliveryBrandSelector({ selected, onSelect }: {
-  selected: DeliveryChoiceId | null;
-  onSelect: (id: DeliveryChoiceId) => void;
-}) {
-  return (
-    <fieldset className={styles.brandSelector} aria-label="오늘 배달할 우유">
-      <div className={styles.brandChoices}>
-        {DELIVERY_BRAND_CHOICES.map((id) => <label key={id} className={styles.brandChoice} style={brandStyle(DELIVERY_BRANDS[id])} data-selected={selected === id}>
-          <input type="radio" name="delivery-brand" value={id} checked={selected === id} onChange={() => onSelect(id)} />
-          <MilkCard id={id} selected={selected === id} />
-        </label>)}
-      </div>
-    </fieldset>
-  );
 }
 
 export function DeliveryBrandQuiz({ brand, stopIndex, address, onCorrect }: {
@@ -117,7 +99,7 @@ export function DeliveryBrandQuiz({ brand, stopIndex, address, onCorrect }: {
       <p className={styles.quizAddress}><MapPin aria-hidden="true" />{address} 도착 · 정답을 맞히면 배달 완료!</p>
       <div className={styles.brandChoices}>
         {DELIVERY_BRAND_CHOICES.map(id => <button key={wrongAnswer === id ? `${id}-wrong` : id} type="button" className={styles.brandChoice} data-quiz-answer={id} data-wrong={wrongAnswer === id} onClick={() => answer(id)}>
-          <MilkCard id={id} selected={false} wrong={wrongAnswer === id} />
+          <MilkCard id={id} wrong={wrongAnswer === id} />
         </button>)}
       </div>
       <div className={styles.quizFeedback} role="status" aria-live="polite">

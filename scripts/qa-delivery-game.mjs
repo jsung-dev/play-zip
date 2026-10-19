@@ -163,9 +163,7 @@ async function waitForGame(cdp) {
 
 async function startDeliveryGame(cdp, brand = SELECTED_BRAND) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    await cdp.evaluate(`document.querySelector('input[name="delivery-brand"][value="${brand}"]')?.click()`);
-    await delay(100);
-    await cdp.evaluate(`([...document.querySelectorAll('button')].find((button) => button.textContent.includes('배달 출발')))?.click()`);
+    await cdp.evaluate(`document.querySelector('[data-brand-choice="${brand}"]')?.click()`);
     await delay(300);
     if ((await readGameState(cdp)).status === "playing") return;
   }
@@ -256,7 +254,7 @@ try {
     await waitForGame(cdp);
     const layout = await cdp.evaluate(`(() => {
       const frame = document.querySelector('[aria-label="몽글몽글 3D 자전거 배달 게임"]')?.getBoundingClientRect();
-      const start = [...document.querySelectorAll('button')].find((button) => button.textContent.includes('배달 출발'))?.getBoundingClientRect();
+      const start = document.querySelector('[data-brand-choice]')?.getBoundingClientRect();
       const canvas = document.querySelector('canvas')?.getBoundingClientRect();
       return {
         width: innerWidth,
@@ -267,9 +265,8 @@ try {
         start: start && { left: start.left, right: start.right, top: start.top, bottom: start.bottom },
         canvas: canvas && { width: canvas.width, height: canvas.height },
       copy: document.body.innerText.includes('세 집에 들러 배달해요'),
-      brandCount: document.querySelectorAll('input[name="delivery-brand"]').length,
-      disabledBeforeSelection: [...document.querySelectorAll('button')].find(button => button.textContent.includes('배달 출발'))?.disabled,
-      cardOverflow: (() => { const card = document.querySelector('fieldset')?.closest('article'); return card ? card.scrollHeight - card.clientHeight : -1; })(),
+      brandCount: document.querySelectorAll('[data-brand-choice]').length,
+      cardOverflow: (() => { const card = document.querySelector('[data-campaign-screen="start"]'); return card ? card.scrollHeight - card.clientHeight : -1; })(),
       };
     })()`);
     assert(layout.width === width, `${width}px viewport was not applied`);
@@ -279,7 +276,7 @@ try {
     assert(layout.start?.top >= 0 && layout.start?.bottom <= height, `${width}x${height} start button is outside viewport`);
     assert(layout.canvas?.width > 0 && layout.canvas?.height > 180, `${width}px 3D canvas is not visible`);
     assert(layout.copy, `${width}px hold-control guidance is missing`);
-    assert(layout.brandCount === 3 && layout.disabledBeforeSelection, "Brand must be selected before starting");
+    assert(layout.brandCount === 3, "Three milk choices start the ride");
     assert(layout.cardOverflow <= 1, `Start card requires scrolling at ${width}x${height}: ${layout.cardOverflow}`);
     results.responsive.push(layout);
   }
@@ -295,13 +292,18 @@ try {
   await cdp.send("Page.reload", { ignoreCache: true });
   await waitForGame(cdp);
   for (const id of ["mongle", "seoul", "delicious"]) {
-    await cdp.evaluate(`document.querySelector('input[name="delivery-brand"][value="${id}"]').click()`);
+    await cdp.send("Page.reload", { ignoreCache: true });
+    await waitForGame(cdp);
+    const loaded = await cdp.evaluate(`([...document.querySelectorAll('[data-brand-choice] img')].every(img => img.complete && img.naturalWidth > 0))`);
+    assert(loaded, `Brand artwork did not load for ${id}`);
+    // Tapping a milk starts the ride straight away.
+    await cdp.evaluate(`document.querySelector('[data-brand-choice="${id}"]').click()`);
     await delay(500);
-    assert((await readGameState(cdp)).brand === id, `Brand selection did not propagate: ${id}`);
-    const loaded = await cdp.evaluate(`([...document.querySelectorAll('fieldset img')].every(img => img.complete && img.naturalWidth > 0))`);
-    assert(loaded, `Brand artwork did not load after selecting ${id}`);
+    const state = await readGameState(cdp);
+    assert(state.brand === id && state.status === "playing", `Tapping ${id} did not start with that brand`);
   }
-  await cdp.evaluate(`document.querySelector('input[name="delivery-brand"][value="${SELECTED_BRAND}"]').click()`);
+  await cdp.send("Page.reload", { ignoreCache: true });
+  await waitForGame(cdp);
   if (START_SCREENSHOT_PATH) {
     await delay(800);
     const screenshot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });

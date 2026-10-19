@@ -50,7 +50,7 @@
 .campaignCard h1, .campaignCard h2 { color: var(--ui-title); font-weight: 900; letter-spacing: -.05em; text-wrap: balance; }
 .campaignCard svg { flex-shrink: 0; width: 22px; height: 22px; stroke-width: 2.2; }
 .campaignCard button, .campaignCard a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.campaignCard button:focus-visible, .campaignCard a:focus-visible, .brandChoice:has(input:focus-visible) { outline: 3px solid var(--ui-green); outline-offset: 3px; }
+.campaignCard button:focus-visible, .campaignCard a:focus-visible { outline: 3px solid var(--ui-green); outline-offset: 3px; }
 .campaignCard img { display: block; object-fit: contain; }
 .campaignCard [role="img"] b { font-size: 15px; }
 .campaignCard [role="img"] small { font-size: 13px; }
@@ -59,6 +59,7 @@
 .eyebrow { color: var(--ui-green); font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
 .campaignCard .sparkTitle { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 16px; font-size: 30px; line-height: 1.25; }
 .sparkTitle svg { width: 26px; height: 26px; }
+.campaignCard .startHint { margin: -8px 0 12px; color: var(--ui-body); font-size: 15px; font-weight: 650; }
 
 /* Milk cards: radio on the start screen, answer buttons in the quiz. */
 .brandSelector { min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -72,7 +73,7 @@
   align-items: center;
   gap: 6px;
   margin: 0;
-  padding: 30px 4px 12px;
+  padding: 14px 4px 12px;
   border: 2px solid var(--ui-border);
   border-radius: 18px;
   background: var(--ui-paper);
@@ -84,11 +85,8 @@
   transition: transform .12s, border-color .12s, background-color .12s;
 }
 .brandChoice:active { transform: scale(.97); }
-.brandChoice[data-selected="true"] { border-color: var(--ui-pick); background: var(--ui-mint); }
 .brandChoice[data-wrong="true"] { border-color: var(--ui-wrong); background: #fff3f5; animation: shake .35s; }
-.brandChoice input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .choiceCheck { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #c5d6cf; border-radius: 50%; background: #fff; }
-.brandChoice[data-selected="true"] .choiceCheck { border-color: var(--ui-green); background: var(--ui-green); color: #fff; }
 .brandChoice[data-wrong="true"] .choiceCheck { border-color: var(--ui-wrong); background: var(--ui-wrong); color: #fff; }
 .campaignCard .choiceCheck svg { width: 15px; height: 15px; stroke-width: 3.2; }
 .choiceProduct { width: 100%; height: 104px; }
@@ -161,7 +159,7 @@
 
 @media (hover: hover) {
   .campaignCard .primaryButton:not(:disabled):hover { background: #0c6a4b; }
-  .brandChoice:not([data-selected="true"]):not([data-wrong="true"]):hover, .actions [data-platform-return]:hover, .campaignCard .secondaryButton:hover { background: var(--ui-mint); }
+  .brandChoice:not([data-wrong="true"]):hover, .actions [data-platform-return]:hover, .campaignCard .secondaryButton:hover { background: var(--ui-mint); }
 }
 
 @media (max-width: 359px) {
@@ -186,7 +184,7 @@
 @media (max-height: 660px) {
   .campaignCard .hero { width: 150px; margin-bottom: 0; }
   .choiceProduct { height: 70px; }
-  .brandChoice { padding-top: 26px; }
+  .brandChoice { padding-top: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -65,9 +65,7 @@ const state = () => run(() => {
   return {status:e.dataset.gameStatus,position:+e.dataset.position,speed:+e.dataset.speed,brand:e.dataset.deliveryBrand,joystickDisabled:document.querySelector("[data-joystick]").disabled};
 });
 async function start() {
-  await touch('label:has(input[value="seoul"])');
-  await until(() => evaluate("!document.querySelector('button[class*=\"primaryButton\"]').disabled"), "brand selected");
-  await touch('button[class*="primaryButton"]');
+  await touch('[data-brand-choice="seoul"]');
   await until(async () => (await state()).status === "playing", "playing");
 }
 async function drive() {

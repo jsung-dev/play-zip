@@ -117,7 +117,7 @@ try {
   else if(m.method==='Runtime.consoleAPICalled'&&m.params.type==='error')errors.push(m.params.args.map(a=>a.value||a.description).join(' '));
  };
  await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
- await load();await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');await until(async()=>(await state()).status==='playing','start');
+ await load();await touch('[data-brand-choice="seoul"]');await until(async()=>(await state()).status==='playing','start');
  if(process.env.GUIDANCE_QA_NEIGHBORHOOD==='1') {
   const frames=[
     ['street',{position:80}],['shops',{position:250}],
@@ -261,7 +261,7 @@ try {
   assert.equal((await details()).count,4);assert.equal((await details()).brand,'seoul');await capture('lane-final-ad-390');
   await touch('[data-purchase-cta]');assert.equal(await run(()=>document.querySelector('[data-purchase-preview]').dataset.purchasePreview),'true');
   await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');assert.equal((await details()).count,0);
-  await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');
+  await touch('[data-brand-choice="seoul"]');
   await fixture({position:990,speed:0,completedStops:[0],quizPassedStops:[0],skippedStops:[1,2],detour:'left'});
   await driveUntil(s=>s.status==='arriving'||s.status==='completed','partial final delivery');await until(async()=>(await details()).status==='completed','partial final ad');
   assert.equal((await details()).count,2);await capture('lane-partial-result-390');
@@ -410,7 +410,7 @@ try {
  const resetAndStart=async()=>{
    await touch('[data-campaign-screen="complete"] button[class*="secondaryButton"]');
    assert.equal((await details()).count,0);assert.equal((await details()).completed,'');assert.equal((await details()).skipped,'');
-   await touch('label:has(input[value="seoul"])');await touch('[data-campaign-screen="start"] button');
+   await touch('[data-brand-choice="seoul"]');
  };
  const finish=async(expected)=>{
    await fixture({position:990,speed:0,driveway:null,detour:'left'});

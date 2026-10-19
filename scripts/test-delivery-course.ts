@@ -21,6 +21,10 @@ const events = [
   ...MOVER_PLACEMENTS.filter(m => moverCollides(m.kind) && m.kind !== "drum").map(m => ({ d: m.distance, route: m.branch ?? "main", id: m.id })),
   ...GAPS.map(g => ({ d: g.start, route: g.branch ?? "main", id: `gap-${g.start}` })),
 ];
+// Detours: each side has its own static obstacles too, so they are not mirror images.
+const staticsOf = (branch: string) => OBSTACLE_PLACEMENTS.filter(o => o.branch === branch).map(o => `${o.kind}${o.lane}${o.span ?? 1}@${o.distance}`).join();
+assert(staticsOf("left") !== "" && staticsOf("left") !== staticsOf("right"), "Left detour has its own obstacles");
+assert(events.filter(e => e.route === "main").length >= 30, "The main road is busy enough");
 for (const route of ["main", "left", "right"]) {
   const list = events.filter(e => e.route === route).sort((a, b) => a.d - b.d);
   for (let i = 1; i < list.length; i++) {

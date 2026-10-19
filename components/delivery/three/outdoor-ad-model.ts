@@ -61,7 +61,7 @@ export function createOverheadAdvertisement(ad: OverheadAdPlacement, art: SceneA
   art.put(group, art.box(ad.width + .13, h + .13, .055, "#fff7e6"), 0, ad.height, .105);
   art.merge(group);
   art.put(group, resources.panel(ad, ad.width), 0, ad.height, .15);
-  const frame = getRouteFrame(ad.distance);
+  const frame = getRouteFrame(ad.distance, ad.route ?? "main");
   group.position.copy(frame.position); group.rotation.y = frame.yaw;
   return group;
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "../data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE } from "../data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE, getDrivewayExitDistance } from "../data/delivery-map";
 import { BOOSTERS, GAPS, GAP_LENGTH, RAMPS, RAMP_MAX_SPEED, RAMP_MIN_SPEED, boosterHit, gapUnder, rampFlight, rampHit } from "../components/delivery/delivery-pickups";
 import { jumpDuration } from "../components/delivery/delivery-jump";
 import { MOVER_PLACEMENTS, moverPose } from "../components/delivery/delivery-movers";
@@ -27,6 +27,8 @@ for (const [i, ramp] of RAMPS.entries()) {
   }
   // Clear of alleys and the fork split.
   for (const stop of DELIVERY_STOPS) assert(Math.abs(ramp.distance - stop.distance) > 40, "Ramp clear of alley entrances");
+  // A rider leaving an alley comes out in the outer lane at low speed: the ramp (centre lane) must be far enough on.
+  if (!ramp.branch) for (const [n] of DELIVERY_STOPS.entries()) { const exit = getDrivewayExitDistance(n); assert(ramp.distance < exit - 40 || ramp.distance > exit + 35, `Ramp ${ramp.distance} too close to alley exit ${exit}`); }
   if (!ramp.branch) assert(ramp.distance < ROAD_CLOSURE.junctionDistance - 40 || ramp.distance > ROAD_CLOSURE.mergeEnd + 10);
 }
 

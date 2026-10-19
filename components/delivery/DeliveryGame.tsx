@@ -65,6 +65,9 @@ type DriveInput = {
 
 const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
 
+// How far past the split a rider may still choose a side road (about 1.8 s at top speed).
+const FORK_SWITCH_METERS = 36;
+
 let toastId = 0;
 // Short on-screen callouts (praise, penalties, section names); the latest wins.
 function showToast(runtime: RuntimeState, text: string, kind: "good" | "bad" | "info", seconds = 1.1) {
@@ -143,13 +146,14 @@ export function DeliveryGame() {
     clearInputs();
   }, [clearInputs]);
 
-  const startGame = useCallback(() => {
-    if (!selectedBrand) return;
+  // Picking a milk starts the ride at once; there is no separate start button.
+  const startGame = useCallback((brand: DeliveryChoiceId) => {
     unlockSound();
+    setSelectedBrand(brand);
     resetRuntime();
     setSessionKey((current) => current + 1);
     setStatus("playing");
-  }, [resetRuntime, selectedBrand]);
+  }, [resetRuntime]);
 
   const returnToStart = useCallback(() => {
     resetRuntime();
@@ -323,8 +327,15 @@ export function DeliveryGame() {
       const junction = ROAD_CLOSURE.junctionDistance;
       if (!runtime.driveway && runtime.position <= junction) {
         runtime.detour = runtime.laneTarget < 1 ? "left" : runtime.laneTarget > 1 ? "right" : "main";
-      } else if (!runtime.driveway && runtime.detour === "main" && runtime.position <= junction + 12 && runtime.laneTarget !== 1) {
-        runtime.detour = runtime.laneTarget < 1 ? "left" : "right";
+      } else if (!runtime.driveway && runtime.detour === "main" && runtime.position <= junction + FORK_SWITCH_METERS && runtime.laneTarget !== 1) {
+        // Rode into the closed middle, then steered out: take that side road now
+        // instead of making the rider go back. The bike keeps its place on screen
+        // and only its lane is re-expressed relative to the new road.
+        const side = runtime.laneTarget < 1 ? "left" : "right";
+        runtime.laneX = runtime.laneFromX = runtime.laneX - getDetourOffset(runtime.position, side);
+        runtime.detour = side;
+        runtime.laneTarget = Math.max(0, Math.min(2, Math.round(runtime.laneX / DELIVERY_GAME_CONFIG.laneSpacing) + 1));
+        runtime.laneStartedAt = timestamp;
       }
       if (runtime.detour !== "main") runtime.closureReached = false;
 
@@ -693,7 +704,7 @@ export function DeliveryGame() {
           )}
         </div>
 
-        {status === "ready" && <DeliveryBrandStart selected={selectedBrand} onSelect={setSelectedBrand} onStart={startGame} />}
+        {status === "ready" && <DeliveryBrandStart onStart={startGame} />}
 
         {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} controlHand={controlHand} onControlHand={changeControlHand} soundOn={soundOn} onToggleSound={toggleSound} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 

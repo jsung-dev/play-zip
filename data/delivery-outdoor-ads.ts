@@ -42,11 +42,28 @@ export const OUTDOOR_ADS: OutdoorAdPlacement[] = [
 // not reserve a solid lot across the street or move the existing 13 billboards.
 export type OverheadAdPlacement = OutdoorCreative & {
   format: "banner"; distance: number; width: number; height: number; supportSpan: number;
+  route?: "main" | "left" | "right"; // 생략 = 큰길. 우회로 위에 세울 때만 지정
 };
 export const DESTINATION_OVERHEAD_AD: OverheadAdPlacement = {
   id: "outdoor-final-overhead", format: "banner", image: null,
   distance: 975, width: 14, height: 9.2, supportSpan: 18.5,
 };
+// 우회로는 큰길보다 좁아(버스 전용 측면 공간 없음) 지주 간격을 12m로 줄여 옆 건물 부지를 피합니다.
+const overhead = (distance: number, width: number, height: number, route?: "left" | "right"): OverheadAdPlacement => ({
+  id: `outdoor-overhead-${route ? `${route}-` : ""}${distance}`, format: "banner", image: null, distance, width, height, supportSpan: route ? 12 : 18.5, ...(route ? { route } : {}),
+});
+// 골목 입구·출구, 갈림길 갈라짐(495~570m) 구간은 피해 도로 위에 일정 간격으로 둡니다.
+export const OVERHEAD_ADS: OverheadAdPlacement[] = [
+  overhead(40, 12, 9),
+  overhead(148, 13, 9.4),
+  overhead(318, 12, 9),
+  overhead(462, 14, 9.6),
+  overhead(604, 11, 9, "left"),
+  overhead(630, 11, 9, "right"),
+  overhead(748, 13, 9.2),
+  overhead(918, 12, 9.4),
+  DESTINATION_OVERHEAD_AD,
+];
 
 export type BusAdPanel = OutdoorCreative & {
   busId: string;

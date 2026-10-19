@@ -11,15 +11,15 @@ export function starsFor(hits: number, deliveries: number, totalDeliveries: numb
 // Named stretches give the ride a shape: warm-up, a first gap, lane work,
 // the fork, moving hazards, then the finale. A banner shows on entry.
 export const SECTIONS = [
-  { from: 95, name: "1구간 · 점프 연습" },
+  { from: 70, name: "1구간 · 점프 연습" },
   { from: 198, name: "2구간 · 지그재그" },
   { from: 245, name: "3구간 · 차단기와 무너진 도로" },
-  { from: 314, name: "4구간 · 움직이는 바리케이드" },
+  { from: 314, name: "4구간 · 바리케이드와 증기" },
   { from: 398, name: "5구간 · 연속 허들" },
   { from: 505, name: "6구간 · 우회로 질주" },
-  { from: 692, name: "7구간 · 버스 조심" },
-  { from: 830, name: "8구간 · 떨어지는 택배" },
-  { from: 894, name: "마지막 · 고양이와 오리 가족" },
+  { from: 692, name: "7구간 · 버스와 수박 소나기" },
+  { from: 830, name: "8구간 · 신호 차선" },
+  { from: 882, name: "마지막 · 무너진 도로와 고양이·오리 가족" },
 ] as const;
 
 export function sectionEntered(previous: number, position: number) {
