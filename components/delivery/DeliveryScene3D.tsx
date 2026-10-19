@@ -6,7 +6,6 @@ import { DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
 import { getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, DELIVERY_STOPS, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
-import { TOWN_COLORS } from "./three/scene-art";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { busTurnLaneClear, type TravelDirection, type TurnChoice } from "./delivery-turns";
@@ -90,24 +89,25 @@ export function DeliveryScene3D({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    // Neutral tone mapping keeps pastel props bright and saturated (ACES greyed them).
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.08;
 
     const scene = new THREE.Scene();
     const skyCanvas = document.createElement("canvas");
     skyCanvas.width = 2; skyCanvas.height = 256;
     const skyContext = skyCanvas.getContext("2d")!;
     const skyGradient = skyContext.createLinearGradient(0, 0, 0, 256);
-    skyGradient.addColorStop(0, "#39b7ef"); skyGradient.addColorStop(.6, "#87d5ee"); skyGradient.addColorStop(1, "#dbebe4");
+    skyGradient.addColorStop(0, "#2aa9f5"); skyGradient.addColorStop(.6, "#86d6fb"); skyGradient.addColorStop(1, "#e9f8ff");
     skyContext.fillStyle = skyGradient; skyContext.fillRect(0, 0, 2, 256);
     const skyTexture = new THREE.CanvasTexture(skyCanvas); skyTexture.colorSpace = THREE.SRGBColorSpace;
     scene.background = skyTexture;
-    scene.fog = new THREE.Fog(TOWN_COLORS.haze, 88, 205);
+    scene.fog = new THREE.Fog("#e3f4fb", 95, 215);
     const camera = new THREE.PerspectiveCamera(DELIVERY_GAME_CONFIG.cameraFovDegrees, 1, 0.1, 270);
     camera.position.set(0, DELIVERY_GAME_CONFIG.cameraHeight, DELIVERY_GAME_CONFIG.cameraFollowDistance);
 
-    const hemisphere = new THREE.HemisphereLight("#f1faff", "#a6b6ad", 1.15);
-    const sun = new THREE.DirectionalLight("#fff5e4", 2.25);
+    const hemisphere = new THREE.HemisphereLight("#f4fbff", "#c9d6c4", 1.35);
+    const sun = new THREE.DirectionalLight("#fff3dc", 2.4);
     sun.position.set(-36, 65, 28);
     scene.add(hemisphere, sun);
 
@@ -136,7 +136,21 @@ export function DeliveryScene3D({
     let activeMovingBus: (typeof world.movingBuses)[number] | null = null;
     let movingBusDistance = 0;
     let renderedSession = stateRef.current.sessionKey;
-    let landingElapsed = 1;
+    let landingElapsed = 1, wobble = 0;
+    // Dust puffs: a small pool reused for hits and hard landings.
+    const dustMaterial = new THREE.MeshBasicMaterial({ color: "#efe3cf", transparent: true, opacity: 0, depthWrite: false });
+    const dustGeometry = new THREE.IcosahedronGeometry(.28, 1);
+    const dust = Array.from({ length: 10 }, () => {
+      const puff = new THREE.Mesh(dustGeometry, dustMaterial.clone()); puff.visible = false; world.root.add(puff);
+      return { puff, velocity: new THREE.Vector3(), age: 1 };
+    });
+    const kickDust = (at: THREE.Vector3, count: number) => {
+      dust.slice(0, count).forEach((d, n) => {
+        const a = n / count * Math.PI * 2;
+        d.age = 0; d.puff.visible = true; d.puff.position.set(at.x, .25, at.z);
+        d.velocity.set(Math.cos(a) * 2.2, 1.2 + (n % 3) * .4, Math.sin(a) * 2.2);
+      });
+    };
     let wasAirborne = false;
     const bikeScale = world.bicycle.group.scale.x;
     const shownMovingBuses = new Set<string>();
@@ -208,7 +222,7 @@ export function DeliveryScene3D({
       world.bicycle.groundShadow.position.y = .045 - current.jumpHeight / bikeScale;
       world.bicycle.groundShadow.scale.setScalar(1 - current.jumpHeight * .25);
       const airborne = current.jumpHeight > 0;
-      if (wasAirborne && !airborne) landingElapsed = 0;
+      if (wasAirborne && !airborne) { landingElapsed = 0; if (live?.jumpPower && live.jumpPower > 1 && !reduceMotion) kickDust(bikePosition, 8); }
       wasAirborne = airborne;
       if (!current.paused) landingElapsed += deltaSeconds;
       // Brief squash on landing only; the camera rail ignores jump height.
@@ -220,12 +234,22 @@ export function DeliveryScene3D({
       if (current.collisionId !== activeCollisionId) {
         activeCollisionId = current.collisionId;
         collisionElapsedMs = 0;
-        if (activeCollisionId) { shake = .25; shakeStrength = .05; }
+        if (activeCollisionId) { shake = .25; shakeStrength = .05; wobble = .7; if (!reduceMotion) kickDust(bikePosition, 10); }
       }
       if (activeCollisionId && current.playing && !current.paused) collisionElapsedMs += deltaSeconds * 1_000;
       const impactProgress = activeCollisionId ? Math.min(1, collisionElapsedMs / 420) : 1;
       const impactBump = activeCollisionId ? Math.sin(impactProgress * Math.PI) * 0.1 : 0;
-      world.bicycle.group.rotation.z = Math.max(-0.15, Math.min(0.15, -laneVelocity * 0.023));
+      // On a hit the rider wobbles side to side for a moment.
+      wobble = Math.max(0, wobble - (current.paused ? 0 : deltaSeconds));
+      world.bicycle.group.rotation.z = Math.max(-0.15, Math.min(0.15, -laneVelocity * 0.023)) + (reduceMotion ? 0 : Math.sin(wobble * 26) * .2 * wobble / .7);
+      for (const d of dust) {
+        if (!d.puff.visible) continue;
+        d.age += current.paused ? 0 : deltaSeconds;
+        d.puff.position.addScaledVector(d.velocity, current.paused ? 0 : deltaSeconds);
+        d.puff.scale.setScalar(1 + d.age * 2.4);
+        (d.puff.material as THREE.MeshBasicMaterial).opacity = Math.max(0, .75 * (1 - d.age / .6));
+        if (d.age > .6) d.puff.visible = false;
+      }
       world.bicycle.group.rotation.x = impactBump + current.jumpHeight * .06;
       wheelPhase -= (current.speed * deltaSeconds) / 0.43;
       for (const wheel of world.bicycle.wheels) wheel.rotation.x = wheelPhase;

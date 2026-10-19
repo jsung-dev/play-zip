@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import {
   BUS_PLACEMENTS,
   DELIVERY_BRANDS,
@@ -538,9 +539,13 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
   group.position.x = obstacleCenterX(placement);
   group.position.z = -placement.distance;
   group.userData.obstacleId = placement.id;
-  const body = new THREE.MeshLambertMaterial({ color: "#ef714f", transparent: true, opacity: 1 });
-  const light = new THREE.MeshLambertMaterial({ color: "#fff1cb", transparent: true, opacity: 1 });
-  const dark = new THREE.MeshLambertMaterial({ color: "#455a54", transparent: true, opacity: 1 });
+  // Bright, toy-like props with soft edges. Materials stay transparent so a hit
+  // can fade the obstacle; each prop is ~25% taller/deeper so it reads early.
+  const mat = (color: string, emissive = 0) => new THREE.MeshLambertMaterial({ color, emissive: emissive ? color : "#000000", emissiveIntensity: emissive, transparent: true, opacity: 1 });
+  const rbox = (w: number, h: number, d: number, material: THREE.Material, radius = .05) =>
+    new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(radius, w / 3, h / 3, d / 3)), material);
+  const add = (mesh: THREE.Mesh, x: number, y: number, z = 0) => { mesh.position.set(x, y, z); group.add(mesh); return mesh; };
+  const white = mat("#ffffff", .25), ink = mat("#3f4d4b");
   const shadow = new THREE.MeshBasicMaterial({ color: "#344944", transparent: true, opacity: 0.2 });
   const width = obstacleSpan(placement) * DELIVERY_GAME_CONFIG.laneSpacing - 0.3;
   const shadowMesh = placement.span && placement.span > 1
@@ -551,64 +556,42 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
   group.add(shadowMesh);
 
   if (placement.kind === "cones") {
+    const orange = mat("#ff7a1a", .18);
     for (const x of [-0.76, 0, 0.76]) {
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.12, 8), dark);
-      base.position.set(x, 0.08, 0);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.86, 8), body);
-      cone.position.set(x, 0.54, 0);
-      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.26, 0.13, 8), light);
-      stripe.position.set(x, 0.48, 0);
-      group.add(base, cone, stripe);
+      add(rbox(.62, .1, .62, ink, .04), x, .05);
+      add(new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.86, 18), orange), x, 0.54);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.1, 18), white), x, 0.42);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.08, 18), white), x, 0.7);
+      add(new THREE.Mesh(new THREE.SphereGeometry(.06, 10, 8), orange), x, .97);
     }
   } else if (placement.kind === "barrier") {
-    const board = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.83, 0.22), body);
-    board.position.set(0, 0.95, 0);
-    group.add(board);
-    for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.82, 0.24), light);
-      stripe.position.set(x, 0.95, 0.02);
-      stripe.rotation.z = -0.55;
-      group.add(stripe);
-    }
-    for (const x of [-0.83, 0.83]) {
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.85, 0.2), dark);
-      foot.position.set(x, 0.45, 0);
-      group.add(foot);
-    }
+    const red = mat("#ff4d5a", .15);
+    add(rbox(2.3, .8, .2, red, .08), 0, .95);
+    for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) add(rbox(.2, .78, .22, white, .03), x, .95, .01).rotation.z = -0.55;
+    for (const x of [-0.83, 0.83]) { add(rbox(.14, .86, .16, ink, .04), x, .45); add(rbox(.5, .08, .5, ink, .03), x, .04); }
+    add(new THREE.Mesh(new THREE.SphereGeometry(.12, 12, 10), mat("#ffd23d", .8)), -.85, 1.45);
   } else if (placement.kind === "plank") {
-    // Low wooden board with a bright stripe so it reads from far away.
-    const wood = new THREE.MeshLambertMaterial({ color: "#c98c59", transparent: true, opacity: 1 });
-    const warn = new THREE.MeshLambertMaterial({ color: "#f3c84b", transparent: true, opacity: 1 });
-    const board = new THREE.Mesh(new THREE.BoxGeometry(width, 0.24, 0.5), wood);
-    board.position.set(0, 0.2, 0);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, 0.08, 0.52), warn);
-    stripe.position.set(0, 0.24, 0);
-    group.add(board, stripe);
-    for (let x = -width / 2 + 0.25; x <= width / 2 - 0.2; x += 1.1) {
-      const block = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.56), dark);
-      block.position.set(x, 0.05, 0);
-      group.add(block);
-    }
+    // Speed-bump board: sunny yellow with white chevrons and red end reflectors.
+    add(rbox(width, .24, .55, mat("#ffcf33", .2), .08), 0, .17);
+    for (let x = -width / 2 + .45; x <= width / 2 - .4; x += .75) add(rbox(.32, .03, .5, white, .01), x, .3).rotation.y = .5;
+    for (const side of [-1, 1]) add(rbox(.22, .2, .57, mat("#ff4d5a", .3), .05), side * (width / 2 - .11), .18);
   } else if (placement.kind === "crates") {
-    // A row of plain milk crates; no logos or brand marks.
-    const crate = new THREE.MeshLambertMaterial({ color: "#5fb3c8", transparent: true, opacity: 1 });
+    // A row of plain milk crates in bright colours; no logos or brand marks.
+    const colours = ["#38b6ff", "#ff6fa8", "#5fd36a", "#ffb02e"].map(c => mat(c, .15)), slot = mat("#ffffff", .05);
     const count = Math.round(width / 0.62);
     for (let index = 0; index < count; index += 1) {
-      const x = -width / 2 + (index + 0.5) * (width / count);
-      const box = new THREE.Mesh(new THREE.BoxGeometry(width / count - 0.06, 0.42, 0.58), crate);
-      box.position.set(x, 0.21, 0);
-      const rim = new THREE.Mesh(new THREE.BoxGeometry(width / count - 0.04, 0.06, 0.6), light);
-      rim.position.set(x, 0.42, 0);
-      group.add(box, rim);
+      const x = -width / 2 + (index + 0.5) * (width / count), w = width / count - 0.06;
+      add(rbox(w, .44, .6, colours[(index + Math.round(placement.distance)) % colours.length], .05), x, .22);
+      add(rbox(w + .02, .06, .62, white, .02), x, .44);
+      for (const y of [.14, .28]) add(rbox(w * .62, .05, .02, slot, .01), x, y, .31);
     }
   } else {
-    const carton = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.92, 0.94), new THREE.MeshLambertMaterial({ color: "#c98c59", transparent: true, opacity: 1 }));
-    carton.position.set(0, 0.49, 0);
-    carton.rotation.y = 0.18;
-    const tape = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.94, 0.96), light);
-    tape.position.set(0, 0.49, 0);
-    group.add(carton, tape);
+    const kraft = mat("#f0b273", .12), tape = mat("#fff3c4", .2);
+    add(rbox(1.15, .92, .94, kraft, .05), 0, .48).rotation.y = .18;
+    add(rbox(.18, .94, .96, tape, .02), 0, .48).rotation.y = .18;
   }
+  // Taller and deeper (not wider: lanes stay readable side by side).
+  group.scale.set(1, 1.25, 1.25);
 
   return { id: placement.id, distance: placement.distance, x: group.position.x, halfWidth: 1.2 + (obstacleSpan(placement) - 1) * DELIVERY_GAME_CONFIG.laneSpacing / 2, group };
 }
@@ -799,7 +782,7 @@ function createBeachBall(placement: MoverPlacement, art: SceneArt): MoverRig {
 function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
   // Faces +x (it walks across the road). Rounded parts, cream belly and muzzle,
   // jointed legs and a swaying tail; slightly larger than life so it reads.
-  const group = new THREE.Group(), fur = "#f0a052", dark = "#c8742f", cream = "#fff1dc", pink = "#f4a3a8", ink = "#2f3a37";
+  const group = new THREE.Group(), fur = "#ffa64a", dark = "#e07a2a", cream = "#fff4e2", pink = "#f4a3a8", ink = "#2f3a37";
   art.shadow(group, 1.25, .7);
   const body = new THREE.Group(); body.position.y = .42; group.add(body);
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.19, .5, 6, 14), art.material(fur));

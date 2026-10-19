@@ -164,7 +164,6 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "jump-840", distance: 840, lane: 0, kind: "plank", span: 3 },
   { id: "jump-920", distance: 920, lane: 1, kind: "crates", span: 2 },
   // 난이도 상향(2026-10): 큰길 추가분과 우회로 양쪽 구간.
-  { id: "jump-132", distance: 132, lane: 1, kind: "crates", span: 2 },
   { id: "jump-760", distance: 760, lane: 0, kind: "crates", span: 2 },
   { id: "jump-935", distance: 935, lane: 0, kind: "plank" },
   { id: "jump-316", distance: 316, lane: 0, kind: "crates" },

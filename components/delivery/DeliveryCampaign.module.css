@@ -189,3 +189,12 @@
   .quizProduct > img, .quizProduct > [role="img"] { height: 94px; }
   .purchaseProduct img, .purchaseProduct [role="img"] { height: 108px; }
 }
+
+/* Run result: stars from milk freshness (this run only, not a reward). */
+.runStars { display: grid; grid-template-columns: repeat(3, auto); justify-content: center; gap: 4px 6px; margin: 8px 0 2px; }
+.runStars i { font-style: normal; font-size: 34px; line-height: 1; color: #e3e6dd; text-shadow: 0 2px 0 #ffffff; }
+.runStars i[data-on="true"] { color: #ffc93c; text-shadow: 0 2px 6px #ffb3006b; animation: starPop .4s cubic-bezier(.2, 1.6, .4, 1) backwards; }
+.runStars i:nth-child(2) { animation-delay: .12s; } .runStars i:nth-child(3) { animation-delay: .24s; }
+.runStars span { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: #4f7a63; }
+@keyframes starPop { from { transform: scale(.2) rotate(-30deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .runStars i { animation: none; } }

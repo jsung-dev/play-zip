@@ -5,11 +5,11 @@ export const JUMP_CONFIG = { height: 1.5, seconds: 0.75 } as const;
 
 // Height the bike must exceed to pass over each kind. Fences stay solid.
 export const OBSTACLE_CLEARANCE: Record<ObstaclePlacement["kind"], number | null> = {
-  cones: 0.7,
-  box: 0.75,
+  cones: 0.85, // drawn 25% taller
+  box: 0.9,
   barrier: null,
   plank: 0.4,
-  crates: 0.5,
+  crates: 0.6, // drawn 25% taller
 };
 
 // A ramp launches with more power: higher and longer than a tap jump.

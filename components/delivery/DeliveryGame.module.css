@@ -2281,7 +2281,7 @@
   transform: translateX(-50%);
   pointer-events: none;
 }
-.boostBadge, .fallBadge {
+.boostBadge, .toastBadge {
   padding: 5px 12px;
   border-radius: 999px;
   color: #ffffff;
@@ -2290,8 +2290,28 @@
   white-space: nowrap;
   animation: rideBadgePop .32s cubic-bezier(.2, 1.6, .4, 1);
 }
-.fallBadge { background: #6d5b4f; box-shadow: 0 3px 10px #3b2f2866; }
+.toastBadge[data-kind="good"] { background: linear-gradient(90deg, #2fc489, #5ad1ff); box-shadow: 0 3px 12px #2fc48966; font-size: 16px; }
+.toastBadge[data-kind="bad"] { background: #ef6a5b; box-shadow: 0 3px 10px #ef6a5b66; }
+.toastBadge[data-kind="info"] { background: #ffffffee; color: #2f6a55; box-shadow: 0 3px 12px #244d4229; }
 .boostBadge { background: linear-gradient(90deg, #ff7a59, #ffb340); box-shadow: 0 3px 12px #ff7a5980; animation: rideBadgePop .32s cubic-bezier(.2, 1.6, .4, 1), rideBoostPulse .5s ease-in-out infinite alternate; }
 @keyframes rideBadgePop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes rideBoostPulse { to { transform: scale(1.08); } }
-@media (prefers-reduced-motion: reduce) { .boostBadge, .fallBadge { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .boostBadge, .toastBadge { animation: none; } }
+
+/* "좋아!" sparkle burst under the praise badge. */
+.sparkle { position: absolute; top: 96px; left: 50%; z-index: 32; width: 0; height: 0; pointer-events: none; }
+.sparkle i {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  background: #ffd23d;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: sparkleBurst .7s ease-out forwards;
+}
+.sparkle i:nth-child(even) { background: #7fe0ff; }
+@keyframes sparkleBurst {
+  from { transform: rotate(var(--a)) translateY(0) scale(.4); opacity: 1; }
+  to { transform: rotate(var(--a)) translateY(-58px) scale(1.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sparkle { display: none; } }

@@ -1,6 +1,6 @@
 // Tiny synthesized sound set (no audio files, nothing to license) plus phone
 // vibration. One on/off switch for both, remembered on this device.
-type Sfx = "jump" | "land" | "hit" | "deliver" | "correct" | "boost" | "ramp";
+type Sfx = "jump" | "land" | "hit" | "deliver" | "correct" | "boost" | "ramp" | "nice";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -41,7 +41,7 @@ function tone(frequency: number, endFrequency: number, start: number, length: nu
   osc.start(start); osc.stop(start + length + .02);
 }
 
-const VIBRATION: Record<Sfx, number | number[]> = { jump: 12, land: 22, hit: 60, deliver: [30, 40, 30], correct: 20, boost: [20, 30, 20], ramp: 30 };
+const VIBRATION: Record<Sfx, number | number[]> = { jump: 12, land: 22, hit: 60, deliver: [30, 40, 30], correct: 20, boost: [20, 30, 20], ramp: 30, nice: 10 };
 
 export function playSfx(name: Sfx) {
   if (!enabled) return;
@@ -54,6 +54,7 @@ export function playSfx(name: Sfx) {
   else if (name === "deliver") { tone(1319, 1319, now, .25, "sine", .2); tone(1047, 1047, now + .22, .4, "sine", .2); }
   else if (name === "boost") { tone(300, 1200, now, .45, "sawtooth", .07); tone(600, 2400, now + .05, .4, "triangle", .1); }
   else if (name === "ramp") tone(260, 1100, now, .35, "triangle", .2);
+  else if (name === "nice") { tone(988, 988, now, .09, "triangle", .16); tone(1319, 1319, now + .08, .16, "triangle", .16); }
   else { [523, 659, 784].forEach((f, n) => tone(f, f, now + n * .08, .2, "triangle", .16)); }
 }
 
