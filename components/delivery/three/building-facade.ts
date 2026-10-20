@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { ReliefSpec } from "./relief-building";
 
 export type BuildingKit = {
   box: (w: number, h: number, d: number, color: string, radius?: number) => THREE.Mesh;
@@ -7,6 +8,8 @@ export type BuildingKit = {
   put: (g: THREE.Group, o: THREE.Object3D, x: number, y: number, z: number) => THREE.Object3D;
   shadow: (g: THREE.Group, w: number, d: number, x?: number, z?: number) => THREE.Object3D;
   merge: (g: THREE.Group) => THREE.Group;
+  /** Atlas material for a photo-modelled building; absent in kits that cannot load images. */
+  photoMaterial?: (spec: Pick<ReliefSpec, "id" | "atlas">) => THREE.Material;
 };
 
 // A–E reference sheet palette. Only scenery architecture uses these finishes.
