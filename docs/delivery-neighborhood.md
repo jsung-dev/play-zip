@@ -53,3 +53,10 @@
 - 자전거의 움직이지 않는 부품을 재질별로 묶어 자전거 드로콜 108 → 39. 바퀴·페달·다리는 따로 움직입니다.
 - 도로는 변경하지 않았습니다.
 - 실기기 FPS는 측정하지 않았습니다. 폰에서 체감을 확인해야 합니다.
+
+## Meshy-model buildings (relief buildings)
+
+Street buildings come from two Meshy GLB models (cafe-corner, blue-laundry): `data/delivery-relief-buildings.ts` (generated) + `public/games/delivery/buildings/*.webp`.
+Each GLB was rendered orthographically (colour + depth) from front/right/left/top, merged into a few hundred depth-levelled quads (about 2–4k triangles) and packed as one mesh with one atlas material, with baked vertex-colour light (no shadow maps in game).
+`createReliefBuilding` fits the model inside the unchanged lot envelope (height may stretch up to 18%), so lot planning, entrances and ad sightlines are untouched; ad code is not modified.
+Design→model map: `DESIGN_PHOTOS` in `street-architecture.ts`. The procedural A–E builders remain as the fallback until the atlas loads and for tests.

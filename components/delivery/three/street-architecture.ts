@@ -2,6 +2,14 @@ import * as THREE from "three";
 import type { SceneryItem } from "@/data/delivery-game";
 import { buildingProfile } from "./street-layout";
 import { facadeDetails, NEIGHBORHOOD_FINISH as finish, type BuildingKit } from "./building-facade";
+import { createReliefBuilding } from "./relief-building";
+import { BUILDING_SCALE } from "./scene-layout";
+import { RELIEF_BUILDINGS } from "@/data/delivery-relief-buildings";
+
+// Which Meshy-model building each A–E lot type shows. Lots, entrances and ad
+// sightlines stay exactly as planned; the model is fitted inside that envelope.
+const DESIGN_PHOTOS = ["cafe-corner", "blue-laundry", "cafe-corner", "blue-laundry", "cafe-corner"] as const;
+const photoId = (item: SceneryItem) => DESIGN_PHOTOS[streetArchitecture(item).design];
 
 export type StreetBuildingKind = "apricot-shop" | "mint-villa" | "cream-tower" | "lavender-house" | "yellow-shop";
 const KINDS: StreetBuildingKind[] = ["apricot-shop", "mint-villa", "cream-tower", "lavender-house", "yellow-shop"];
@@ -20,6 +28,27 @@ export function streetArchitecture(item: Pick<SceneryItem, "type" | "variant">) 
  * because these are also visible from the fixed riding camera.
  */
 export function createStreetArchitecture(item: SceneryItem, art: BuildingKit) {
+  const photo = art.photoMaterial && RELIEF_BUILDINGS[photoId(item)];
+  if (photo && art.photoMaterial) return createPhotoStreetBuilding(item, art, photo);
+  return createProceduralStreetArchitecture(item, art);
+}
+
+function createPhotoStreetBuilding(item: SceneryItem, art: BuildingKit, photo: typeof RELIEF_BUILDINGS[string]) {
+  const spec = streetArchitecture(item), lot = buildingProfile(item, true);
+  // Envelope in model units (the caller applies BUILDING_SCALE afterwards).
+  const fit = {
+    width: 2 * lot.halfWidth / BUILDING_SCALE.width - .06, height: lot.solidHeight / BUILDING_SCALE.height - .05,
+    front: lot.front / BUILDING_SCALE.depth - .03, back: lot.back / BUILDING_SCALE.depth - .03,
+  };
+  const g = createReliefBuilding(photo, art.photoMaterial!(photo), fit);
+  g.name = `street-architecture:${spec.kind}`; g.userData.architecture = { ...spec, photo: photo.id };
+  art.shadow(g, fit.width + 2.4, fit.front + fit.back + 2.4, .9, (fit.front - fit.back) / 2 - .9);
+  art.merge(g);
+  return g;
+}
+
+/** The previous vertex-colour models, kept as the fallback when no atlas material is available. */
+export function createProceduralStreetArchitecture(item: SceneryItem, art: BuildingKit) {
   const spec = streetArchitecture(item), { kind, width: w, depth: d, height: h, floors, pitch, design } = spec;
   const g = new THREE.Group(); g.name = `street-architecture:${kind}`; g.userData.architecture = spec;
   const { piece, pane, rail, balcony, planter, awning, aircon, shrub, flowerBox } = facadeDetails(art);

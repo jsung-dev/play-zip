@@ -6,6 +6,7 @@ import { BUILDING_SCALE } from "./scene-layout";
 import { buildingProfile } from "./street-layout";
 import { ROAD_SURFACE } from "./road-surface";
 import { createStreetArchitecture } from "./street-architecture";
+import type { ReliefSpec } from "./relief-building";
 
 export const TOWN_COLORS = {
   sky: "#50bff0", haze: "#d9eceb", lawn: "#b8d998", road: ROAD_SURFACE.color,
@@ -57,6 +58,30 @@ export function createSceneArt() {
     geometry(`building-box:${w}:${h}:${d}:${color}:${top ?? ""}`, () => paint(
       d <= .03 ? new THREE.PlaneGeometry(w, h).translate(0, 0, d / 2) : new THREE.BoxGeometry(w, h, d), color, top)), buildingMaterial,
   );
+  // Street buildings modelled from the Figma sheets: one atlas material per
+  // building, same baked-colour lighting as buildingMaterial. Plain cream until
+  // the atlas arrives (and in node tests, which have no Image).
+  const photoMaterials = new Map<string, THREE.MeshLambertMaterial>();
+  const photoMaterial = (spec: Pick<ReliefSpec, "id" | "atlas">) => {
+    let mat = photoMaterials.get(spec.id);
+    if (mat) return mat;
+    mat = new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false, color: "#f3e2ac" });
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * 0.42;");
+    };
+    mat.customProgramCacheKey = () => "building-photo-atlas";
+    photoMaterials.set(spec.id, mat);
+    if (typeof Image !== "undefined") {
+      const image = new Image(), target = mat;
+      image.onload = () => {
+        const texture = new THREE.Texture(image);
+        texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4; texture.needsUpdate = true;
+        target.map = texture; target.color.set("#ffffff"); target.needsUpdate = true;
+      };
+      image.src = spec.atlas;
+    }
+    return mat;
+  };
   // Low-poly foliage for roofs and window boxes, in the same single batch.
   const buildingBlob = (radius: number, color: string) => new THREE.Mesh(
     geometry(`building-blob:${radius}:${color}`, () => paint(new THREE.IcosahedronGeometry(radius, radius > .45 ? 1 : 0), color)), buildingMaterial,
@@ -196,7 +221,7 @@ export function createSceneArt() {
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
     if (street) {
-      const model = createStreetArchitecture(item, { box, buildingBox, buildingBlob, put, shadow, merge });
+      const model = createStreetArchitecture(item, { box, buildingBox, buildingBlob, put, shadow, merge, photoMaterial });
       model.scale.set(BUILDING_SCALE.width, BUILDING_SCALE.height, BUILDING_SCALE.depth);
       buildingTemplates.set(key, model);
       return place(model.clone());
