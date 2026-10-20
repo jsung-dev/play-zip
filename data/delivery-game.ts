@@ -36,7 +36,7 @@ export type ObstaclePlacement = {
   id: string;
   distance: number;
   lane: 0 | 1 | 2;
-  kind: "cones" | "barrier" | "box" | "plank" | "crates";
+  kind: "cones" | "barrier" | "box" | "plank" | "crates" | "overhead";
   // Lanes covered to the right of `lane`; 3 blocks the whole road (jump only).
   span?: 1 | 2 | 3;
   // Placed on a detour branch instead of the main road.
@@ -149,6 +149,9 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   // 2026-10 재설계 2차: 구간마다 한 가지 패턴, 패턴끼리는 10m 이상 간격(같은 패턴은 같은 거리).
   // 하늘에서 떨어지는 것·움직이는 장애물은 components/delivery/delivery-movers.ts에 있습니다.
   // 골목 진입 30m 전~진입, 골목 출구 합류, 갈림길, 붕괴 도로 비행 구간, 목적지 직전은 비워 둡니다.
+  // 숙이기: 도로 전체를 가로지르는 낮은 가로대(span 3). 점프로는 못 넘고 아래로 스와이프해 숙여야 지나갑니다.
+  { id: "duck-overhead-314", distance: 314, lane: 0, kind: "overhead", span: 3 },
+  { id: "duck-overhead-880", distance: 880, lane: 0, kind: "overhead", span: 3 },
   // 1구간 점프 연습: 전 차선 판자 → 두 차선 상자 → (하늘 택배) → 양쪽 콘 → (수박 소나기) → 두 차선 상자.
   { id: "s1-plank-80", distance: 80, lane: 0, kind: "plank", span: 3 },
   { id: "s1-crates-96", distance: 96, lane: 1, kind: "crates", span: 2 },

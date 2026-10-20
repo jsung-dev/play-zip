@@ -35,7 +35,7 @@ pnpm dev
 - `public/fonts/`, `licenses/`: 공용 한글 폰트와 라이선스
 - `scripts/`: 게임 검증 도구 (산출물은 Git/배포 제외)
 
-[광고 교체](docs/delivery-outdoor-ads.md) · [조작](docs/delivery-joystick.md) · [정리 범위와 복구](docs/repository-separation.md)
+[광고 교체](docs/delivery-outdoor-ads.md) · [조작](docs/delivery-controls.md) · [정리 범위와 복구](docs/repository-separation.md)
 
 ## 확인과 배포
 

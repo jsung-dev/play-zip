@@ -12,7 +12,7 @@ const cases = [
   { input: { ...base, position: 350, stopIndex: 1 }, direction: "right", text: "오른쪽 회전 차선" },
   { input: { ...base, position: 470, stopIndex: 2 }, direction: "fork", text: "좌우 우회로" },
   { input: { ...base, position: 490, stopIndex: 2, detour: "right" as const }, direction: "right", text: "오른쪽 우회로" },
-  { input: { ...base, position: 567, stopIndex: 2, closureReached: true }, direction: "reverse", text: "후진해서 갈림길로" },
+  { input: { ...base, position: 567, stopIndex: 2, closureReached: true }, direction: "fork", text: "옆 길로 비켜 가세요" },
   { input: { ...base, position: 490, stopIndex: 2, closureReached: true }, direction: "fork", text: "좌우 우회로" },
   { input: { ...base, position: 190, driveway: { stopIndex: 0, progress: 10, entryPosition: 190, entryLaneX: -2.5 } }, direction: "forward", text: "골목 안으로 이동" },
   { input: { ...base, position: 190, driveway: { stopIndex: 0, progress: 18, entryPosition: 190, entryLaneX: -2.5 } }, direction: "forward", text: "입구로 이동" },
@@ -34,4 +34,4 @@ assert.equal(getDeliveryNavigation({ ...base, position: 1000, stopIndex: 3 }, tr
 assert.equal(getDeliveryNavigation({ ...base, stopIndex: 1, deliverySuccessRemaining: 2 }).destination, "민트하우스 3동");
 assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0]}).instruction,"직진","Do not advertise a completed alley as the next mission");
 assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0],turnChoice:occupiedDeliveryTurn(175,1,-5)}).destination,"포근빌라 202호","The occupied turn lane names the actual house, not another target");
-console.log("Single-line navigation: entrances, missed stops, detour, reverse, delivery and final arrival verified.");
+console.log("Single-line navigation: entrances, missed stops, detour, closure sidestep, delivery and final arrival verified.");

@@ -1,19 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronsUp, GitFork, PackageCheck, Pause, Play } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDetourOffset, getDrivewayLength, getDrivewayExitDistance, getDrivewayDeliveryInterval, getRouteFrame, isAtDrivewayDelivery, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
-import { DeliveryPauseMenu, type ControlHand } from "./DeliveryPauseMenu";
+import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, occupiedDeliveryTurn, enterTurnLane, type TravelDirection, type TurnChoice } from "./delivery-turns";
-import { DeliveryJoystick, type DeliveryJoystickHandle } from "./DeliveryJoystick";
-import type { JoystickDrive } from "./delivery-joystick";
-import { clearsObstacle, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER } from "./delivery-jump";
+import { DeliverySwipe } from "./DeliverySwipe";
+import type { SwipeAction } from "./delivery-swipe";
+import { clearsObstacle, DUCK_SECONDS, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER } from "./delivery-jump";
 import { sectionEntered, starsFor } from "./delivery-course";
 import { BOOST, boosterHit, FALL_SECONDS, gapUnder, RAMP_MAX_SPEED, RAMP_MIN_SPEED, rampHit } from "./delivery-pickups";
 import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose, snapToLane, TIMED } from "./delivery-movers";
@@ -46,6 +46,7 @@ type RuntimeState = {
   travelDirection: TravelDirection;
   turnChoice: TurnChoice | null;
   jumpElapsed: number | null;
+  duckElapsed: number | null;
   clock: number;
   moverStarts: Record<string, number>;
   moverTargets: Record<string, number>;
@@ -58,15 +59,11 @@ type RuntimeState = {
   boostRemaining: number;
 };
 
-type DriveInput = {
-  forward: boolean;
-  reverse: boolean;
-};
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", closureReached: false, driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, duckElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
 
-// How far past the split a rider may still choose a side road (about 1.8 s at top speed).
-const FORK_SWITCH_METERS = 36;
+// Until the closure gate a rider may still pick a side road. The bike now only goes forward, so reaching the gate must never trap it.
+const FORK_SWITCH_METERS = ROAD_CLOSURE.distance - ROAD_CLOSURE.junctionDistance;
 
 let toastId = 0;
 // Short on-screen callouts (praise, penalties, section names); the latest wins.
@@ -86,22 +83,13 @@ export function DeliveryGame() {
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
   const lastUiCommitRef = useRef(0);
-  const joystickRef = useRef<DeliveryJoystickHandle>(null);
-  const joystickDriveRef = useRef<JoystickDrive>(null);
   const pauseTouchHandledRef = useRef(false);
   const obstaclePassUntilRef = useRef(new Map<string, number>());
-  const keyInputsRef = useRef<DriveInput>({ forward: false, reverse: false });
-  const driveInputRef = useRef<DriveInput>({ forward: false, reverse: false });
   const [frame, setFrame] = useState<RuntimeState>(() => ({ ...runtimeRef.current }));
   const [status, setStatus] = useState<GameStatus>("ready");
   const [paused, setPaused] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
   const [guidanceReplay, setGuidanceReplay] = useState(0);
-  // Which thumb steers; the other half of the screen is the jump area.
-  const [controlHand, setControlHand] = useState<ControlHand>("right");
-  useEffect(() => {
-    try { if (localStorage.getItem("delivery-control-hand") === "left") setControlHand("left"); } catch { /* storage blocked: keep default */ }
-  }, []);
   const [soundOn, setSoundOn] = useState(true);
   useEffect(() => setSoundOn(soundEnabled()), []);
   const toggleSound = useCallback(() => {
@@ -109,30 +97,8 @@ export function DeliveryGame() {
     setSoundEnabled(next); setSoundOn(next);
     if (next) unlockSound();
   }, []);
-  const changeControlHand = useCallback((hand: ControlHand) => {
-    setControlHand(hand);
-    try { localStorage.setItem("delivery-control-hand", hand); } catch { /* not persisted */ }
-  }, []);
-
-  const syncDriveInput = useCallback(() => {
-    const next = {
-      forward: keyInputsRef.current.forward || joystickDriveRef.current === "forward",
-      reverse: keyInputsRef.current.reverse || joystickDriveRef.current === "reverse",
-    };
-    driveInputRef.current = next;
-  }, []);
-
-  const handleJoystickDrive = useCallback((direction: JoystickDrive) => {
-    joystickDriveRef.current = direction;
-    syncDriveInput();
-  }, [syncDriveInput]);
-
   const clearInputs = useCallback(() => {
     runtimeRef.current.turnChoice = null;
-    joystickRef.current?.reset();
-    joystickDriveRef.current = null;
-    keyInputsRef.current = { forward: false, reverse: false };
-    driveInputRef.current = { forward: false, reverse: false };
   }, []);
 
   const resetRuntime = useCallback(() => {
@@ -197,12 +163,28 @@ export function DeliveryGame() {
   const jump = useCallback(() => {
     if (status !== "playing" || paused) return;
     const runtime = runtimeRef.current;
-    if (runtime.jumpElapsed !== null) return;
+    if (runtime.jumpElapsed !== null || runtime.duckElapsed !== null || runtime.fallElapsed !== null) return;
     runtime.jumpElapsed = 0;
     runtime.jumpPower = 1;
     playSfx("jump");
     setFrame({ ...runtime });
   }, [paused, status]);
+
+  const duck = useCallback(() => {
+    if (status !== "playing" || paused) return;
+    const runtime = runtimeRef.current;
+    if (runtime.duckElapsed !== null || runtime.jumpElapsed !== null || runtime.fallElapsed !== null) return;
+    runtime.duckElapsed = 0;
+    playSfx("land");
+    setFrame({ ...runtime });
+  }, [paused, status]);
+
+  const handleSwipe = useCallback((action: SwipeAction) => {
+    if (action === "left") moveLane(-1);
+    else if (action === "right") moveLane(1);
+    else if (action === "jump") jump();
+    else duck();
+  }, [duck, jump, moveLane]);
 
   useEffect(() => {
     if (status !== "playing" || paused) return;
@@ -221,7 +203,7 @@ export function DeliveryGame() {
         // Fell into a collapsed road: drop out of sight, then respawn before the gap.
         runtime.fallElapsed += deltaSeconds;
         if (runtime.fallElapsed >= FALL_SECONDS) {
-          Object.assign(runtime, { fallElapsed: null, position: runtime.fallRespawn, speed: 0, laneTarget: 1, laneX: 0, laneFromX: 0, laneStartedAt: timestamp, jumpElapsed: null, collisionId: null });
+          Object.assign(runtime, { fallElapsed: null, position: runtime.fallRespawn, speed: 0, laneTarget: 1, laneX: 0, laneFromX: 0, laneStartedAt: timestamp, jumpElapsed: null, duckElapsed: null, collisionId: null });
           clearInputs();
           setFrame({ ...runtime });
         }
@@ -236,8 +218,10 @@ export function DeliveryGame() {
           runtime.jumpElapsed = null;
         }
       }
-      const input = driveInputRef.current;
-      if (input.forward !== input.reverse) runtime.travelDirection = input.reverse ? -1 : 1;
+      if (runtime.duckElapsed !== null) {
+        runtime.duckElapsed += deltaSeconds;
+        if (runtime.duckElapsed >= DUCK_SECONDS) runtime.duckElapsed = null;
+      }
       const settledLane = settledDeliveryLane(runtime.position, runtime.laneTarget);
       if (!runtime.driveway && settledLane !== runtime.laneTarget) {
         runtime.laneFromX = runtime.laneX;
@@ -248,29 +232,17 @@ export function DeliveryGame() {
       const easedLaneProgress = laneProgress * laneProgress * (3 - 2 * laneProgress);
       const previousLaneX = runtime.laneX;
       if (!runtime.driveway) runtime.laneX = runtime.laneFromX + (laneTargetX(runtime.laneTarget, runtime.position) - runtime.laneFromX) * easedLaneProgress;
-      const bothPressed = input.forward && input.reverse;
-      const desiredSpeed = bothPressed
-        ? 0
-        : input.forward
-          ? DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1)
-          : input.reverse
-            ? -DELIVERY_GAME_CONFIG.reverseSpeedPerSecond
-            : 0;
-      const changingDirection = desiredSpeed !== 0 && runtime.speed !== 0 && Math.sign(desiredSpeed) !== Math.sign(runtime.speed);
-      const rate = changingDirection
-        ? DELIVERY_GAME_CONFIG.directionChangeDecelerationPerSecond
-        : desiredSpeed === 0
-          ? DELIVERY_GAME_CONFIG.decelerationPerSecond
-          : DELIVERY_GAME_CONFIG.accelerationPerSecond * (boosting ? 2 : 1);
+      // Always rolling forward; the rider only steers, jumps and ducks.
+      const desiredSpeed = DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1);
+      const rate = DELIVERY_GAME_CONFIG.accelerationPerSecond * (boosting ? 2 : 1);
 
       const slowdownActive = timestamp < runtime.slowdownUntil;
       const cappedSpeed = slowdownActive
-        ? Math.sign(desiredSpeed) * Math.min(Math.abs(desiredSpeed), desiredSpeed >= 0 ? 11 : 4)
+        ? Math.min(desiredSpeed, 11)
         : desiredSpeed;
       // A ramp flight keeps its launch speed: no throttle or brakes in the air.
       if (!(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
-      if (Math.abs(runtime.speed) < 0.012 && desiredSpeed === 0) runtime.speed = 0;
-      // Inside an unserved delivery alley, brake automatically so the bike
+            // Inside an unserved delivery alley, brake automatically so the bike
       // stops on the pad and the quiz opens, even if the throttle is held.
       const pendingStop = runtime.driveway && !runtime.completedStops.includes(runtime.driveway.stopIndex) ? runtime.driveway : null;
       if (pendingStop && runtime.speed !== 0) {
@@ -441,7 +413,7 @@ export function DeliveryGame() {
             + getDetourOffset(obstacle.distance, runtime.detour);
           const obstacleX = obstacleCenterX(obstacle) + getDetourOffset(obstacle.distance, obstacle.branch ?? "main");
           if (Math.abs(actualBikeX - obstacleX) >= obstacleHitHalfWidth(obstacle)) continue;
-          if (clearsObstacle(obstacle.kind, jumpHeight)) { praise(obstacle.id); continue; }
+          if (clearsObstacle(obstacle.kind, jumpHeight, runtime.duckElapsed !== null)) { praise(obstacle.id); continue; }
           hit(obstacle.id);
           break;
         }
@@ -495,41 +467,19 @@ export function DeliveryGame() {
   }, [paused, status]);
 
   useEffect(() => {
+    const keys: Record<string, SwipeAction> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "jump", Space: "jump", ArrowDown: "duck" };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]).has(event.code)) return;
+      const action = keys[event.code];
+      if (!action) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (status !== "playing" || paused) return;
       event.preventDefault();
-      if (event.code === "Space") {
-        if (!event.repeat) jump();
-        return;
-      }
-      if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
-        if (!event.repeat) moveLane(event.code === "ArrowLeft" ? -1 : 1);
-        return;
-      }
-      if (event.code === "ArrowUp") keyInputsRef.current.forward = true;
-      if (event.code === "ArrowDown") keyInputsRef.current.reverse = true;
-      syncDriveInput();
+      if (!event.repeat) handleSwipe(action);
     };
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (!new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]).has(event.code)) return;
-      if (status === "playing" && !paused) event.preventDefault();
-      if (event.code === "ArrowUp") keyInputsRef.current.forward = false;
-      if (event.code === "ArrowDown") keyInputsRef.current.reverse = false;
-      syncDriveInput();
-    };
-    const handleBlur = () => clearInputs();
     window.addEventListener("keydown", handleKeyDown, { passive: false });
-    window.addEventListener("keyup", handleKeyUp, { passive: false });
-    window.addEventListener("blur", handleBlur);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleBlur);
-    };
-  }, [clearInputs, jump, moveLane, paused, status, syncDriveInput]);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSwipe, paused, status]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -623,7 +573,7 @@ export function DeliveryGame() {
                 onPointerDown={() => { pauseTouchHandledRef.current = false; }}
                 onPointerUp={(event) => {
                   // Some mobile browsers do not synthesize a click for a
-                  // second finger while the first is holding the joystick.
+                  // second finger while another finger is on the screen.
                   if (event.pointerType !== "touch" || event.isPrimary) return;
                   const bounds = event.currentTarget.getBoundingClientRect();
                   if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return;
@@ -653,7 +603,7 @@ export function DeliveryGame() {
           <span className={styles.screenReaderOnly} role="status" aria-live="polite" aria-atomic="true">{navigation.instruction}. {navigation.destination}</span>
         </header>
 
-        <div className={styles.playArea} data-control-hand={controlHand}>
+        <div className={styles.playArea}>
           {status === "playing" && (
             <div className={styles.rideStats}>
               {frame.toast && <strong key={frame.toast.id} className={styles.toastBadge} data-kind={frame.toast.kind}>{frame.toast.text}</strong>}
@@ -686,27 +636,12 @@ export function DeliveryGame() {
             liveRef={runtimeRef}
           />
 
-          <DeliveryJoystick ref={joystickRef} disabled={status !== "playing" || paused} steeringDisabled={frame.driveway !== null} onDrive={handleJoystickDrive} onLane={moveLane} />
-          {status === "playing" && !paused && (
-            <button
-              className={styles.jumpZone}
-              type="button"
-              aria-label="점프 (이 쪽 화면 아무 곳이나 탭)"
-              data-jump-zone
-              data-airborne={frame.jumpElapsed !== null}
-              // Its own pointer target, so the steering thumb is never interrupted.
-              onPointerDown={(event) => { event.preventDefault(); jump(); }}
-              onClick={(event) => { if (event.detail === 0) jump(); }}
-              onContextMenu={(event) => event.preventDefault()}
-            >
-              <span className={styles.jumpButton} data-jump-button aria-hidden="true"><ChevronsUp /></span>
-            </button>
-          )}
+          <DeliverySwipe disabled={status !== "playing" || paused} onAction={handleSwipe} />
         </div>
 
         {status === "ready" && <DeliveryBrandStart onStart={startGame} />}
 
-        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} controlHand={controlHand} onControlHand={changeControlHand} soundOn={soundOn} onToggleSound={toggleSound} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
+        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} soundOn={soundOn} onToggleSound={toggleSound} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
         {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} hits={frame.collisionCount} stars={starsFor(frame.collisionCount, completedDeliveries, totalDeliveries)} onRestart={returnToStart} />}

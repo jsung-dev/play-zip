@@ -4,12 +4,21 @@ import { DELIVERY_GAME_CONFIG, type ObstaclePlacement } from "@/data/delivery-ga
 export const JUMP_CONFIG = { height: 1.5, seconds: 0.75 } as const;
 
 // Height the bike must exceed to pass over each kind. Fences stay solid.
+// Ducking is a short crouch with no air time; a low bar is passed only while crouched.
+export const DUCK_SECONDS = 0.7;
+// 0 upright, 1 fully crouched, eased in and out over 0.12 s.
+export function duckAmountAt(elapsed: number | null) {
+  if (elapsed === null) return 0;
+  return Math.max(0, Math.min(1, elapsed / .12, (DUCK_SECONDS - elapsed) / .12));
+}
+
 export const OBSTACLE_CLEARANCE: Record<ObstaclePlacement["kind"], number | null> = {
   cones: 0.85, // drawn 25% taller
   box: 0.9,
   barrier: null,
   plank: 0.4,
   crates: 0.6, // drawn 25% taller
+  overhead: null, // a low bar across the road: duck under it, jumping does not help
 };
 
 // A ramp launches with more power: higher and longer than a tap jump.
@@ -22,7 +31,8 @@ export function jumpHeightAt(elapsed: number | null, power = 1) {
   return t <= 0 || t >= 1 ? 0 : 4 * JUMP_CONFIG.height * power * t * (1 - t);
 }
 
-export function clearsObstacle(kind: ObstaclePlacement["kind"], height: number) {
+export function clearsObstacle(kind: ObstaclePlacement["kind"], height: number, ducking = false) {
+  if (kind === "overhead") return ducking;
   const clearance = OBSTACLE_CLEARANCE[kind];
   return clearance !== null && height > clearance;
 }

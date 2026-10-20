@@ -53,7 +53,7 @@ export function getDeliveryNavigation(state: NavigationState, arriving = false):
     };
   }
   if (state.closureReached && state.position > ROAD_CLOSURE.junctionDistance) {
-    return { direction: "reverse", instruction: "후진해서 갈림길로", destination, remaining };
+    return { direction: "fork", instruction: "옆 길로 비켜 가세요", destination, remaining };
   }
   const junction = getDeliveryJunction(state.position, state.travelDirection ?? 1);
   if (junction && (junction.stopIndex === state.stopIndex || state.turnChoice?.stopIndex === junction.stopIndex)) {

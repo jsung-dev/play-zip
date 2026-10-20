@@ -1,6 +1,6 @@
 "use client";
 
-import { Hand, MapPin, Pause, Play, RotateCcw, Route, Volume2, VolumeX } from "lucide-react";
+import { MapPin, Pause, Play, RotateCcw, Route, Volume2, VolumeX } from "lucide-react";
 import { DELIVERY_STOPS } from "@/data/delivery-map";
 import { DELIVERY_GAME_CONFIG } from "@/data/delivery-game";
 import { useDialogFocus } from "./DeliveryCampaign";
@@ -8,10 +8,8 @@ import { PlatformReturnLink } from "./PlatformReturnLink";
 import shared from "./DeliveryCampaign.module.css";
 import styles from "./DeliveryNavigation.module.css";
 
-export type ControlHand = "right" | "left";
-
-export function DeliveryPauseMenu({ stopIndex, controlHand, onControlHand, soundOn, onToggleSound, onResume, onReplay, onRestart }: {
-  stopIndex: number; controlHand: ControlHand; onControlHand: (hand: ControlHand) => void; soundOn: boolean; onToggleSound: () => void; onResume: () => void; onReplay: () => void; onRestart: () => void;
+export function DeliveryPauseMenu({ stopIndex, soundOn, onToggleSound, onResume, onReplay, onRestart }: {
+  stopIndex: number; soundOn: boolean; onToggleSound: () => void; onResume: () => void; onReplay: () => void; onRestart: () => void;
 }) {
   const ref = useDialogFocus();
   const next = DELIVERY_STOPS[stopIndex];
@@ -20,15 +18,7 @@ export function DeliveryPauseMenu({ stopIndex, controlHand, onControlHand, sound
       <div className={styles.pauseHead}><span className={styles.pauseSymbol}><Pause aria-hidden="true" /></span><h2 id="delivery-pause-title">잠시 멈췄어요</h2></div>
       <p className={styles.pauseDestination}><MapPin aria-hidden="true" /><span>{next ? `다음 배달 ${stopIndex + 1}/${DELIVERY_STOPS.length}` : "마지막 배달"}</span><strong>{next?.address ?? DELIVERY_GAME_CONFIG.destinationName}</strong></p>
       <div className={styles.settings}>
-        <div className={styles.settingRow}>
-          <span className={styles.settingLabel}><Hand aria-hidden="true" />이동하는 손</span>
-          <div className={styles.segmented} role="radiogroup" aria-label="이동하는 손">
-            {([["right", "오른손"], ["left", "왼손"]] as const).map(([hand, label]) => (
-              <button key={hand} type="button" role="radio" aria-checked={controlHand === hand} data-control-hand-option={hand} onClick={() => onControlHand(hand)}>{label}</button>
-            ))}
-          </div>
-        </div>
-        <p className={styles.settingHint}>{controlHand === "right" ? "왼쪽" : "오른쪽"} 화면을 탭하면 점프해요</p>
+        <p className={styles.settingHint}>좌우로 밀면 차선 이동 · 위로 밀거나 탭하면 점프 · 아래로 밀면 숙이기</p>
         <button type="button" className={styles.settingRow} aria-pressed={soundOn} data-sound-toggle onClick={onToggleSound}>
           <span className={styles.settingLabel}>{soundOn ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}소리·진동</span>
           <span className={styles.switch} aria-hidden="true"><i /></span>

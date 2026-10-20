@@ -570,6 +570,16 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
     for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) add(rbox(.2, .78, .22, white, .03), x, .95, .01).rotation.z = -0.55;
     for (const x of [-0.83, 0.83]) { add(rbox(.14, .86, .16, ink, .04), x, .45); add(rbox(.5, .08, .5, ink, .03), x, .04); }
     add(new THREE.Mesh(new THREE.SphereGeometry(.12, 12, 10), mat("#ffd23d", .8)), -.85, 1.45);
+  } else if (placement.kind === "overhead") {
+    // A low striped beam on two posts across the whole road, with hanging flags: duck under it.
+    const red = mat("#ff4d5a", .2);
+    add(rbox(width + .3, .5, .42, red, .1), 0, 1.5);
+    for (let x = -width / 2 + .5; x <= width / 2 - .4; x += .9) add(rbox(.34, .52, .44, white, .03), x, 1.5).rotation.z = -.55;
+    for (const side of [-1, 1]) {
+      add(rbox(.26, 1.75, .3, ink, .05), side * (width / 2 + .1), .88);
+      add(rbox(.6, .08, .6, ink, .03), side * (width / 2 + .1), .04);
+    }
+    for (const x of [-width / 4, width / 4]) add(rbox(.5, .42, .05, mat("#ffd23d", .5), .03), x, 1.05);
   } else if (placement.kind === "plank") {
     // Speed-bump board: sunny yellow with white chevrons and red end reflectors.
     add(rbox(width, .24, .55, mat("#ffcf33", .2), .08), 0, .17);
