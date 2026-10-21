@@ -20,7 +20,7 @@ for (const [i] of DELIVERY_STOPS.entries()) {
   assert(hasArrived(h - 1, i, .3));
 
   // Same braking rule as the game tick: from full speed the bike halts on the stop point, without overshoot.
-  let position = h - DRIVE_BY.warnAhead - 10, speed = config.forwardSpeedPerSecond, t = 0;
+  let position = h - DRIVE_BY.warnAhead - 10, speed: number = config.forwardSpeedPerSecond, t = 0;
   const dt = 1 / 60;
   while (!hasArrived(position, i, speed) && t < 20) {
     speed = Math.min(config.forwardSpeedPerSecond, speed + config.accelerationPerSecond * dt);
