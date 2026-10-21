@@ -238,12 +238,8 @@ export function DeliveryGame() {
         : desiredSpeed;
       // A ramp flight keeps its launch speed: no throttle or brakes in the air.
       if (!(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
-            const previousPosition = runtime.position;
+      const previousPosition = runtime.position;
       runtime.position += runtime.speed * deltaSeconds;
-            runtime.turnChoice = null;
-          runtime.collisionId = null;
-        }
-      }
 
       if (runtime.position <= 0) {
         runtime.position = 0;
