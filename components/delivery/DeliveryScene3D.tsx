@@ -8,7 +8,6 @@ import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
-import { DRIVE_BY } from "./delivery-driveby";
 import { type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { duckAmountAt, jumpHeightAt } from "./delivery-jump";
 import { moverPose, TIMED } from "./delivery-movers";
@@ -346,9 +345,9 @@ export function DeliveryScene3D({
       }
 
       for (const [index, stop] of world.deliveryStops.entries()) {
-        // The parcel flies to the door during the throw, then rests there while the banner shows.
+        // After a correct answer the parcel flies to the door while the success banner shows.
         const delivered = current.deliverySuccessRemaining > 0 && current.completedStops?.at(-1) === index;
-        const progress = delivered ? 1 : index === current.stopIndex ? Math.min(1, current.stopDwell / DRIVE_BY.throwSeconds) : 0;
+        const progress = delivered ? Math.min(1, DELIVERY_GAME_CONFIG.deliverySuccessSeconds - current.deliverySuccessRemaining) : 0;
         stop.parcel.visible = progress > .08 && !reduceMotion;
         if (stop.parcel.visible) {
           const destination = stop.house.localToWorld(new THREE.Vector3(...stop.house.userData.entranceLocal as [number, number, number]));

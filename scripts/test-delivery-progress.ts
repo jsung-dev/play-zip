@@ -8,7 +8,7 @@ for (const [i] of DELIVERY_STOPS.entries()) {
   const state = {...fresh(), stopIndex: i, completedStops: Array.from({length: i}, (_, n) => n), position: houseDistance(i)};
   assert.equal(advanceDeliveryTargets(state).stopIndex, i, "Reaching the house keeps it as the target");
   const edge = houseDistance(i) + DRIVE_BY.windowBehind;
-  assert.equal(advanceDeliveryTargets({...state, position: edge}).stopIndex, i, "Still inside the throw window");
+  assert.equal(advanceDeliveryTargets({...state, position: edge}).stopIndex, i, "Still beside the house");
   const skipped = advanceDeliveryTargets({...state, position: edge + .01});
   assert.equal(skipped.stopIndex, i + 1); assert.deepEqual(skipped.skippedStops, [i]);
   assert.equal(completedDeliveryCount(state.completedStops, false), i);

@@ -9,8 +9,7 @@ import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
-import { DRIVE_BY, DRIVE_BY_TEXT, THROW_LABEL, driveByPhase, driveByRing, throwGrade, type ThrowGrade } from "./delivery-driveby";
-import { DeliveryThrowRing } from "./DeliveryThrowRing";
+import { DRIVE_BY_TEXT, driveByPhase, hasArrived, metersToStop } from "./delivery-driveby";
 import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliverySwipe } from "./DeliverySwipe";
@@ -39,8 +38,7 @@ type RuntimeState = {
   quizPassedStops: number[];
   completedStops: number[];
   skippedStops: number[];
-  stopDwell: number; // seconds since the parcel left the bike (0 = not throwing)
-  throwGrade: ThrowGrade | null;
+  stopDwell: number;
   deliveryPulse: number;
   deliverySuccessRemaining: number;
   detour: DetourChoice;
@@ -62,7 +60,7 @@ type RuntimeState = {
 };
 
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, throwGrade: null, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, duckElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, duckElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
 
 let toastId = 0;
 // Short on-screen callouts (praise, penalties, section names); the latest wins.
@@ -139,8 +137,6 @@ export function DeliveryGame() {
     runtime.deliverySuccessRemaining = DELIVERY_GAME_CONFIG.deliverySuccessSeconds;
     Object.assign(runtime, advanceDeliveryTargets(runtime));
     runtime.speed = 0;
-    if (runtime.throwGrade === "perfect") { runtime.boostRemaining = BOOST.seconds; showToast(runtime, "퍼펙트 부스터!", "good"); }
-    runtime.throwGrade = null;
     runtime.stopDwell = 0;
     clearInputs();
     setFrame({ ...runtime });
@@ -242,8 +238,12 @@ export function DeliveryGame() {
         : desiredSpeed;
       // A ramp flight keeps its launch speed: no throttle or brakes in the air.
       if (!(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
-      // The bike hangs in the air while the parcel flies to the door.
-      if (runtime.stopDwell > 0) runtime.speed = 0;
+      // Brake automatically so the bike stops beside the house of the pending delivery.
+      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex) && runtime.speed > 0
+        && !(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) {
+        const cap = Math.sqrt(2 * DELIVERY_GAME_CONFIG.deliveryAutoBrakePerSecond * metersToStop(runtime.position, runtime.stopIndex));
+        if (driveByPhase(runtime.position, runtime.stopIndex) === "warn" && runtime.speed > cap) runtime.speed = cap;
+      }
       const previousPosition = runtime.position;
       runtime.position += runtime.speed * deltaSeconds;
 
@@ -272,27 +272,14 @@ export function DeliveryGame() {
       const previousStopIndex = runtime.stopIndex;
       Object.assign(runtime, advanceDeliveryTargets(runtime));
       if (runtime.stopIndex !== previousStopIndex) runtime.stopDwell = 0;
-      // Jump in the window (or ride through it) throws the parcel; the quiz opens once it lands.
-      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex)) {
-        if (runtime.stopDwell > 0) {
-          runtime.stopDwell += deltaSeconds;
-          if (runtime.stopDwell >= DRIVE_BY.throwSeconds) {
-            runtime.stopDwell = DRIVE_BY.throwSeconds;
-            clearInputs();
-            setFrame({ ...runtime });
-            setStatus("quiz");
-            return;
-          }
-        } else {
-          const grade = throwGrade(runtime.position, runtime.stopIndex, runtime.jumpElapsed !== null);
-          if (grade) {
-            runtime.throwGrade = grade;
-            runtime.stopDwell = .001;
-            runtime.speed = 0;
-            showToast(runtime, THROW_LABEL[grade], grade === "auto" ? "info" : "good", 1.2);
-            playSfx(grade === "perfect" ? "nice" : "jump");
-          }
-        }
+      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex)
+        && hasArrived(runtime.position, runtime.stopIndex, runtime.speed)) {
+        runtime.speed = 0;
+        runtime.jumpElapsed = null;
+        clearInputs();
+        setFrame({ ...runtime });
+        setStatus("quiz");
+        return;
       }
 
       // An alley-to-main join bypasses that section of the main road; do not
@@ -464,7 +451,7 @@ export function DeliveryGame() {
   // Count completed handoffs, including the final destination after its animation.
   const completedDeliveries = completedDeliveryCount(frame.completedStops, status === "completed");
   const canPause = status === "playing" || status === "arriving";
-  const ring = frame.completedStops.includes(frame.stopIndex) ? null : driveByRing(frame.position, frame.stopIndex);
+  const driveBy = frame.completedStops.includes(frame.stopIndex) ? "far" : driveByPhase(frame.position, frame.stopIndex);
   const navigation = getDeliveryNavigation(frame, status === "arriving");
   const NavigationIcon = { forward: ArrowUp, left: ArrowLeft, right: ArrowRight, reverse: ArrowDown, fork: GitFork, stop: Pause, delivery: PackageCheck, complete: Check }[navigation.direction];
 
@@ -493,7 +480,7 @@ export function DeliveryGame() {
         data-delivery-pulse={frame.deliveryPulse}
         data-delivery-success-remaining={frame.deliverySuccessRemaining.toFixed(3)}
         data-detour={frame.detour}
-        data-drive-by={driveByPhase(frame.position, frame.stopIndex)} data-throw-grade={frame.throwGrade ?? ""}
+        data-drive-by={driveByPhase(frame.position, frame.stopIndex)}
       >
         <header className={navStyles.hud} data-navigation-hud aria-label="배달 길안내">
           <div className={navStyles.card}>
@@ -550,8 +537,8 @@ export function DeliveryGame() {
               {frame.boostRemaining > 0 && <strong className={styles.boostBadge}>우유 부스터!</strong>}
             </div>
           )}
-          {status === "playing" && !paused && frame.deliverySuccessRemaining <= 0 && frame.stopDwell === 0 && ring && (
-            <DeliveryThrowRing fill={ring.fill} phase={ring.phase} perfect={ring.perfect} text={DRIVE_BY_TEXT[ring.phase]} />
+          {status === "playing" && !paused && frame.deliverySuccessRemaining <= 0 && driveBy === "warn" && (
+            <strong className={styles.driveByBanner} role="status">{DRIVE_BY_TEXT.warn}</strong>
           )}
           <DeliveryScene3D
             position={frame.position}

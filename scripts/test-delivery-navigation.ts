@@ -7,7 +7,6 @@ const h = houseDistance(0);
 const cases = [
   { input: base, direction: "forward", text: "직진" },
   { input: { ...base, position: h - DRIVE_BY.warnAhead + 1 }, direction: "left", text: DRIVE_BY_TEXT.warn },
-  { input: { ...base, position: h - DRIVE_BY.windowAhead + 1 }, direction: "stop", text: DRIVE_BY_TEXT.window },
   { input: { ...base, position: h + DRIVE_BY.windowBehind + 1, stopIndex: 1 }, direction: "forward", text: "직진" },
   { input: { ...base, position: 380, stopIndex: 1 }, direction: "right", text: DRIVE_BY_TEXT.warn },
   { input: { ...base, position: 470, stopIndex: 2 }, direction: "fork", text: "가운데 길" },
