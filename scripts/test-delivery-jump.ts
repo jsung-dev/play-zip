@@ -36,5 +36,11 @@ for (const o of OBSTACLE_PLACEMENTS) {
   }
   for (const [from, to] of blocked) assert(o.distance < from || o.distance > to, `${o.id} sits in a reserved zone ${from}-${to}`);
 }
+// Sign beams punish a jumper, so each set follows a full-width jump obstacle 7-12 m earlier (jump, then swipe down).
+for (const b of OBSTACLE_PLACEMENTS.filter(o => o.kind === "signbeam")) {
+  assert.equal(b.span, 3, `${b.id} spans the road`);
+  assert(OBSTACLE_PLACEMENTS.some(o => o.span === 3 && OBSTACLE_CLEARANCE[o.kind] !== null && b.distance - o.distance >= 7 && b.distance - o.distance <= 12), `${b.id} follows a jump obstacle`);
+}
+assert(OBSTACLE_PLACEMENTS.filter(o => o.kind === "signbeam").length >= 2, "Has swipe-down sign beam sets");
 assert(OBSTACLE_PLACEMENTS.filter(o => o.span === 3).length >= 2, "Has must-jump obstacles");
 console.log("Jump arc, clearance, lane coverage and reserved-zone placement verified.");

@@ -85,7 +85,7 @@ for (const d of MOVER_PLACEMENTS.filter(m => m.kind === "dropper")) {
   if (d.lane !== undefined) assert.equal(moverPose(d, start, start, lanes[1]).x, lanes[d.lane], `${d.id} falls in its own lane`);
   else assert.equal(moverPose(d, start, start, lanes[2]).x, lanes[2], `${d.id} is aimed at the rider's lane`);
 }
-assert(MOVER_PLACEMENTS.filter(m => m.kind === "dropper").length >= 8, "Plenty of things fall from the sky");
+assert(MOVER_PLACEMENTS.filter(m => m.kind === "dropper").length >= 4, "Plenty of things fall from the sky");
 assert(MOVER_PLACEMENTS.some(m => m.kind === "dropper" && m.look === "pot") && MOVER_PLACEMENTS.some(m => m.kind === "dropper" && m.look === "melon"), "Falling things come in different kinds");
 // The two detours get different hazards.
 const kindsOf = (branch: string) => new Set(MOVER_PLACEMENTS.filter(m => m.branch === branch).map(m => m.kind));

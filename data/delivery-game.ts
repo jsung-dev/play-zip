@@ -36,7 +36,7 @@ export type ObstaclePlacement = {
   id: string;
   distance: number;
   lane: 0 | 1 | 2;
-  kind: "cones" | "barrier" | "box" | "plank" | "crates" | "overhead";
+  kind: "cones" | "barrier" | "box" | "plank" | "crates" | "overhead" | "signbeam";
   // Lanes covered to the right of `lane`; 3 blocks the whole road (jump only).
   span?: 1 | 2 | 3;
   // Placed on a detour branch instead of the main road.
@@ -154,9 +154,9 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "duck-overhead-880", distance: 880, lane: 0, kind: "overhead", span: 3 },
   // 1구간 점프 연습: 전 차선 판자 → 두 차선 상자 → (하늘 택배) → 양쪽 콘 → (수박 소나기) → 두 차선 상자.
   { id: "s1-plank-80", distance: 80, lane: 0, kind: "plank", span: 3 },
-  { id: "s1-crates-100", distance: 100, lane: 1, kind: "crates", span: 2 },
-  { id: "s1-cones-140-0", distance: 140, lane: 0, kind: "cones" },
-  { id: "s1-cones-140-2", distance: 140, lane: 2, kind: "cones" },
+  { id: "s1-crates-112", distance: 112, lane: 1, kind: "crates", span: 2 },
+  { id: "s1-cones-144-0", distance: 144, lane: 0, kind: "cones" },
+  { id: "s1-cones-144-2", distance: 144, lane: 2, kind: "cones" },
   // 2구간 지그재그: 왼쪽 차단 펜스 + 가운데 상자. (첫 배달 존 뒤 40m)
   { id: "s2-barrier-240", distance: 240, lane: 0, kind: "barrier" },
   { id: "s2-crates-240", distance: 240, lane: 1, kind: "crates" },
@@ -173,9 +173,13 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "s7-cones-748", distance: 748, lane: 0, kind: "cones" },
   // 5구간 허들: 두 번째 배달 존(~430m)을 벗어나자마자 한 번.
   { id: "s5-plank-432", distance: 432, lane: 0, kind: "plank", span: 3 },
-  { id: "s7-crates-768", distance: 768, lane: 0, kind: "crates", span: 2 },
+  // 7구간 급하강 연습: 판자를 점프로 넘은 직후 낮은 표지판 빔. 공중에 있으면 표지판 빔에 걸리니 착지 직전 아래로 스와이프.
+  { id: "s7-plank-766", distance: 766, lane: 0, kind: "plank", span: 3 },
+  { id: "s7-signbeam-775", distance: 775, lane: 0, kind: "signbeam", span: 3 },
   // 마지막: 착지한 뒤 바로 두 차선 상자.
-  { id: "s9-crates-934", distance: 934, lane: 0, kind: "crates", span: 2 },
+  // 마지막 급하강: 판자 직후 표지판 빔.
+  { id: "s9-plank-928", distance: 928, lane: 0, kind: "plank", span: 3 },
+  { id: "s9-signbeam-937", distance: 937, lane: 0, kind: "signbeam", span: 3 },
 ];
 
 // 광고 브랜드/옥외 광고 설정은 data/delivery-outdoor-ads.ts에서 독립 관리합니다.

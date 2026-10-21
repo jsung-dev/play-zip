@@ -423,6 +423,17 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
       add(rbox(.6, .08, .6, ink, .03), side * (width / 2 + .1), .04);
     }
     for (const x of [-width / 4, width / 4]) add(rbox(.5, .42, .05, mat("#ffd23d", .5), .03), x, 1.05);
+  } else if (placement.kind === "signbeam") {
+    // A raised height-limit beam on two posts: ride under it, a jump hits it.
+    const yellow = mat("#ffcf33", .2);
+    add(rbox(width + .3, .8, .42, yellow, .1), 0, 2.3);
+    for (let x = -width / 2 + .5; x <= width / 2 - .4; x += .9) add(rbox(.3, .82, .44, ink, .03), x, 2.3).rotation.z = -.55;
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), new THREE.MeshBasicMaterial({ map: makeTextTexture({ title: "높이 제한", background: "#2f7fd6", foreground: "#ffffff", width: 512, height: 192 }), toneMapped: false }));
+    add(plate, 0, 2.3, .23);
+    for (const side of [-1, 1]) {
+      add(rbox(.26, 2.7, .3, ink, .05), side * (width / 2 + .1), 1.35);
+      add(rbox(.6, .08, .6, ink, .03), side * (width / 2 + .1), .04);
+    }
   } else if (placement.kind === "plank") {
     // Speed-bump board: sunny yellow with white chevrons and red end reflectors.
     add(rbox(width, .24, .55, mat("#ffcf33", .2), .08), 0, .17);
