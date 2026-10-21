@@ -26,7 +26,7 @@ for (const o of OBSTACLE_PLACEMENTS) {
 }
 
 // Jump obstacles avoid the start, the green delivery zones (30 m before to 30 m after the stop), the detour and the final approach.
-const blocked: [number, number][] = [[0, 70], [ROAD_CLOSURE.junctionDistance - 60, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
+const blocked: [number, number][] = [[0, 70], [ROAD_CLOSURE.junctionDistance - 60, ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.rampMeters], [ROAD_CLOSURE.mergeStart, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
 for (const i of DELIVERY_STOPS.keys()) blocked.push([houseDistance(i) - DRIVE_BY.protect, houseDistance(i) + DRIVE_BY.protect]);
 for (const o of OBSTACLE_PLACEMENTS) {
   if (o.branch) {
@@ -42,5 +42,7 @@ for (const b of OBSTACLE_PLACEMENTS.filter(o => o.kind === "signbeam")) {
   assert(OBSTACLE_PLACEMENTS.some(o => o.span === 3 && OBSTACLE_CLEARANCE[o.kind] !== null && b.distance - o.distance >= 7 && b.distance - o.distance <= 12), `${b.id} follows a jump obstacle`);
 }
 assert(OBSTACLE_PLACEMENTS.filter(o => o.kind === "signbeam").length >= 2, "Has swipe-down sign beam sets");
+// The middle road of the open fork is not empty: it has its own obstacles on the straight section.
+assert(OBSTACLE_PLACEMENTS.filter(o => !o.branch && o.distance > ROAD_CLOSURE.junctionDistance && o.distance < ROAD_CLOSURE.mergeEnd).length >= 3, "Middle road has obstacles");
 assert(OBSTACLE_PLACEMENTS.filter(o => o.span === 3).length >= 2, "Has must-jump obstacles");
 console.log("Jump arc, clearance, lane coverage and reserved-zone placement verified.");

@@ -164,6 +164,10 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   { id: "s3-cones-272-0", distance: 272, lane: 0, kind: "cones" },
   { id: "s3-cones-272-2", distance: 272, lane: 2, kind: "cones" },
   // 6구간 우회로. 왼쪽(공사장 길): 콘 → 우유통 → 점프대 → 상자 → 콘 → 바리케이드.
+  // 가운데 길(세 갈래 중 본길): 상자 → 판자 → 표지판 빔. 우회로와 달리 점프대는 없지만 장애물이 이어집니다.
+  { id: "s6-mid-crates-580", distance: 580, lane: 0, kind: "crates", span: 2 },
+  { id: "s6-mid-plank-603", distance: 603, lane: 0, kind: "plank", span: 3 },
+  { id: "s6-mid-signbeam-612", distance: 612, lane: 0, kind: "signbeam", span: 3 },
   { id: "s6-left-cones-574-0", distance: 574, lane: 0, kind: "cones", branch: "left" },
   { id: "s6-left-cones-574-2", distance: 574, lane: 2, kind: "cones", branch: "left" },
   { id: "s6-left-crates-623", distance: 623, lane: 0, kind: "crates", span: 2, branch: "left" },
