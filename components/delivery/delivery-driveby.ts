@@ -1,4 +1,4 @@
-import { DELIVERY_STOPS } from "@/data/delivery-map";
+import { DELIVERY_HOUSE, DELIVERY_STOPS } from "@/data/delivery-map";
 
 /** Delivery without an alley: the bike brakes beside the house on the main road and the quiz opens. */
 export const DRIVE_BY = { warnAhead: 90, windowBehind: 4, stopSpeed: .55, stopWithin: 3 } as const;
@@ -7,8 +7,8 @@ export const DRIVE_BY_TEXT = { warn: "곧 배달지 도착입니다", arrive: "�
 
 export type DriveByPhase = "far" | "warn" | "passed";
 
-/** Route distance closest to the house (it sits 8.5–10.5 m past the old alley entrance; tested). */
-export const houseDistance = (stopIndex: number) => DELIVERY_STOPS[stopIndex].distance + 9.5;
+/** Route distance beside the house, where the bike halts. */
+export const houseDistance = (stopIndex: number) => DELIVERY_STOPS[stopIndex].distance + DELIVERY_HOUSE.along;
 
 export function driveByPhase(position: number, stopIndex: number): DriveByPhase {
   if (!DELIVERY_STOPS[stopIndex]) return "far";

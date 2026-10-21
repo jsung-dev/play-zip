@@ -57,7 +57,7 @@ assert.equal(brightMaterial.toneMapped, false, "Keep the reference pastel colour
 assert.notEqual(brightMaterial, art.box(1,1,1,"#BDE6C2").material, "Do not change the courier or ad material response");
 assert(Math.max(...dimensions.map(d=>d.newWidth))/Math.min(...dimensions.map(d=>d.newWidth))>1.4, "Wide shops and narrow villas have different real frontage");
 const ads = resolveAdvertisements(), buildings = buildStreetLayout(ads), oldBuildings = SCENERY_ITEMS.filter(i => ["house", "shop"].includes(i.type) && sceneryHasClearance(i, ads));
-assert.equal(buildings.length,203,"Preserve the existing lot plan");
+assert.equal(buildings.length,204,"Lot plan: the 203 original lots plus one freed by removing the alleys");
 let triangles = 0, meshes = 0;
 for(const item of buildings) art.building(item,true).traverse(o=>{
   if(o instanceof THREE.Mesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;}
@@ -78,13 +78,9 @@ for (let i = 0; i < buildings.length; i++) {
     }
   }
   for (let i = 0; i < DELIVERY_STOPS.length; i++) {
-    const length = getDrivewayLength(i), transform = getDeliveryHouseTransform(i), p = buildingProfile({ type: "house", variant: i });
+    const transform = getDeliveryHouseTransform(i), p = buildingProfile({ type: "house", variant: i });
     const house = rectangle(transform.position, transform.yaw, -p.halfWidth, p.halfWidth, -p.back, p.front);
     assert(!polygonsOverlap(b.footprint, house, .9), `Delivery-house clearance: ${b.id}`);
-    for (let d = 0; d <= length; d += .25) {
-      const point = getDrivewayFrame(i, d).position;
-      assert(pointPolygonDistance(new THREE.Vector2(point.x, point.z), b.footprint) > getDrivewayPavedWidth(i,d) / 2 + .5, `Driveway clearance: ${b.id}`);
-    }
   }
 }
 // Check the creative, not only its centre, along three approach sightlines.

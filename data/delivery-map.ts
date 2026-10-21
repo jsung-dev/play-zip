@@ -161,13 +161,18 @@ export function getDrivewayDeliveryInterval(stopIndex: number) {
   return { start: center - halfDepth, end: center + halfDepth, width: DELIVERY_GAME_CONFIG.drivewayWidth };
 }
 
+/** Houses stand on the sidewalk side of the main road, facing it (no alley). */
+export const DELIVERY_HOUSE = {
+  /** Meters past the stop's route distance where the bike halts beside the house. */
+  along: 9.5,
+  /** Lateral distance of the house origin: sidewalk outer edge 10.1 + front 3.894 + setback .55 (checked in test-delivery-driveby). */
+  offset: 14.544,
+} as const;
+
 export function getDeliveryHouseTransform(stopIndex: number) {
-  getDrivewayCurve(stopIndex);
-  const frame = getDrivewayFrame(stopIndex, deliveryCenters.get(stopIndex)!);
-  const side = DELIVERY_STOPS[stopIndex].side === "left" ? -1 : 1;
-  // Move only this house to the outside of its delivery pad. The old house
-  // stood across the dead end; its door now faces the unobstructed through-road.
-  return { position: frame.position.clone().addScaledVector(frame.lateral, side * DRIVEWAY_ROUTE.houseOffset), yaw: frame.yaw - side * Math.PI / 2 };
+  const stop = DELIVERY_STOPS[stopIndex], side = stop.side === "left" ? -1 : 1;
+  const frame = getRouteFrame(stop.distance + DELIVERY_HOUSE.along);
+  return { position: frame.position.clone().addScaledVector(frame.lateral, side * DELIVERY_HOUSE.offset), yaw: frame.yaw - side * Math.PI / 2 };
 }
 
 export function getDrivewayFrame(stopIndex: number, progress: number, entry?: Pick<DrivewayState, "entryPosition" | "entryLaneX" | "entryEnd">) {

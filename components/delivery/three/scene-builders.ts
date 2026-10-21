@@ -10,7 +10,7 @@ import {
   type DeliveryBrand,
   type ObstaclePlacement,
 } from "@/data/delivery-game";
-import { DELIVERY_STOPS, ROAD_CLOSURE, TURN_LANE, TURN_LANE_CONNECTIONS, getExtraLaneX, turnLaneSide, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, getDrivewayDeliveryInterval, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
+import { DELIVERY_HOUSE, DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
 import { applyRoadSurfaceUV, createRoadSurfaceMaterial, createRestrictedSurfaceMaterial, ROAD_SURFACE } from "./road-surface";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
@@ -282,9 +282,6 @@ function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourCh
 
 export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt, brand: DeliveryBrand, road: THREE.Material) {
   const index = DELIVERY_STOPS.findIndex((item) => item.id === stop.id);
-  const length = getDrivewayLength(index);
-  const zone = getDrivewayDeliveryInterval(index);
-  const frame = getDrivewayFrame(index, (zone.start + zone.end) / 2);
   const houseTransform = getDeliveryHouseTransform(index);
   const house = art.building({ id: stop.id, distance: stop.distance, side: stop.side, type: "house", variant: index });
   house.position.copy(houseTransform.position);
@@ -292,70 +289,8 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
   house.name = `delivery-house-${stop.id}`;
   house.userData.deliveryStopId = stop.id;
   const marker = markDistance(new THREE.Group(), stop.distance);
-  const width = DELIVERY_GAME_CONFIG.drivewayWidth;
-  const edgeMaterial = new THREE.MeshBasicMaterial({ color: "#fae4ab", side: THREE.DoubleSide, toneMapped: false });
-  // Do not leave the decorative ivory/yellow rim across the main-road join.
-  // Recolor only overlapping triangles; retain every vertex and all road paths.
-  const mainRoadSamples = Array.from({length: Math.ceil(getDrivewayExitDistance(index) - stop.distance + 16) + 1}, (_, n) => getRouteFrame(stop.distance - 8 + n).position);
-  const blendJoinedEdge = (mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material>) => {
-    const geometry = mesh.geometry, position = geometry.getAttribute("position"), triangles = geometry.index!;
-    geometry.clearGroups();
-    let previousMaterial = -1, start = 0;
-    for (let n = 0; n < triangles.count; n += 3) {
-      const onRoad = [0,1,2].some(corner => {
-        const vertex = triangles.getX(n + corner), x = position.getX(vertex), z = position.getZ(vertex);
-        return mainRoadSamples.some(point => (point.x-x)**2 + (point.z-z)**2 <= 7.8**2);
-      });
-      const nextMaterial = onRoad ? 0 : 1;
-      if (nextMaterial !== previousMaterial) {
-        if (previousMaterial >= 0) geometry.addGroup(start, n-start, previousMaterial);
-        start = n; previousMaterial = nextMaterial;
-      }
-    }
-    geometry.addGroup(start, triangles.count-start, previousMaterial);
-    return new THREE.Mesh(geometry, [road, mesh.material]);
-  };
-  const ribbon = (ribbonWidth: number, material: THREE.Material, start = 0, end = length, offset = 0, y = .065) => {
-    const positions: number[] = [], indices: number[] = [];
-    for (let n = 0; n <= 40; n++) {
-      const distance = start + (end - start) * n / 40;
-      const segment = getDrivewayFrame(index, distance);
-      if (distance > length) segment.position.addScaledVector(segment.tangent, distance - length);
-      // Match the fourth lane's 3m mouth, then ease into the unchanged 4.4m
-      // alley. The old 7.6m decorative flare left gray triangles on the walk.
-      // This is pavement skin only; driveway curves, entries and bounds stay put.
-      const joinDistance = Math.min(distance, length - distance);
-      const flare = THREE.MathUtils.lerp(TURN_LANE.halfWidth * 2, width,
-        THREE.MathUtils.smoothstep(joinDistance, 0, 6)) - width;
-      const pavedWidth = ribbonWidth > 1 ? ribbonWidth + flare : ribbonWidth;
-      const edgeOffset = offset + Math.sign(offset) * flare / 2;
-      for (const side of [-1, 1]) {
-        const point = segment.position.clone().addScaledVector(segment.lateral, edgeOffset + side * pavedWidth / 2);
-        positions.push(point.x, y, point.z);
-      }
-      if (n < 40) { const i = n * 2; indices.push(i, i + 1, i + 2, i + 1, i + 3, i + 2); }
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setIndex(indices); geometry.computeVertexNormals();
-    return new THREE.Mesh(applyRoadSurfaceUV(geometry), material);
-  };
-  marker.add(blendJoinedEdge(ribbon(width + .5, art.material(ROAD_SURFACE.sidewalk))));
-  marker.add(ribbon(width, road, 0, length, 0, .076));
-  // Fade the borders into the main road instead of drawing a barrier at either join.
-  for (const offset of [-width / 2, width / 2]) marker.add(blendJoinedEdge(ribbon(.12, edgeMaterial, 3, length - 3, offset, .095)));
-
-  // Current-target guidance is rendered separately from permanent road geometry.
-  const furniture = new THREE.Group();
   const side = stop.side === "left" ? -1 : 1;
-  furniture.position.copy(frame.position); furniture.rotation.y = frame.yaw;
-  marker.add(furniture);
-  for (const z of [-5.5, 5.5]) {
-    const x = side * (width / 2 + 1);
-    art.put(furniture, art.box(.8, .48, 1.3, "#cfbea2", .07), x, .24, z);
-    const bush = art.sphere(.55, "#8ca77f"); bush.scale.z = 1.5;
-    art.put(furniture, bush, x, .7, z);
-  }
+  const frame = getRouteFrame(stop.distance + DELIVERY_HOUSE.along);
 
   const parcel = new THREE.Group();
   art.put(parcel, art.box(.6, .8, .46, brand.secondaryColor, .05), 0, 0, 0);
