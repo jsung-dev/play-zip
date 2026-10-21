@@ -62,6 +62,28 @@ export type DeliveryWorld = {
   horizon: THREE.Group;
 };
 
+const ZONE = { width: 7.8, length: 14, y: .06, color: "#2fc26e" } as const;
+
+/** Flat green pad on the road at a delivery stop: solid green, white border, "배달" read from the saddle. */
+function createDeliveryZone() {
+  const canvas = document.createElement("canvas"), w = 256, h = Math.round(w * ZONE.length / ZONE.width);
+  canvas.width = w; canvas.height = h;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.fillStyle = "#ffffff"; context.fillRect(0, 0, w, h);
+    context.fillStyle = ZONE.color; context.fillRect(14, 14, w - 28, h - 28);
+    context.fillStyle = "#ffffff"; context.textAlign = "center"; context.textBaseline = "middle";
+    context.font = `900 ${Math.round(w * .34)}px "Malgun Gothic", sans-serif`;
+    context.fillText("배달", w / 2, h / 2);
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+  const material = new THREE.MeshBasicMaterial({ map, toneMapped: false });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ZONE.width, ZONE.length), material);
+  mesh.rotation.x = -Math.PI / 2; // lies flat, text top points down the road
+  return mesh;
+}
+
 const DUCK_SHIRTS = ["#ff7a8a", "#4fb7e8", "#7bd389"];
 
 export type DeliveryStopRig = {
@@ -306,6 +328,13 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
   const doorWorld = house.localToWorld(new THREE.Vector3(...house.userData.entranceLocal as [number, number, number])).sub(frame.position);
   const base = { position: frame.position.clone(), lateral: frame.lateral.clone(), tangent: frame.tangent.clone() };
   const rest = { u: side * DUCK.restU, v: 0 }, door = { u: doorWorld.dot(base.lateral), v: doorWorld.dot(base.tangent) };
+
+  const zone = createDeliveryZone();
+  const zoneGroup = new THREE.Group();
+  zoneGroup.position.set(base.position.x, ZONE.y, base.position.z);
+  zoneGroup.rotation.y = frame.yaw;
+  zoneGroup.add(zone);
+  marker.add(zoneGroup);
 
   const parcel = new THREE.Group();
   art.put(parcel, art.box(.6, .8, .46, brand.secondaryColor, .05), 0, 0, 0);

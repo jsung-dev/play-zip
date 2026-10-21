@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "../data/delivery-game";
-import { DELIVERY_STOPS, DRIVEWAY_ROUTE, ROAD_CLOSURE, TURN_LANE, getDrivewayExitDistance } from "../data/delivery-map";
+import { DELIVERY_STOPS, ROAD_CLOSURE } from "../data/delivery-map";
+import { DRIVE_BY, houseDistance } from "../components/delivery/delivery-driveby";
 import { JUMP_CONFIG, OBSTACLE_CLEARANCE, clearsObstacle, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth } from "../components/delivery/delivery-jump";
 
 assert.equal(jumpHeightAt(null), 0);
@@ -24,14 +25,9 @@ for (const o of OBSTACLE_PLACEMENTS) {
   assert(o.lane + (o.span ?? 1) - 1 <= 2, `${o.id} stays on the three through lanes`);
 }
 
-// Jump obstacles avoid the start, the last 30 m before each alley, alley exits, the detour and the final approach.
+// Jump obstacles avoid the start, the green delivery zones (30 m before to 30 m after the stop), the detour and the final approach.
 const blocked: [number, number][] = [[0, 70], [ROAD_CLOSURE.junctionDistance - 60, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
-for (const [i, stop] of DELIVERY_STOPS.entries()) {
-  blocked.push([stop.distance - 30, stop.distance + TURN_LANE.tail]);
-  const exit = getDrivewayExitDistance(i);
-  // Only the merge itself; reversing back into an exit is rare, so obstacles may follow it.
-  blocked.push([exit - DRIVEWAY_ROUTE.passMargin, exit + 15]);
-}
+for (const i of DELIVERY_STOPS.keys()) blocked.push([houseDistance(i) - DRIVE_BY.protect, houseDistance(i) + DRIVE_BY.protect]);
 for (const o of OBSTACLE_PLACEMENTS) {
   if (o.branch) {
     // Detour obstacles sit on the fully offset part of their branch only.

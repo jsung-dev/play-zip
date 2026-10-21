@@ -15,7 +15,7 @@ export const SECTIONS = [
   { from: 198, name: "2구간 · 지그재그" },
   { from: 245, name: "3구간 · 차단기와 무너진 도로" },
   { from: 314, name: "4구간 · 바리케이드와 증기" },
-  { from: 398, name: "5구간 · 연속 허들" },
+  { from: 398, name: "5구간 · 허들" },
   { from: 505, name: "6구간 · 우회로 질주" },
   { from: 692, name: "7구간 · 버스와 수박 소나기" },
   { from: 830, name: "8구간 · 신호 차선" },

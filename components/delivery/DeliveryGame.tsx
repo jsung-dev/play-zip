@@ -10,7 +10,7 @@ import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./Del
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { duckWalkSeconds, DUCK } from "./three/duck-resident";
-import { DRIVE_BY, DRIVE_BY_TEXT, driveByPhase, hasArrived, metersToStop } from "./delivery-driveby";
+import { DRIVE_BY, driveByPhase, hasArrived, metersToStop } from "./delivery-driveby";
 import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliverySwipe } from "./DeliverySwipe";
@@ -466,7 +466,6 @@ export function DeliveryGame() {
   // Count completed handoffs, including the final destination after its animation.
   const completedDeliveries = completedDeliveryCount(frame.completedStops, status === "completed");
   const canPause = status === "playing" || status === "arriving";
-  const driveBy = frame.completedStops.includes(frame.stopIndex) ? "far" : driveByPhase(frame.position, frame.stopIndex);
   const navigation = getDeliveryNavigation(frame, status === "arriving");
   const NavigationIcon = { forward: ArrowUp, left: ArrowLeft, right: ArrowRight, reverse: ArrowDown, fork: GitFork, stop: Pause, delivery: PackageCheck, complete: Check }[navigation.direction];
 
@@ -551,9 +550,6 @@ export function DeliveryGame() {
               {frame.toast && <strong key={frame.toast.id} className={styles.toastBadge} data-kind={frame.toast.kind}>{frame.toast.text}</strong>}
               {frame.boostRemaining > 0 && <strong className={styles.boostBadge}>우유 부스터!</strong>}
             </div>
-          )}
-          {status === "playing" && !paused && frame.deliverySuccessRemaining <= 0 && frame.stopDwell === 0 && driveBy === "warn" && (
-            <strong className={styles.driveByBanner} role="status">{DRIVE_BY_TEXT.warn}</strong>
           )}
           <DeliveryScene3D
             position={frame.position}

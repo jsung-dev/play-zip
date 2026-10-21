@@ -25,16 +25,15 @@ export const TIMED: ReadonlySet<MoverKind> = new Set(["cat", "ducks", "boom", "s
 
 export const MOVER_PLACEMENTS: MoverPlacement[] = [
   // 1구간: 첫 하늘 택배 → 수박 소나기(양쪽 차선에 시간차로 떨어져 가운데로 몰아 줌).
-  { id: "drop-112", kind: "dropper", trigger: 82, distance: 112 },
-  { id: "melon-144-0", kind: "dropper", trigger: 114, distance: 144, lane: 0, look: "melon" },
-  { id: "melon-144-2", kind: "dropper", trigger: 114, distance: 144, lane: 2, look: "melon", delay: .3 },
-  { id: "pigeons-158", kind: "pigeons", trigger: 136, distance: 158 },
+  { id: "drop-120", kind: "dropper", trigger: 90, distance: 120 },
+  { id: "melon-164-0", kind: "dropper", trigger: 134, distance: 164, lane: 0, look: "melon" },
+  { id: "melon-164-2", kind: "dropper", trigger: 134, distance: 164, lane: 2, look: "melon", delay: .3 },
   // 3구간: 점프대 앞 철도 차단기.
   { id: "boom-258", kind: "boom", trigger: 0, distance: 258 },
   // 4구간: 세 차선을 쓸고 다니는 바퀴 달린 바리케이드 → 화분 → 맨홀 증기 물결.
-  { id: "slider-326", kind: "slider", trigger: 0, distance: 326 },
-  { id: "pot-342", kind: "dropper", trigger: 310, distance: 342, look: "pot" },
-  ...([0, 1, 2] as const).map((lane): MoverPlacement => ({ id: `geyser-356-${lane}`, kind: "geyser", trigger: 0, distance: 356, lane, phase: lane * 1.2 })),
+  { id: "slider-330", kind: "slider", trigger: 0, distance: 330 },
+  { id: "pot-346", kind: "dropper", trigger: 316, distance: 346, look: "pot" },
+  ...([0, 1, 2] as const).map((lane): MoverPlacement => ({ id: `geyser-364-${lane}`, kind: "geyser", trigger: 0, distance: 364, lane, phase: lane * 1.2 })),
   // 왼쪽 우회로(공사장 길): 양옆에서 우유통이 굴러와 가운데 점프대로 몰고, 착지 뒤엔 바리케이드가 오간다.
   ...(["left"] as const).flatMap(branch => [
     { id: `drum-${branch}-0`, kind: "drum" as const, trigger: 554, distance: 585, lane: 0 as const, branch },
@@ -49,10 +48,9 @@ export const MOVER_PLACEMENTS: MoverPlacement[] = [
   { id: "pot-right-660-2", kind: "dropper", trigger: 630, distance: 660, lane: 2, look: "pot", branch: "right", delay: .3 },
   // 7구간: 버스가 3차선을 막는 동안 하늘에서 수박이 내려옴.
   { id: "bus-726", kind: "bus", trigger: 698, distance: 726 },
-  { id: "melon-776", kind: "dropper", trigger: 744, distance: 776, look: "melon" },
-  { id: "pigeons-790", kind: "pigeons", trigger: 768, distance: 790 },
-  // 8구간: 차선마다 따로 열리고 닫히는 신호 게이트.
-  ...([0, 1, 2] as const).map((lane): MoverPlacement => ({ id: `gate-846-${lane}`, kind: "lanegate", trigger: 0, distance: 846, lane, phase: lane * 1.3 })),
+  // 8구간: 차선마다 따로 열리고 닫히는 신호 게이트. (세 번째 배달 존 뒤 40m)
+  ...([0, 1, 2] as const).map((lane): MoverPlacement => ({ id: `gate-870-${lane}`, kind: "lanegate", trigger: 0, distance: 870, lane, phase: lane * 1.3 })),
+  { id: "melon-788", kind: "dropper", trigger: 756, distance: 788, look: "melon" },
   // 마지막: 폭주 카트 대신 고양이와 오리 가족이 계속 길을 오간다.
   { id: "cat-946", kind: "cat", trigger: 0, distance: 946 },
   { id: "ducks-962", kind: "ducks", trigger: 0, distance: 962, phase: .35 },

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { SceneArt } from "./scene-art";
 
 /** Timings (seconds) of the resident's part in a delivery. */
-export const DUCK = { minWalkSeconds: .8, handSeconds: .5, homeSeconds: 1.6, restU: 9.3, meetGap: 1.25, speed: 4 } as const;
+export const DUCK = { minWalkSeconds: .8, handSeconds: .5, homeSeconds: 1.6, restU: 9.3, meetGap: 1.8, meetAhead: 4.5, speed: 4 } as const;
 
 type Point = { u: number; v: number }; // u: lateral across the road, v: along it
 export type DuckPhaseInput = {
@@ -16,12 +16,12 @@ export type DuckPose = { at: Point; look: Point; anim: "idle" | "wave" | "walk" 
 const ease = (t: number) => t * t * (3 - 2 * t);
 const mix = (a: Point, b: Point, t: number): Point => ({ u: a.u + (b.u - a.u) * t, v: a.v + (b.v - a.v) * t });
 
-/** How long the duck needs to waddle from its spot to the bike (lateral distances). */
-export const duckWalkSeconds = (restU: number, meetU: number) => Math.max(DUCK.minWalkSeconds, Math.abs(restU - meetU) / DUCK.speed);
+/** How long the duck needs to waddle from its spot to the meeting point, a few metres ahead of the bike. */
+export const duckWalkSeconds = (restU: number, meetU: number) => Math.max(DUCK.minWalkSeconds, Math.hypot(restU - meetU, DUCK.meetAhead) / DUCK.speed);
 
 /** Where the duck is and what it does: waits, walks to the stopped bike, takes the parcel, carries it home. */
 export function duckPose(s: DuckPhaseInput): DuckPose {
-  const bike: Point = { u: s.meet.u + Math.sign(s.rest.u - s.meet.u) * -DUCK.meetGap, v: s.meet.v };
+  const bike: Point = { u: s.meet.u + Math.sign(s.rest.u - s.meet.u) * -DUCK.meetGap, v: s.meet.v - DUCK.meetAhead };
   if (s.delivered !== null) {
     if (s.delivered < DUCK.handSeconds) return { at: s.meet, look: bike, anim: "hand", visible: true, carrying: s.delivered > DUCK.handSeconds / 2 };
     const t = (s.delivered - DUCK.handSeconds) / DUCK.homeSeconds;
@@ -34,8 +34,8 @@ export function duckPose(s: DuckPhaseInput): DuckPose {
   return { at: s.rest, look: { u: 0, v: s.rest.v }, anim: s.waving ? "wave" : "idle", visible: true, carrying: false };
 }
 
-/** The meeting spot: right beside the stopped bike, on the house side. */
-export function meetPoint(bikeU: number, side: number, v: number): Point { return { u: bikeU + side * DUCK.meetGap, v }; }
+/** The meeting spot: a few metres in front of the stopped bike, on the house side, so the camera sees the whole handover. */
+export function meetPoint(bikeU: number, side: number): Point { return { u: bikeU + side * DUCK.meetGap, v: DUCK.meetAhead }; }
 
 /** A cute duck neighbour: round yellow body, orange beak and feet, a colourful shirt. */
 export function createDuckResident(art: SceneArt, shirt: string) {

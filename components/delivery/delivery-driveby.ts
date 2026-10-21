@@ -1,9 +1,9 @@
 import { DELIVERY_HOUSE, DELIVERY_STOPS } from "@/data/delivery-map";
 
 /** Delivery without an alley: the bike brakes beside the house on the main road and the quiz opens. */
-export const DRIVE_BY = { warnAhead: 90, windowBehind: 4, stopSpeed: .55, stopWithin: 3, brake: 5 } as const;
+export const DRIVE_BY = { warnAhead: 90, windowBehind: 4, stopSpeed: .55, stopWithin: 3, protect: 30, brake: 5 } as const;
 
-export const DRIVE_BY_TEXT = { warn: "곧 배달지 도착입니다", arrive: "배달지 도착!" } as const;
+export const DRIVE_BY_TEXT = { arrive: "배달지 도착!" } as const;
 
 export type DriveByPhase = "far" | "warn" | "passed";
 

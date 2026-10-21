@@ -166,7 +166,7 @@ export function DeliveryScene3D({
       }
     };
 
-    let baseFov = camera.fov, shake = 0, shakeStrength = 0, speedLineOpacity = -1;
+    let deliveryCam = 0, baseFov = camera.fov, shake = 0, shakeStrength = 0, speedLineOpacity = -1;
     const shakeOffset = new THREE.Vector3();
     const resize = () => {
       const bounds = canvas.getBoundingClientRect();
@@ -286,18 +286,22 @@ export function DeliveryScene3D({
       const forkApproach = THREE.MathUtils.clamp((current.position - (ROAD_CLOSURE.junctionDistance - 100)) / 55, 0, 1);
       const forkDeparture = 1 - THREE.MathUtils.clamp((current.position - (ROAD_CLOSURE.junctionDistance + 55)) / 70, 0, 1);
       const forkView = Math.min(forkApproach, forkDeparture);
-      cameraTarget.y = DELIVERY_GAME_CONFIG.cameraHeight + forkView * 1.4;
+      // Handover: the camera pulls back and up so bike, duck and parcel fit the frame nicely.
+      const handover = current.stopDwell > 0 || (current.deliverySuccessRemaining > DELIVERY_GAME_CONFIG.deliverySuccessSeconds - DUCK.handSeconds - 1);
+      deliveryCam += ((handover ? 1 : 0) - deliveryCam) * (reduceMotion ? 1 : 1 - Math.exp(-3.5 * deltaSeconds));
+      cameraTarget.addScaledVector(routeFrame.tangent, -3.5 * deliveryCam);
+      cameraTarget.y = DELIVERY_GAME_CONFIG.cameraHeight + forkView * 1.4 + deliveryCam * 1.3;
       const followBlend = reduceMotion ? 1 : 1 - Math.exp(-9 * deltaSeconds);
       camera.position.lerp(cameraTarget, followBlend);
       // Speed feel: the view widens a little near top speed, with streaks at the edges.
       const boost = live && live.boostRemaining > 0 ? 1 : 0;
       const rush = reduceMotion ? 0 : Math.max(boost, THREE.MathUtils.smoothstep(Math.abs(current.speed), 12, 20));
       // Boost is the one deliberate rush: wider view and strong streaks.
-      const fov = baseFov + rush * 2.5 + (reduceMotion ? 0 : boost * 5);
+      const fov = baseFov + rush * 2.5 + (reduceMotion ? 0 : boost * 5) + deliveryCam * 4;
       if (Math.abs(camera.fov - fov) > .01) { camera.fov += (fov - camera.fov) * Math.min(1, deltaSeconds * 1.5); camera.updateProjectionMatrix(); }
       const lines = Math.round((rush * .35 + boost * .4) * (current.paused ? 0 : 1) * 20) / 20;
       if (lines !== speedLineOpacity && speedLinesRef.current) { speedLineOpacity = lines; speedLinesRef.current.style.opacity = String(lines); }
-      const lookTarget = cameraRail.clone().addScaledVector(routeFrame.tangent, 16 - forkView * 2 - drivewayMix * 7);
+      const lookTarget = cameraRail.clone().addScaledVector(routeFrame.tangent, 16 - forkView * 2 - drivewayMix * 7 + deliveryCam * 3);
       lookTarget.y = 1.15;
       camera.lookAt(lookTarget);
       if (scene.fog instanceof THREE.Fog) scene.fog.far = 205 + forkView * 15;
@@ -358,7 +362,7 @@ export function DeliveryScene3D({
         if (arrived === 0 && delivered === null && !done) meetU[index] = null;
         const { base, rest, door, duck } = stop;
         const near = Math.abs(current.position - stop.distance - DELIVERY_HOUSE.along) < DRIVE_BY.warnAhead;
-        const pose = duckPose({ waving: near, arrived, delivered, rest, door, meet: meetPoint(meetU[index] ?? current.laneX, stop.side, 0) });
+        const pose = duckPose({ waving: near, arrived, delivered, rest, door, meet: meetPoint(meetU[index] ?? current.laneX, stop.side) });
         const world3 = (p: { u: number; v: number }) => base.position.clone().addScaledVector(base.lateral, p.u).addScaledVector(base.tangent, p.v);
         const at = world3(pose.at), look = world3(pose.look);
         duck.group.visible = pose.visible && !done;

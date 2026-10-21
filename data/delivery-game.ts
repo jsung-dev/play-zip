@@ -148,25 +148,21 @@ export const DELIVERY_GAME_CONFIG = {
 export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   // 2026-10 재설계 2차: 구간마다 한 가지 패턴, 패턴끼리는 10m 이상 간격(같은 패턴은 같은 거리).
   // 하늘에서 떨어지는 것·움직이는 장애물은 components/delivery/delivery-movers.ts에 있습니다.
-  // 골목 진입 30m 전~진입, 골목 출구 합류, 갈림길, 붕괴 도로 비행 구간, 목적지 직전은 비워 둡니다.
+  // 배달 존 앞 30m~뒤 30m(멈춤·출발 구간), 갈림길, 붕괴 도로 비행 구간, 목적지 직전은 비워 둡니다. 같은 위치 겹침 없이 20m 안팎 간격으로 한 번에 하나씩.
   // 숙이기: 도로 전체를 가로지르는 낮은 가로대(span 3). 점프로는 못 넘고 아래로 스와이프해 숙여야 지나갑니다.
   { id: "duck-overhead-314", distance: 314, lane: 0, kind: "overhead", span: 3 },
   { id: "duck-overhead-880", distance: 880, lane: 0, kind: "overhead", span: 3 },
   // 1구간 점프 연습: 전 차선 판자 → 두 차선 상자 → (하늘 택배) → 양쪽 콘 → (수박 소나기) → 두 차선 상자.
   { id: "s1-plank-80", distance: 80, lane: 0, kind: "plank", span: 3 },
-  { id: "s1-crates-96", distance: 96, lane: 1, kind: "crates", span: 2 },
-  { id: "s1-cones-128-0", distance: 128, lane: 0, kind: "cones" },
-  { id: "s1-cones-128-2", distance: 128, lane: 2, kind: "cones" },
-  { id: "s1-crates-159", distance: 159, lane: 0, kind: "crates", span: 2 },
-  // 2구간 지그재그: 왼쪽 차단 펜스 + 가운데 상자.
-  { id: "s2-barrier-208", distance: 208, lane: 0, kind: "barrier" },
-  { id: "s2-crates-208", distance: 208, lane: 1, kind: "crates" },
+  { id: "s1-crates-100", distance: 100, lane: 1, kind: "crates", span: 2 },
+  { id: "s1-cones-140-0", distance: 140, lane: 0, kind: "cones" },
+  { id: "s1-cones-140-2", distance: 140, lane: 2, kind: "cones" },
+  // 2구간 지그재그: 왼쪽 차단 펜스 + 가운데 상자. (첫 배달 존 뒤 40m)
+  { id: "s2-barrier-240", distance: 240, lane: 0, kind: "barrier" },
+  { id: "s2-crates-240", distance: 240, lane: 1, kind: "crates" },
   // 3구간: 차단기(움직임) 뒤 양쪽 콘이 가운데 점프대로 몰아 줌.
   { id: "s3-cones-272-0", distance: 272, lane: 0, kind: "cones" },
   { id: "s3-cones-272-2", distance: 272, lane: 2, kind: "cones" },
-  // 5구간 연속 허들: 착지 직후 다시 점프해야 하는 간격.
-  { id: "s5-plank-402", distance: 402, lane: 0, kind: "plank", span: 3 },
-  { id: "s5-plank-419", distance: 419, lane: 0, kind: "plank", span: 3 },
   // 6구간 우회로. 왼쪽(공사장 길): 콘 → 우유통 → 점프대 → 상자 → 콘 → 바리케이드.
   { id: "s6-left-cones-574-0", distance: 574, lane: 0, kind: "cones", branch: "left" },
   { id: "s6-left-cones-574-2", distance: 574, lane: 2, kind: "cones", branch: "left" },
@@ -175,7 +171,9 @@ export const OBSTACLE_PLACEMENTS: ObstaclePlacement[] = [
   // 7구간 버스: 버스가 3차선을 막는 동안 1·2차선 상자와 1차선 콘.
   { id: "s7-crates-700", distance: 700, lane: 0, kind: "crates", span: 2 },
   { id: "s7-cones-748", distance: 748, lane: 0, kind: "cones" },
-  { id: "s7-crates-762", distance: 762, lane: 0, kind: "crates", span: 2 },
+  // 5구간 허들: 두 번째 배달 존(~430m)을 벗어나자마자 한 번.
+  { id: "s5-plank-432", distance: 432, lane: 0, kind: "plank", span: 3 },
+  { id: "s7-crates-768", distance: 768, lane: 0, kind: "crates", span: 2 },
   // 마지막: 착지한 뒤 바로 두 차선 상자.
   { id: "s9-crates-934", distance: 934, lane: 0, kind: "crates", span: 2 },
 ];
