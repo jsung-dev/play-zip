@@ -2215,25 +2215,28 @@
 }
 @media (prefers-reduced-motion: reduce) { .sparkle { display: none; } }
 
-/* Drive-by delivery guidance: "곧 배달지 도착입니다" then "타이밍에 맞춰서 점프를 하세요". */
-.driveByBanner {
+/* Drive-by delivery: countdown ring that fills on approach and turns green inside the jump window. */
+.throwRing {
   position: absolute;
-  top: 118px;
+  top: 100px;
   left: 50%;
   z-index: 33;
-  max-width: calc(100% - 32px);
-  padding: 10px 18px;
-  border-radius: 999px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
   transform: translateX(-50%);
-  background: #ffffffee;
-  color: #1d5c49;
-  font-size: 16px;
-  font-weight: 900;
-  text-align: center;
-  white-space: nowrap;
   pointer-events: none;
-  box-shadow: 0 4px 14px #244d4233;
-  animation: rideBadgePop .32s cubic-bezier(.2, 1.6, .4, 1);
+  color: #1d5c49;
+  font-weight: 900;
+  text-shadow: 0 1px 0 #fff, 0 0 8px #ffffffcc;
 }
-.driveByBanner[data-phase="window"] { background: linear-gradient(90deg, #ff7a59, #ffb340); color: #fff; font-size: 18px; animation: rideBadgePop .32s cubic-bezier(.2, 1.6, .4, 1), rideBoostPulse .45s ease-in-out infinite alternate; }
-@media (prefers-reduced-motion: reduce) { .driveByBanner { animation: none !important; } }
+.throwRing svg { width: 76px; height: 76px; filter: drop-shadow(0 3px 8px #244d4244); }
+.throwRing .track { fill: #ffffffcc; stroke: #ffffff; stroke-width: 6; }
+.throwRing .bar { fill: none; stroke: #ffb340; stroke-width: 7; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.throwRing[data-phase="window"] .bar { stroke: #2fc489; }
+.throwRing[data-phase="window"] svg { animation: rideBoostPulse .4s ease-in-out infinite alternate; }
+.throwRing .star { fill: #ffd23d; stroke: #fff; stroke-width: 2; opacity: .35; }
+.throwRing[data-perfect="true"] .star { opacity: 1; }
+.throwRing span { font-size: 15px; white-space: nowrap; }
+.throwRing[data-phase="window"] span { font-size: 22px; color: #148a60; }
+@media (prefers-reduced-motion: reduce) { .throwRing svg { animation: none !important; } }

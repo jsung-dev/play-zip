@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { DRIVE_BY, driveByPhase, houseDistance, isThrowing } from "../components/delivery/delivery-driveby";
+import { DRIVE_BY, driveByPhase, driveByRing, houseDistance, throwGrade } from "../components/delivery/delivery-driveby";
 import { laneTargetX, nextDeliveryLane, settledDeliveryLane } from "../components/delivery/delivery-turns";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDeliveryHouseTransform, getRouteFrame } from "../data/delivery-map";
 import { DELIVERY_GAME_CONFIG } from "../data/delivery-game";
@@ -17,8 +17,18 @@ for (const [i] of DELIVERY_STOPS.entries()) {
   assert.equal(driveByPhase(h - DRIVE_BY.windowAhead + .1, i), "window");
   assert.equal(driveByPhase(h + DRIVE_BY.windowBehind, i), "window");
   assert.equal(driveByPhase(h + DRIVE_BY.windowBehind + .1, i), "passed");
-  assert(isThrowing(h, i, true) && !isThrowing(h, i, false), "Only an airborne bike throws");
-  assert(!isThrowing(h - DRIVE_BY.warnAhead, i, true), "Jumping early does nothing");
+  const c = h - DRIVE_BY.perfectCenter;
+  assert.equal(throwGrade(c, i, true), "perfect"); assert.equal(throwGrade(c + DRIVE_BY.perfectHalf + .1, i, true), "good");
+  assert.equal(throwGrade(h - DRIVE_BY.windowAhead + .1, i, true), "good", "Early jump is still a throw");
+  assert.equal(throwGrade(h - DRIVE_BY.warnAhead, i, true), null, "Jumping early does nothing");
+  assert.equal(throwGrade(c, i, false), null, "No jump yet: keep waiting");
+  assert.equal(throwGrade(h + DRIVE_BY.autoBehind, i, false), "auto", "Never jumped: parcel is thrown anyway, quiz still opens");
+  assert(h + DRIVE_BY.autoBehind <= h + DRIVE_BY.windowBehind, "Auto throw happens before the stop would be skipped");
+  assert.equal(driveByRing(h - DRIVE_BY.warnAhead - 1, i), null);
+  assert.equal(driveByRing(h - DRIVE_BY.warnAhead, i)!.fill, 0);
+  assert.equal(driveByRing(h - DRIVE_BY.windowAhead, i)!.fill, 1, "Ring is full when the window opens");
+  const mid = driveByRing(h - (DRIVE_BY.warnAhead + DRIVE_BY.windowAhead) / 2, i)!; assert(mid.fill > .45 && mid.fill < .55 && mid.phase === "warn");
+  assert(driveByRing(c, i)!.perfect && !driveByRing(h - DRIVE_BY.windowAhead, i)!.perfect);
   assert(DRIVE_BY.windowAhead / DELIVERY_GAME_CONFIG.forwardSpeedPerSecond >= .9, "Window lasts about a second at riding speed");
 }
 assert.equal(driveByPhase(0, 99), "far");
