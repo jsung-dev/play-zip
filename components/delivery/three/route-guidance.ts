@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { DELIVERY_STOPS, getDrivewayFrame } from "@/data/delivery-map";
-import { deliveryArrivalInterval, deliveryGuidanceWaypoints, type GuidanceState } from "../delivery-guidance";
+import { DELIVERY_STOPS } from "@/data/delivery-map";
+import { deliveryGuidanceWaypoints, type GuidanceState } from "../delivery-guidance";
 import type { DeliveryWorld } from "./scene-builders";
 
 export function deliveryHouseAnchors(house: THREE.Group, side = 0) {
@@ -31,26 +31,6 @@ function markerTexture(label: string, pinX: number) {
   return texture;
 }
 
-/** An outline of the exact navigable arrival interval, not a circle on another house. */
-export function deliveryArrivalOutline(index: number) {
-  const { start, end, width } = deliveryArrivalInterval(index);
-  const vertices: number[] = [];
-  const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => {
-    for (const p of [a,b,c,b,d,c]) vertices.push(p.x, .115, p.z);
-  };
-  const point = (progress: number, offset: number) => {
-    const frame = getDrivewayFrame(index, progress);
-    return frame.position.addScaledVector(frame.lateral, offset);
-  };
-  for (const side of [-1, 1]) for (let n = 0; n < 16; n++) {
-    const a = start + (end - start) * n / 16, b = start + (end - start) * (n + 1) / 16;
-    quad(point(a, side * width / 2), point(a, side * (width / 2 - .10)), point(b, side * width / 2), point(b, side * (width / 2 - .10)));
-  }
-  for (const p of [start, end - .1]) quad(point(p,-width/2),point(p,width/2),point(p+.1,-width/2),point(p+.1,width/2));
-  const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position",new THREE.Float32BufferAttribute(vertices,3));
-  geometry.computeVertexNormals(); return geometry;
-}
-
 export function createRouteGuidance(world: DeliveryWorld) {
   const group = new THREE.Group(); group.name = "current-delivery-guidance"; world.root.add(group);
   const targets = [...world.deliveryStops.map(stop => stop.house), world.destination].map((house,index) => {
@@ -72,14 +52,12 @@ export function createRouteGuidance(world: DeliveryWorld) {
     const fill = new THREE.Mesh(arrowGeometry,mint); fill.rotation.x=-Math.PI/2; fill.position.y=.13;
     arrow.add(border,fill); group.add(arrow); return arrow;
   });
-  const rings = DELIVERY_STOPS.map((_,index)=>{const ring=new THREE.Mesh(deliveryArrivalOutline(index),mint); ring.visible=false; group.add(ring); return ring;});
   const ray = new THREE.Raycaster(); let cachedDoorVisible=false,cachedRoofVisible=false,lastVisibilityCheck=-Infinity,previousIndex=-1;
   const update = (state: GuidanceState, camera: THREE.PerspectiveCamera, height: number, highlighted: boolean, timestamp: number, enabled: boolean) => {
     group.visible=enabled;
     const index=Math.min(state.stopIndex,targets.length-1), target=targets[index];
     const near=index<DELIVERY_STOPS.length?Math.abs(state.position-DELIVERY_STOPS[index].distance)<100:state.position>880;
-    const inAlley=state.driveway?.stopIndex===index;
-    const close=inAlley ? Math.abs(deliveryArrivalInterval(index).end-state.driveway!.progress)<=14 : index===DELIVERY_STOPS.length && state.position>975;
+    const close=index===DELIVERY_STOPS.length && state.position>975;
     if(!close) cachedDoorVisible=false;
     if(enabled&&near&&(timestamp-lastVisibilityCheck>140||index!==previousIndex)){
       lastVisibilityCheck=timestamp;previousIndex=index;
@@ -105,7 +83,6 @@ export function createRouteGuidance(world: DeliveryWorld) {
     const size=Math.min(6.5,unitsPerPixel*(highlighted?88:76));
     pin.scale.set(size*1.2,size,1);
     pin.visible=near&&(entrance||cachedRoofVisible);
-    rings.forEach((ring,i)=>{ring.visible=near&&entrance&&i===index;});
     const points=deliveryGuidanceWaypoints(state,highlighted);
     arrows.forEach((arrow,i)=>{
       const sample=points[i]; arrow.visible=!!sample;
@@ -114,7 +91,7 @@ export function createRouteGuidance(world: DeliveryWorld) {
         (arrow.children[1] as THREE.Mesh).material=sample.selected===false?white:mint;
       }
     });
-    return {target: index<DELIVERY_STOPS.length?DELIVERY_STOPS[index].id:"final",house:target.houseId,door:target.doorKey,mode:enabled&&pin.visible?(entrance?"entrance":"house"):"hidden",arrows:enabled?points.length:0,highlighted:enabled&&highlighted,ring:enabled&&entrance&&index<rings.length};
+    return {target: index<DELIVERY_STOPS.length?DELIVERY_STOPS[index].id:"final",house:target.houseId,door:target.doorKey,mode:enabled&&pin.visible?(entrance?"entrance":"house"):"hidden",arrows:enabled?points.length:0,highlighted:enabled&&highlighted};
   };
   return {update,dispose:()=>{for(const map of [...houseMaps,...doorMaps])map.dispose();}};
 }

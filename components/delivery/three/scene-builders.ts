@@ -255,10 +255,6 @@ export function createRoad(art: SceneArt, road: THREE.Material) {
     }
   }
   const forkStart = ROAD_CLOSURE.junctionDistance - 18, forkEnd = ROAD_CLOSURE.mergeEnd + 18;
-  // The barrier's inaccessible continuation, BELOW both usable bypasses.
-  // Their existing gray ribbons cover the join, without changing route vertices.
-  const closed = createRoadRibbon(DELIVERY_GAME_CONFIG.roadWidth, restricted, "main", .014, ROAD_CLOSURE.distance, ROAD_CLOSURE.mergeEnd);
-  closed.name = "closed-main-road"; group.add(closed);
   for (const branch of ["left", "right"] as const) {
     group.add(createRoadRibbon(9.3, art.material(ROAD_SURFACE.sidewalk), branch, -.015, forkStart, forkEnd));
     group.add(createRoadRibbon(8.2, road, branch, branch === "left" ? .027 : .029, forkStart, forkEnd));
@@ -274,41 +270,6 @@ export function createRoad(art: SceneArt, road: THREE.Material) {
     }
   }
   dashes.count = count; dashes.instanceMatrix.needsUpdate = true; group.add(dashes);
-  // Reuse the roadside shoulder only at each junction. Main road and its two
-  // lane dividers stay untouched. Shared materials/geometry keep this light.
-  const stripeMaterial = art.material("#fff8e6");
-  const stripeGeometry = new THREE.BoxGeometry(.12, .018, 2.6);
-  for (const connection of TURN_LANE_CONNECTIONS) {
-    const side = turnLaneSide(connection), positions: number[] = [], indices: number[] = [];
-    const far = connection.distance - connection.direction * (TURN_LANE.approach + TURN_LANE.taper);
-    const near = connection.distance + connection.direction * TURN_LANE.tail;
-    const start = Math.min(far, near), end = Math.max(far, near), segments = 40;
-    for (let n = 0; n <= segments; n++) {
-      const distance = start + (end-start) * n / segments, frame = getRouteFrame(distance);
-      const laneOuter = Math.abs(getExtraLaneX(connection, distance)) + TURN_LANE.halfWidth;
-      // After the same grace point where the rider merges, taper only the
-      // painted asphalt edge into the main road. No square shoulder cut-off.
-      const pastJoin = (distance - connection.distance) * connection.direction;
-      const tailBlend = THREE.MathUtils.smoothstep(pastJoin, TURN_LANE.grace, TURN_LANE.tail);
-      const outer = Math.max(DELIVERY_GAME_CONFIG.roadWidth / 2,
-        THREE.MathUtils.lerp(laneOuter, DELIVERY_GAME_CONFIG.roadWidth / 2, tailBlend));
-      for (const x of [3.65, outer]) {
-        const p = frame.position.clone().addScaledVector(frame.lateral, side * x);
-        positions.push(p.x, .06, p.z);
-      }
-      if (n < segments) { const k = n*2; indices.push(k,k+1,k+2,k+1,k+3,k+2); }
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions,3));
-    geometry.setIndex(indices); geometry.computeVertexNormals();
-    const surface = new THREE.Mesh(applyRoadSurfaceUV(geometry),road); surface.name = `turn-lane-${connection.stopIndex}-${connection.entryEnd}`; group.add(surface);
-    for (let ahead = 6; ahead <= TURN_LANE.approach; ahead += 7) {
-      const distance = connection.distance - connection.direction * ahead, frame = getRouteFrame(distance);
-      const stripe = new THREE.Mesh(stripeGeometry,stripeMaterial);
-      stripe.position.copy(frame.position).addScaledVector(frame.lateral,side * 3.75);
-      stripe.position.y=.09; stripe.rotation.y=frame.yaw; group.add(stripe);
-    }
-  }
   return group;
 }
 
@@ -405,103 +366,6 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
   marker.userData.stopId = stop.id;
   const rig: DeliveryStopRig = { distance: stop.distance, side, house, parcel };
   return { house, marker, rig };
-}
-
-function createRoadClosure() {
-  const group = new THREE.Group();
-  const frame = getRouteFrame(ROAD_CLOSURE.distance);
-  const barrier = new THREE.Mesh(new THREE.BoxGeometry(DELIVERY_GAME_CONFIG.roadWidth, 1.25, 0.45), new THREE.MeshLambertMaterial({ color: "#f0c35d" }));
-  barrier.position.y = 0.78;
-  group.add(barrier);
-  for (let index = -4; index <= 4; index += 1) {
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.3, 0.48), new THREE.MeshLambertMaterial({ color: index % 2 ? "#fff1d2" : "#df8067" }));
-    stripe.position.set(index * 1.15, 0.78, 0.25);
-    stripe.rotation.z = -0.36;
-    group.add(stripe);
-  }
-  const notice = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.15), new THREE.MeshBasicMaterial({ map: makeTextTexture({ title: "앞길 공사 중", subtitle: "갈림길로 돌아가 우회하세요", background: "#fff0d1", foreground: "#8b5645" }), toneMapped: false }));
-  notice.position.set(0, 2.4, 0.28);
-  group.add(notice);
-  group.position.copy(frame.position);
-  group.position.y = 0;
-  group.rotation.y = frame.yaw;
-  markDistance(group, ROAD_CLOSURE.distance);
-  group.userData.roadClosure = true;
-  return group;
-}
-
-function createAdvanceDetourSign() {
-  const distance = ROAD_CLOSURE.junctionDistance - 55;
-  const group = markDistance(new THREE.Group(), distance);
-  const frameMaterial = new THREE.MeshLambertMaterial({ color: "#6f7768" });
-  const backing = new THREE.Mesh(new THREE.BoxGeometry(5.25, 2.3, 0.16), frameMaterial);
-  backing.position.y = 3.2;
-  const graphic = new THREE.Mesh(
-    new THREE.PlaneGeometry(5.08, 2.13),
-    new THREE.MeshBasicMaterial({
-      map: makeTextTexture({ title: "앞길 공사 · 갈림길", subtitle: "왼쪽 또는 오른쪽 차선으로", background: "#fff0cf", foreground: "#694f42", width: 768, height: 320 }),
-      toneMapped: false,
-    }),
-  );
-  graphic.position.set(0, 3.2, 0.09);
-  group.add(backing, graphic);
-  for (const x of [-1.65, 1.65]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.05, 0.14), frameMaterial);
-    leg.position.set(x, 1.1, -0.06);
-    group.add(leg);
-  }
-  group.position.set(-8.7, 0.1, -distance);
-  return group;
-}
-
-function createDetourArrow(branch: Exclude<DetourChoice, "main">, distance: number) {
-  const frame = getRouteFrame(distance, branch);
-  const arrowShape = new THREE.Shape();
-  arrowShape.moveTo(0, 5.2);
-  arrowShape.lineTo(1.2, 2.8);
-  arrowShape.lineTo(0.48, 2.8);
-  arrowShape.lineTo(0.48, 0);
-  arrowShape.lineTo(-0.48, 0);
-  arrowShape.lineTo(-0.48, 2.8);
-  arrowShape.lineTo(-1.2, 2.8);
-  arrowShape.closePath();
-  const shapeGeometry = new THREE.ShapeGeometry(arrowShape);
-  const flatPositions: number[] = [];
-  const source = shapeGeometry.getAttribute("position");
-  for (let index = 0; index < source.count; index += 1) {
-    const side = source.getX(index);
-    const forward = source.getY(index);
-    const point = frame.position.clone()
-      .addScaledVector(frame.lateral, side)
-      .addScaledVector(frame.tangent, forward);
-    flatPositions.push(point.x, 0.055, point.z);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(flatPositions, 3));
-  geometry.setIndex(shapeGeometry.getIndex());
-  geometry.computeVertexNormals();
-  shapeGeometry.dispose();
-  const arrow = markDistance(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: "#fff5d2", side: THREE.DoubleSide })), distance);
-  arrow.userData.detour = branch;
-  return arrow;
-}
-
-function createForkDirectionSign(branch: Exclude<DetourChoice, "main">) {
-  const distance = ROAD_CLOSURE.junctionDistance + 7;
-  const group = markDistance(new THREE.Group(), distance);
-  const left = branch === "left";
-  const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3.4, 0.18), new THREE.MeshLambertMaterial({ color: "#70877d" }));
-  post.position.y = 1.7;
-  const backing = new THREE.Mesh(new THREE.BoxGeometry(5.8, 2.2, 0.16), new THREE.MeshLambertMaterial({ color: left ? "#6d9d83" : "#887ca7" }));
-  backing.position.y = 3.65;
-  const graphic = new THREE.Mesh(new THREE.PlaneGeometry(5.62, 2.03), new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: left ? "← 왼쪽 길" : "오른쪽 길 →", subtitle: "공사 구간 우회", background: left ? "#e6f4e3" : "#eee7f7", foreground: left ? "#42634f" : "#5b4e71", width: 768, height: 300 }),
-    toneMapped: false,
-  }));
-  graphic.position.set(0, 3.65, 0.09);
-  group.add(post, backing, graphic);
-  group.position.set(left ? -7.6 : 7.6, 0, 0);
-  return group;
 }
 
 
@@ -1103,25 +967,6 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
     deliveryStops.push(rig);
     root.add(house, marker);
     worldObjects.push(house, marker);
-  }
-
-  const closure = createRoadClosure();
-  root.add(closure);
-  worldObjects.push(closure);
-  const advanceSign = createAdvanceDetourSign();
-  placeOnRoute(advanceSign, ROAD_CLOSURE.junctionDistance - 55);
-  root.add(advanceSign);
-  worldObjects.push(advanceSign);
-  for (const branch of ["left", "right"] as const) {
-    const sign = createForkDirectionSign(branch);
-    placeOnRoute(sign, ROAD_CLOSURE.junctionDistance + 7);
-    root.add(sign);
-    worldObjects.push(sign);
-    for (const offset of [18, 47]) {
-      const arrow = createDetourArrow(branch, ROAD_CLOSURE.junctionDistance + offset);
-      root.add(arrow);
-      worldObjects.push(arrow);
-    }
   }
 
   const destination = createDestination(brand, art);

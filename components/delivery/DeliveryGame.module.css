@@ -2214,3 +2214,26 @@
   to { transform: rotate(var(--a)) translateY(-58px) scale(1.2); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .sparkle { display: none; } }
+
+/* Drive-by delivery guidance: "곧 배달지 도착입니다" then "타이밍에 맞춰서 점프를 하세요". */
+.driveByBanner {
+  position: absolute;
+  top: 118px;
+  left: 50%;
+  z-index: 33;
+  max-width: calc(100% - 32px);
+  padding: 10px 18px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: #ffffffee;
+  color: #1d5c49;
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 14px #244d4233;
+  animation: rideBadgePop .32s cubic-bezier(.2, 1.6, .4, 1);
+}
+.driveByBanner[data-phase="window"] { background: linear-gradient(90deg, #ff7a59, #ffb340); color: #fff; font-size: 18px; animation: rideBadgePop .32s cubic-bezier(.2, 1.6, .4, 1), rideBoostPulse .45s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .driveByBanner { animation: none !important; } }

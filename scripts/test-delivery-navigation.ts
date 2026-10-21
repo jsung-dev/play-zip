@@ -1,37 +1,28 @@
 import assert from "node:assert/strict";
 import { getDeliveryNavigation } from "../components/delivery/delivery-navigation";
-import { getDrivewayDeliveryInterval } from "../data/delivery-map";
-import { occupiedDeliveryTurn } from "../components/delivery/delivery-turns";
-import { remainingDeliveryDistance } from "../components/delivery/delivery-guidance";
+import { DRIVE_BY, DRIVE_BY_TEXT, houseDistance } from "../components/delivery/delivery-driveby";
 
-const base = { position: 0, speed: 0, stopIndex: 0, stopDwell: 0, deliverySuccessRemaining: 0, closureReached: false, detour: "main" as const, driveway: null };
+const base = { position: 0, speed: 20, stopIndex: 0, stopDwell: 0, deliverySuccessRemaining: 0, detour: "main" as const };
+const h = houseDistance(0);
 const cases = [
   { input: base, direction: "forward", text: "직진" },
-  { input: { ...base, position: 140 }, direction: "left", text: "왼쪽 골목으로" },
-  { input: { ...base, position: 210 }, direction: "forward", text: "큰길 따라 계속" },
-  { input: { ...base, position: 350, stopIndex: 1 }, direction: "right", text: "오른쪽 회전 차선" },
-  { input: { ...base, position: 470, stopIndex: 2 }, direction: "fork", text: "좌우 우회로" },
-  { input: { ...base, position: 490, stopIndex: 2, detour: "right" as const }, direction: "right", text: "오른쪽 우회로" },
-  { input: { ...base, position: 567, stopIndex: 2, closureReached: true }, direction: "fork", text: "옆 길로 비켜 가세요" },
-  { input: { ...base, position: 490, stopIndex: 2, closureReached: true }, direction: "fork", text: "좌우 우회로" },
-  { input: { ...base, position: 190, driveway: { stopIndex: 0, progress: 10, entryPosition: 190, entryLaneX: -2.5 } }, direction: "forward", text: "골목 안으로 이동" },
-  { input: { ...base, position: 190, driveway: { stopIndex: 0, progress: 18, entryPosition: 190, entryLaneX: -2.5 } }, direction: "forward", text: "입구로 이동" },
-  { input: { ...base, position: 190, driveway: { stopIndex: 0, progress: getDrivewayDeliveryInterval(0).start, entryPosition: 190, entryLaneX: -2.5 } }, direction: "stop", text: "멈춰서 배달" },
-  { input: { ...base, position: 190, stopDwell: .5, driveway: { stopIndex: 0, progress: getDrivewayDeliveryInterval(0).start, entryPosition: 190, entryLaneX: -2.5 } }, direction: "delivery", text: "상품 전달 중" },
-  { input: { ...base, position: 190, stopIndex: 1, deliverySuccessRemaining: 2 }, direction: "complete", text: "배달 완료!" },
-  { input: { ...base, position: 190, stopIndex: 1, driveway: { stopIndex: 0, progress: 24, entryPosition: 190, entryLaneX: -2.5 } }, direction: "forward", text: "출구 따라 큰길로" },
+  { input: { ...base, position: h - DRIVE_BY.warnAhead + 1 }, direction: "left", text: DRIVE_BY_TEXT.warn },
+  { input: { ...base, position: h - DRIVE_BY.windowAhead + 1 }, direction: "stop", text: DRIVE_BY_TEXT.window },
+  { input: { ...base, position: h + DRIVE_BY.windowBehind + 1, stopIndex: 1 }, direction: "forward", text: "직진" },
+  { input: { ...base, position: 380, stopIndex: 1 }, direction: "right", text: DRIVE_BY_TEXT.warn },
+  { input: { ...base, position: 470, stopIndex: 2 }, direction: "fork", text: "가운데 길" },
+  { input: { ...base, position: 490, stopIndex: 2, detour: "right" as const }, direction: "right", text: "오른쪽 길" },
+  { input: { ...base, position: 490, stopIndex: 2, detour: "left" as const }, direction: "left", text: "왼쪽 길" },
+  { input: { ...base, position: h, stopIndex: 1, deliverySuccessRemaining: 2 }, direction: "complete", text: "배달 완료!" },
   { input: { ...base, position: 900, stopIndex: 3 }, direction: "forward", text: "직진" },
 ];
 for (const test of cases) {
   const actual = getDeliveryNavigation(test.input);
   assert.equal(actual.direction, test.direction);
   assert.equal(actual.instruction, test.text);
-  assert(actual.instruction.length <= 12, "Keep one short instruction, not a paragraph");
   assert(actual.remaining >= 0);
 }
-assert.equal(getDeliveryNavigation({ ...base, position: 567, stopIndex: 2, closureReached: true }).remaining, Math.ceil(remainingDeliveryDistance({...base,position:567,stopIndex:2})+144));
+assert.equal(getDeliveryNavigation({ ...base, position: h - 40 }).remaining, 40);
 assert.equal(getDeliveryNavigation({ ...base, position: 1000, stopIndex: 3 }, true).instruction, "상품 전달 중");
 assert.equal(getDeliveryNavigation({ ...base, stopIndex: 1, deliverySuccessRemaining: 2 }).destination, "민트하우스 3동");
-assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0]}).instruction,"직진","Do not advertise a completed alley as the next mission");
-assert.equal(getDeliveryNavigation({...base,position:175,stopIndex:1,completedStops:[0],turnChoice:occupiedDeliveryTurn(175,1,-5)}).destination,"포근빌라 202호","The occupied turn lane names the actual house, not another target");
-console.log("Single-line navigation: entrances, missed stops, detour, closure sidestep, delivery and final arrival verified.");
+console.log("Navigation: warning, jump prompt, open three-way fork, completion and arrival verified.");

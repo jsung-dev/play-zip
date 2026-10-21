@@ -1,35 +1,14 @@
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { DELIVERY_GAME_CONFIG as config } from "../data/delivery-game";
-import { DELIVERY_STOPS, getDrivewayFrame, getDrivewayLength, getDeliveryHouseTransform, isAtDrivewayDelivery } from "../data/delivery-map";
-import { deliveryArrivalInterval, deliveryGuidanceWaypoints, remainingDeliveryDistance } from "../components/delivery/delivery-guidance";
-import { deliveryArrivalOutline, deliveryHouseAnchors } from "../components/delivery/three/route-guidance";
+import { DELIVERY_STOPS, getDeliveryHouseTransform, getDrivewayDeliveryInterval } from "../data/delivery-map";
+import { deliveryGuidanceWaypoints } from "../components/delivery/delivery-guidance";
+import { deliveryHouseAnchors } from "../components/delivery/three/route-guidance";
 import { BUILDING_SCALE } from "../components/delivery/three/scene-layout";
 import { buildingProfile } from "../components/delivery/three/street-layout";
 
 const audit=[];
 for(const [index,stop] of DELIVERY_STOPS.entries()) {
-  const interval=deliveryArrivalInterval(index),length=getDrivewayLength(index);
-  const entry={stopIndex:index,entryPosition:stop.distance,entryLaneX:(stop.side==='left'?-1:1)*config.laneSpacing};
-  assert(interval.end<length);assert.equal(interval.end-interval.start,config.drivewayDeliveryDepth);
-  for(const progress of [0,interval.start-.001,interval.start,interval.end]) {
-    const state={position:stop.distance,stopIndex:index,driveway:{...entry,progress},laneX:0,detour:'main' as const};
-    assert.equal(remainingDeliveryDistance(state)===0,isAtDrivewayDelivery(state.driveway,index),'distance zero agrees with unchanged arrival zone');
-    for(const point of deliveryGuidanceWaypoints(state)){
-      assert.equal(point.path,'driveway');assert(point.progress>progress&&point.progress<interval.start);
-      assert(point.frame.position.distanceTo(getDrivewayFrame(index,point.progress,entry).position)<1e-9,'arrows are on navigable curve');
-    }
-  }
-  const before={position:stop.distance-5,stopIndex:index,driveway:null,laneX:0,detour:'main' as const};
-  assert.equal(remainingDeliveryDistance(before),5+interval.start);
-  assert(deliveryGuidanceWaypoints(before).length>=1);
-  assert(deliveryGuidanceWaypoints({...before,position:stop.distance-30}).some(p=>p.path==='road'&&p.selected),'turn-lane approach is visibly guided');
-  const returning={...before,position:stop.distance,stopIndex:index+1,driveway:{...entry,progress:16}};
-  assert(deliveryGuidanceWaypoints(returning).every(p=>!p.reverse&&p.progress>16),'exit arrows continue forward through the same alley');
-  const outline=deliveryArrivalOutline(index),positions=outline.getAttribute('position');
-  assert(positions.count>0);for(let i=0;i<positions.count;i++)assert(Math.abs(positions.getY(i)-.115)<1e-6);
-  outline.dispose();
-
+  const interval=getDrivewayDeliveryInterval(index);
   // Reconstruct the model transform independently; the browser records the
   // anchor produced by the actual house mesh for comparison with this audit.
   const transform=getDeliveryHouseTransform(index),profile=buildingProfile({type:'house',variant:index});
@@ -45,4 +24,7 @@ for(const [index,stop] of DELIVERY_STOPS.entries()) {
   box.geometry.dispose();(box.material as THREE.Material).dispose();
 }
 console.log(JSON.stringify(audit,null,2));
-console.log('Guidance: world door anchors, all three routes, matching arrival intervals, remaining distance and forward exit arrows passed.');
+const ahead={position:100,stopIndex:0,laneX:0,detour:'main' as const};
+assert.equal(deliveryGuidanceWaypoints(ahead).length,0,'No arrows unless the guide is replayed');
+assert(deliveryGuidanceWaypoints(ahead,true).every(p=>p.path==='road'&&p.progress>100));
+console.log('Guidance: world door anchors and replay arrows passed.');

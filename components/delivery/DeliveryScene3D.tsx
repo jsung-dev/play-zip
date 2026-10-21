@@ -8,7 +8,7 @@ import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
-import { busTurnLaneClear, type TravelDirection, type TurnChoice } from "./delivery-turns";
+import { type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { duckAmountAt, jumpHeightAt } from "./delivery-jump";
 import { moverPose, TIMED } from "./delivery-movers";
 import styles from "./DeliveryGame.module.css";
@@ -29,15 +29,14 @@ type SceneState = {
   deliverySuccessRemaining: number;
   driveway: DrivewayState | null;
   guidanceReplay: number;
-  closureReached: boolean;
   travelDirection: TravelDirection;
   turnChoice: TurnChoice | null;
   completedStops: number[];
   jumpHeight: number;
 };
 
-type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "closureReached" | "travelDirection" | "turnChoice" | "completedStops";
-const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "closureReached", "travelDirection", "turnChoice", "completedStops"];
+type LiveKeys = "position" | "speed" | "laneX" | "collisionId" | "detour" | "stopIndex" | "stopDwell" | "deliveryPulse" | "deliverySuccessRemaining" | "driveway" | "travelDirection" | "turnChoice" | "completedStops";
+const LIVE_KEYS: LiveKeys[] = ["position", "speed", "laneX", "collisionId", "detour", "stopIndex", "stopDwell", "deliveryPulse", "deliverySuccessRemaining", "driveway", "travelDirection", "turnChoice", "completedStops"];
 export type LiveRuntime = Pick<SceneState, LiveKeys> & { jumpElapsed: number | null; duckElapsed: number | null; jumpPower: number; clock: number; moverStarts: Record<string, number>; moverTargets: Record<string, number>; collected: Set<number>; boostRemaining: number; fallElapsed: number | null };
 
 export function DeliveryScene3D({
@@ -56,7 +55,7 @@ export function DeliveryScene3D({
   deliverySuccessRemaining,
   driveway,
   guidanceReplay,
-  closureReached,
+ 
   travelDirection,
   turnChoice,
   completedStops,
@@ -66,9 +65,9 @@ export function DeliveryScene3D({
 }: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime } }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const speedLinesRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight });
+  const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, travelDirection, turnChoice, completedStops, jumpHeight });
   const [webglFailed, setWebglFailed] = useState(false);
-  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, closureReached, travelDirection, turnChoice, completedStops, jumpHeight };
+  stateRef.current = { position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, travelDirection, turnChoice, completedStops, jumpHeight };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -346,7 +345,9 @@ export function DeliveryScene3D({
       }
 
       for (const [index, stop] of world.deliveryStops.entries()) {
-        const progress = index === current.stopIndex ? Math.min(1, current.stopDwell / DELIVERY_GAME_CONFIG.deliveryStopDwellSeconds) : 0;
+        // The thrown parcel flies to the door while the success banner counts down.
+        const thrown = current.deliverySuccessRemaining > 0 && current.completedStops?.at(-1) === index;
+        const progress = thrown ? Math.min(1, DELIVERY_GAME_CONFIG.deliverySuccessSeconds - current.deliverySuccessRemaining) : 0;
         stop.parcel.visible = progress > .08 && !reduceMotion;
         if (stop.parcel.visible) {
           const destination = stop.house.localToWorld(new THREE.Vector3(...stop.house.userData.entranceLocal as [number, number, number]));
@@ -369,7 +370,7 @@ export function DeliveryScene3D({
         const busPosition = busFrame.position.clone().addScaledVector(busFrame.lateral, (activeMovingBus.placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset);
         activeMovingBus.group.position.set(busPosition.x, 0, busPosition.z);
         activeMovingBus.group.rotation.y = busFrame.yaw;
-        if (movingBusDistance < current.position - 45 || movingBusDistance < 0 || !busTurnLaneClear(movingBusDistance, movingBusDistance, activeMovingBus.placement.side)) {
+        if (movingBusDistance < current.position - 45 || movingBusDistance < 0) {
           activeMovingBus.group.visible = false;
           activeMovingBus = null;
         }
@@ -378,7 +379,6 @@ export function DeliveryScene3D({
       if (!activeMovingBus && !nearRoadClosure && current.playing && !current.paused) {
         const nextBus = world.movingBuses.find(({ placement }) => (
           current.position >= placement.distance && !shownMovingBuses.has(placement.id)
-          && busTurnLaneClear(current.position - 45, current.position + 68, placement.side)
         ));
         if (nextBus) {
           shownMovingBuses.add(nextBus.placement.id);
