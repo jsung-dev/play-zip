@@ -9,7 +9,8 @@ import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
-import { DRIVE_BY_TEXT, driveByPhase, hasArrived, metersToStop } from "./delivery-driveby";
+import { duckWalkSeconds, DUCK } from "./three/duck-resident";
+import { DRIVE_BY, DRIVE_BY_TEXT, driveByPhase, hasArrived, metersToStop } from "./delivery-driveby";
 import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progress";
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliverySwipe } from "./DeliverySwipe";
@@ -146,6 +147,7 @@ export function DeliveryGame() {
   const moveLane = useCallback((direction: -1 | 1) => {
     if (status !== "playing" || paused) return;
     const runtime = runtimeRef.current;
+    if (runtime.stopDwell > 0) return; // stopped for the duck: stay in your lane
     // Finish each 0.26s adjacent-lane movement before accepting another.
     if (Math.abs(runtime.laneX - laneTargetX(runtime.laneTarget, runtime.position)) > .15) return;
     const nextTarget = nextDeliveryLane(runtime.position, runtime.laneTarget, direction);
@@ -238,10 +240,12 @@ export function DeliveryGame() {
         : desiredSpeed;
       // A ramp flight keeps its launch speed: no throttle or brakes in the air.
       if (!(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) runtime.speed = approach(runtime.speed, cappedSpeed, rate * deltaSeconds);
-      // Brake automatically so the bike stops beside the house of the pending delivery.
+      // The bike stays put while the duck walks over (stopDwell counts that wait).
+      if (runtime.stopDwell > 0) runtime.speed = 0;
+      // Brake gently so the bike stops beside the house of the pending delivery.
       if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex) && runtime.speed > 0
         && !(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) {
-        const cap = Math.sqrt(2 * DELIVERY_GAME_CONFIG.deliveryAutoBrakePerSecond * metersToStop(runtime.position, runtime.stopIndex));
+        const cap = Math.sqrt(2 * DRIVE_BY.brake * metersToStop(runtime.position, runtime.stopIndex));
         if (driveByPhase(runtime.position, runtime.stopIndex) === "warn" && runtime.speed > cap) runtime.speed = cap;
       }
       const previousPosition = runtime.position;
@@ -272,14 +276,25 @@ export function DeliveryGame() {
       const previousStopIndex = runtime.stopIndex;
       Object.assign(runtime, advanceDeliveryTargets(runtime));
       if (runtime.stopIndex !== previousStopIndex) runtime.stopDwell = 0;
-      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex)
-        && hasArrived(runtime.position, runtime.stopIndex, runtime.speed)) {
-        runtime.speed = 0;
-        runtime.jumpElapsed = null;
-        clearInputs();
-        setFrame({ ...runtime });
-        setStatus("quiz");
-        return;
+      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex)) {
+        if (runtime.stopDwell > 0) {
+          runtime.stopDwell += deltaSeconds;
+          const side = DELIVERY_STOPS[runtime.stopIndex].side === "left" ? -1 : 1;
+          const walk = duckWalkSeconds(side * DUCK.restU, runtime.laneX + side * DUCK.meetGap);
+          if (runtime.stopDwell >= walk) {
+            runtime.stopDwell = walk;
+            clearInputs();
+            setFrame({ ...runtime });
+            setStatus("quiz");
+            return;
+          }
+        } else if (hasArrived(runtime.position, runtime.stopIndex, runtime.speed)) {
+          runtime.stopDwell = .001;
+          runtime.speed = 0;
+          runtime.jumpElapsed = null;
+          showToast(runtime, "배달지 도착!", "good", 1.2);
+          playSfx("land");
+        }
       }
 
       // An alley-to-main join bypasses that section of the main road; do not
@@ -537,7 +552,7 @@ export function DeliveryGame() {
               {frame.boostRemaining > 0 && <strong className={styles.boostBadge}>우유 부스터!</strong>}
             </div>
           )}
-          {status === "playing" && !paused && frame.deliverySuccessRemaining <= 0 && driveBy === "warn" && (
+          {status === "playing" && !paused && frame.deliverySuccessRemaining <= 0 && frame.stopDwell === 0 && driveBy === "warn" && (
             <strong className={styles.driveByBanner} role="status">{DRIVE_BY_TEXT.warn}</strong>
           )}
           <DeliveryScene3D

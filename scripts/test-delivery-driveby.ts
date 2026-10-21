@@ -24,7 +24,7 @@ for (const [i] of DELIVERY_STOPS.entries()) {
   const dt = 1 / 60;
   while (!hasArrived(position, i, speed) && t < 20) {
     speed = Math.min(config.forwardSpeedPerSecond, speed + config.accelerationPerSecond * dt);
-    if (driveByPhase(position, i) === "warn") speed = Math.min(speed, Math.sqrt(2 * config.deliveryAutoBrakePerSecond * metersToStop(position, i)));
+    if (driveByPhase(position, i) === "warn") speed = Math.min(speed, Math.sqrt(2 * DRIVE_BY.brake * metersToStop(position, i)));
     position += speed * dt; t += dt;
   }
   assert(t < 20, `${i}: bike stops (${t.toFixed(1)}s)`);

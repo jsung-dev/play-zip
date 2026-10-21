@@ -12,6 +12,7 @@ import {
 } from "@/data/delivery-game";
 import { DELIVERY_HOUSE, DELIVERY_STOPS, ROAD_CLOSURE, getRouteFrame, getDeliveryHouseTransform, type DetourChoice } from "@/data/delivery-map";
 import { createSceneArt, TOWN_COLORS, type SceneArt } from "./scene-art";
+import { DUCK, createDuckResident, type DuckResident } from "./duck-resident";
 import { applyRoadSurfaceUV, createRoadSurfaceMaterial, createRestrictedSurfaceMaterial, ROAD_SURFACE } from "./road-surface";
 import { resolveAdvertisements, sceneryHasClearance } from "./scene-layout";
 import { BUS_AD_PANELS, OVERHEAD_ADS } from "@/data/delivery-outdoor-ads";
@@ -61,11 +62,18 @@ export type DeliveryWorld = {
   horizon: THREE.Group;
 };
 
+const DUCK_SHIRTS = ["#ff7a8a", "#4fb7e8", "#7bd389"];
+
 export type DeliveryStopRig = {
   distance: number;
   side: number;
   house: THREE.Group;
   parcel: THREE.Group;
+  duck: DuckResident;
+  /** Road frame beside the house; duck points are (u across, v along) in it. */
+  base: { position: THREE.Vector3; lateral: THREE.Vector3; tangent: THREE.Vector3 };
+  rest: { u: number; v: number };
+  door: { u: number; v: number };
 };
 
 function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -291,6 +299,13 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
   const marker = markDistance(new THREE.Group(), stop.distance);
   const side = stop.side === "left" ? -1 : 1;
   const frame = getRouteFrame(stop.distance + DELIVERY_HOUSE.along);
+  // The resident duck waits on the sidewalk in front of its door.
+  const duck = createDuckResident(art, DUCK_SHIRTS[index % DUCK_SHIRTS.length]);
+  marker.add(duck.group);
+  house.updateMatrixWorld(true);
+  const doorWorld = house.localToWorld(new THREE.Vector3(...house.userData.entranceLocal as [number, number, number])).sub(frame.position);
+  const base = { position: frame.position.clone(), lateral: frame.lateral.clone(), tangent: frame.tangent.clone() };
+  const rest = { u: side * DUCK.restU, v: 0 }, door = { u: doorWorld.dot(base.lateral), v: doorWorld.dot(base.tangent) };
 
   const parcel = new THREE.Group();
   art.put(parcel, art.box(.6, .8, .46, brand.secondaryColor, .05), 0, 0, 0);
@@ -299,7 +314,7 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
   parcel.rotation.y = frame.yaw;
   marker.add(parcel);
   marker.userData.stopId = stop.id;
-  const rig: DeliveryStopRig = { distance: stop.distance, side, house, parcel };
+  const rig: DeliveryStopRig = { distance: stop.distance, side, house, parcel, duck, base, rest, door };
   return { house, marker, rig };
 }
 

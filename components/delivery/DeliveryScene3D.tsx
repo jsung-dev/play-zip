@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
-import { getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, DELIVERY_STOPS, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_HOUSE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, DELIVERY_STOPS, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { type TravelDirection, type TurnChoice } from "./delivery-turns";
+import { DUCK, animateDuck, duckPose, meetPoint } from "./three/duck-resident";
+import { DRIVE_BY } from "./delivery-driveby";
 import { duckAmountAt, jumpHeightAt } from "./delivery-jump";
 import { moverPose, TIMED } from "./delivery-movers";
 import styles from "./DeliveryGame.module.css";
@@ -136,6 +138,7 @@ export function DeliveryScene3D({
     let movingBusDistance = 0;
     let renderedSession = stateRef.current.sessionKey;
     let landingElapsed = 1, wobble = 0;
+    const meetU: (number | null)[] = world.deliveryStops.map(() => null);
     // Dust puffs: a small pool reused for hits and hard landings.
     const dustMaterial = new THREE.MeshBasicMaterial({ color: "#efe3cf", transparent: true, opacity: 0, depthWrite: false });
     const dustGeometry = new THREE.IcosahedronGeometry(.28, 1);
@@ -345,15 +348,29 @@ export function DeliveryScene3D({
       }
 
       for (const [index, stop] of world.deliveryStops.entries()) {
-        // After a correct answer the parcel flies to the door while the success banner shows.
-        const delivered = current.deliverySuccessRemaining > 0 && current.completedStops?.at(-1) === index;
-        const progress = delivered ? Math.min(1, DELIVERY_GAME_CONFIG.deliverySuccessSeconds - current.deliverySuccessRemaining) : 0;
-        stop.parcel.visible = progress > .08 && !reduceMotion;
+        // The duck walks to the stopped bike, takes the parcel after the quiz and carries it home.
+        const here = index === current.stopIndex && !current.completedStops?.includes(index);
+        const arrived = here ? current.stopDwell : 0;
+        const delivered = current.deliverySuccessRemaining > 0 && current.completedStops?.at(-1) === index
+          ? DELIVERY_GAME_CONFIG.deliverySuccessSeconds - current.deliverySuccessRemaining : null;
+        const done = delivered === null && !!current.completedStops?.includes(index);
+        if (arrived > 0 && meetU[index] === null) meetU[index] = current.laneX;
+        if (arrived === 0 && delivered === null && !done) meetU[index] = null;
+        const { base, rest, door, duck } = stop;
+        const near = Math.abs(current.position - stop.distance - DELIVERY_HOUSE.along) < DRIVE_BY.warnAhead;
+        const pose = duckPose({ waving: near, arrived, delivered, rest, door, meet: meetPoint(meetU[index] ?? current.laneX, stop.side, 0) });
+        const world3 = (p: { u: number; v: number }) => base.position.clone().addScaledVector(base.lateral, p.u).addScaledVector(base.tangent, p.v);
+        const at = world3(pose.at), look = world3(pose.look);
+        duck.group.visible = pose.visible && !done;
+        duck.group.position.set(at.x, 0, at.z);
+        if (look.distanceToSquared(at) > .01) duck.group.rotation.y = Math.atan2(look.x - at.x, look.z - at.z);
+        animateDuck(duck, reduceMotion ? "idle" : pose.anim, timestamp / 1000, pose.carrying);
+        // Parcel: bike -> duck's hands at the handover, then in its arms on the way home.
+        stop.parcel.visible = delivered !== null && pose.visible && !reduceMotion;
         if (stop.parcel.visible) {
-          const destination = stop.house.localToWorld(new THREE.Vector3(...stop.house.userData.entranceLocal as [number, number, number]));
-          const deliveryProgress = THREE.MathUtils.smoothstep(progress, .08, 1);
-          stop.parcel.position.copy(bikePosition).lerp(destination, deliveryProgress);
-          stop.parcel.position.y = 1.65 + Math.sin(deliveryProgress * Math.PI) * 1.3;
+          const hands = at.clone(); hands.y = 1.05;
+          const t = THREE.MathUtils.clamp((delivered ?? 0) / DUCK.handSeconds, 0, 1);
+          stop.parcel.position.copy(bikePosition).setY(1.5).lerp(hands, THREE.MathUtils.smoothstep(t, 0, 1));
         }
       }
 
