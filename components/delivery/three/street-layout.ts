@@ -1,15 +1,18 @@
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG, type SceneryItem } from "@/data/delivery-game";
-import { type OutdoorAdPlacement as AdPlacement } from "@/data/delivery-outdoor-ads";
+import { OVERHEAD_ADS, type OutdoorAdPlacement as AdPlacement } from "@/data/delivery-outdoor-ads";
 import { DELIVERY_STOPS, ROAD_CLOSURE, getDeliveryHouseTransform, getRouteFrame, type DetourChoice } from "@/data/delivery-map";
 import { houseDistance } from "../delivery-driveby";
+import { glbBuildingSize } from "./glb-buildings";
 import { BUILDING_SCALE, advertisementLayout, advertisementPanelCorners, advertisementTransform, resolveAdvertisements } from "./scene-layout";
 
 // World architecture only. Never used by driving, collision or camera code.
 export const STREET_BUILDINGS = {
-  heightMultiplier: 3, // lot envelope for 3–7 storey facades (ad sightlines re-checked by the planner)
-  frontageMultiplier: 1.3,
-  gapRatio: .15,
+  minHeight: 8, // the five GLB buildings are scaled into this 8–13 m band
+  maxHeight: 13,
+  minStretch: .82, // frontage varies in code (x scale), the models themselves are untouched
+  maxStretch: 1.18,
+  gapRatio: .3,
   sidewalkOuterEdge: 10.1,
   frontageSetback: .55,
   chunkLength: 36,
@@ -18,24 +21,29 @@ export const STREET_BUILDINGS = {
 
 // Street=true is the reserved legacy LOT envelope. Architecture may be smaller,
 // but keeping this planner stable preserves all existing roads and ad sightlines.
-export function buildingProfile(item: Pick<SceneryItem, "variant" | "type">, street = false) {
+export type StreetLook = { tall: number; stretch: number; mirror: boolean };
+export function buildingProfile(item: Pick<SceneryItem, "variant" | "type"> & Partial<StreetLook>, street = false) {
+  if (street) {
+    const tall = item.tall ?? STREET_BUILDINGS.minHeight, size = glbBuildingSize(item.variant, tall, item.stretch ?? 1);
+    return { width: size.width, height: tall, depth: size.depth, floors: 3, halfWidth: size.width / 2 + .1, front: size.depth / 2 + .1, back: size.depth / 2 + .1, solidHeight: tall };
+  }
   const v = item.variant % 5, shop = item.type === "shop";
-  const width = (shop ? 6.2 : 5.4 + v % 2 * .8) * (street ? STREET_BUILDINGS.frontageMultiplier : 1);
-  const height = (shop ? 4.2 : 5.5 + v % 3 * 1.5) * (street ? STREET_BUILDINGS.heightMultiplier : 1);
+  const width = shop ? 6.2 : 5.4 + v % 2 * .8;
+  const height = shop ? 4.2 : 5.5 + v % 3 * 1.5;
   const depth = 4.8;
   const pitched = !shop && v % 2 === 0;
   const halfWidth = Math.max(width + (v % 2 && !shop ? .9 : .56), pitched ? width * .76 * Math.SQRT2 : 0) * BUILDING_SCALE.width / 2;
   return {
     width, height, depth,
-    floors: street ? (height * BUILDING_SCALE.height > 13 ? 4 : 3) : shop ? 1 : Math.floor((height - 1) / 2),
+    floors: shop ? 1 : Math.floor((height - 1) / 2),
     halfWidth,
     front: (depth / 2 + (shop ? 1.04 : .9)) * BUILDING_SCALE.depth,
-    back: Math.max((depth + .5) / 2, pitched ? (street ? depth : width) * .76 / Math.SQRT2 : 0) * BUILDING_SCALE.depth,
+    back: Math.max((depth + .5) / 2, pitched ? width * .76 / Math.SQRT2 : 0) * BUILDING_SCALE.depth,
     solidHeight: (height + (pitched ? 1.82 : .94)) * BUILDING_SCALE.height,
   };
 }
 
-export type StreetBuilding = SceneryItem & { route: DetourChoice; offset: number; footprint: THREE.Vector2[]; height: number };
+export type StreetBuilding = SceneryItem & StreetLook & { route: DetourChoice; offset: number; footprint: THREE.Vector2[]; height: number };
 const point2 = (p: THREE.Vector3) => new THREE.Vector2(p.x, p.z);
 export function rectangle(position: THREE.Vector3, yaw: number, left: number, right: number, back: number, front: number) {
   const rotation = new THREE.Matrix4().makeRotationY(yaw);
@@ -81,10 +89,17 @@ export function streetTransform(item: Pick<StreetBuilding, "distance" | "route" 
 function makeBuilding(distance: number, side: "left" | "right", index: number, extraOffset = 0): StreetBuilding {
   const variant = (index + (side === "right" ? 2 : 0)) % 5;
   const type = index % 3 === 0 ? "shop" : "house";
-  const profile = buildingProfile({ variant, type }, true);
+  // Deterministic spread of height, frontage and mirroring so no two neighbours repeat.
+  const rnd = (n: number) => { const x = Math.sin((index * 3 + n + (side === "right" ? 500 : 0)) * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const look: StreetLook = {
+    tall: STREET_BUILDINGS.minHeight + (STREET_BUILDINGS.maxHeight - STREET_BUILDINGS.minHeight) * rnd(0),
+    stretch: STREET_BUILDINGS.minStretch + (STREET_BUILDINGS.maxStretch - STREET_BUILDINGS.minStretch) * rnd(1),
+    mirror: rnd(2) > .5,
+  };
+  const profile = buildingProfile({ variant, type, ...look }, true);
   const route = distance > ROAD_CLOSURE.junctionDistance - 18 && distance < ROAD_CLOSURE.mergeEnd + 18 ? side : "main";
   const offset = (route === "main" ? STREET_BUILDINGS.sidewalkOuterEdge : 4.65) + profile.front + STREET_BUILDINGS.frontageSetback + extraOffset;
-  const item = { id: `street-${side}-${index}`, distance, side, variant, type, route, offset } as StreetBuilding;
+  const item = { id: `street-${side}-${index}`, distance, side, variant, type, route, offset, ...look } as StreetBuilding;
   const transform = streetTransform(item);
   item.footprint = rectangle(transform.position, transform.yaw, -profile.halfWidth, profile.halfWidth, -profile.back, profile.front);
   item.height = profile.solidHeight;
@@ -129,6 +144,11 @@ export function advertisementSightlines(ads: AdPlacement[]) {
 export function buildStreetLayout(ads: AdPlacement[] = resolveAdvertisements()) {
   const buildings: StreetBuilding[] = [], adSolids = ads.map(ad => ({ ad, footprint: adFootprint(ad) }));
   const rays = advertisementSightlines(ads);
+  // Feet of the overhead banner gantries stand beside the road too.
+  const gantryFeet = OVERHEAD_ADS.flatMap(ad => {
+    const frame = getRouteFrame(ad.distance, ad.route ?? "main");
+    return [-1, 1].map(side => ({ distance: ad.distance, foot: rectangle(frame.position.clone().addScaledVector(frame.lateral, side * ad.supportSpan / 2), frame.yaw, -.325, .325, -.695, .055) }));
+  });
   const houses = DELIVERY_STOPS.map((stop, index) => {
     const transform = getDeliveryHouseTransform(index), profile = buildingProfile({ variant: index, type: "house" });
     return { distance: houseDistance(index), house: rectangle(transform.position, transform.yaw, -profile.halfWidth, profile.halfWidth, -profile.back, profile.front) };
@@ -155,6 +175,7 @@ export function buildStreetLayout(ads: AdPlacement[] = resolveAdvertisements()) 
       for (const extra of [0, 1.5, 3, 5, 7, 9, 12]) {
         const item = extra === 0 ? base : makeBuilding(distance, side, index, extra);
         if (adSolids.some(a => Math.abs(a.ad.distance - distance) < 35 && polygonsOverlap(item.footprint, a.footprint, .6))) continue;
+        if (gantryFeet.some(g => Math.abs(g.distance - distance) < 35 && polygonsOverlap(item.footprint, g.foot, .6))) continue;
         if (houses.some(h => Math.abs(h.distance - distance) < 30 && polygonsOverlap(item.footprint, h.house, 1))) continue;
         const nearbyRoads = roads.slice(Math.max(0, Math.floor((distance - 18) * 2)), Math.ceil((distance + 18) * 2));
         if (nearbyRoads.some(r => r.lines.some(l => pointPolygonDistance(l.point, item.footprint) < l.width + .15))) continue;

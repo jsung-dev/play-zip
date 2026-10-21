@@ -3,9 +3,9 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { DELIVERY_GAME_CONFIG, type DeliveryBrand, type SceneryItem } from "@/data/delivery-game";
 import { BUILDING_SCALE } from "./scene-layout";
-import { buildingProfile } from "./street-layout";
+import { buildingProfile, type StreetLook } from "./street-layout";
 import { ROAD_SURFACE } from "./road-surface";
-import { createStreetArchitecture } from "./street-architecture";
+import { glbBuildingGeometry, glbBuildingSize } from "./glb-buildings";
 
 export const TOWN_COLORS = {
   sky: "#50bff0", haze: "#d9eceb", lawn: "#b8d998", road: ROAD_SURFACE.color,
@@ -43,6 +43,10 @@ export function createSceneArt() {
     shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * 0.42;");
   };
   buildingMaterial.customProgramCacheKey = () => "building-vertex-colour";
+  // GLB street buildings: same lighting as above, but flat-shaded so the geometry needs no normals.
+  const glbMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false, flatShading: true });
+  glbMaterial.onBeforeCompile = buildingMaterial.onBeforeCompile;
+  glbMaterial.customProgramCacheKey = () => "glb-building-vertex-colour";
   const paint = (geo: THREE.BufferGeometry, color: string, top = color) => {
     const position = geo.attributes.position, bottomColor = new THREE.Color(color), topColor = new THREE.Color(top);
     const colors = new Float32Array(position.count * 3);
@@ -193,14 +197,14 @@ export function createSceneArt() {
       model.userData.routeDistance = item.distance;
       return model;
     };
+    if (street) {
+      const look = item as SceneryItem & Partial<StreetLook>, { scale } = glbBuildingSize(item.variant, look.tall ?? 10, 1);
+      const mesh = new THREE.Mesh(glbBuildingGeometry(item.variant, look.mirror ?? false), glbMaterial);
+      mesh.scale.set(scale * (look.stretch ?? 1), scale, scale);
+      return place(new THREE.Group().add(mesh));
+    }
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
-    if (street) {
-      const model = createStreetArchitecture(item, { box, buildingBox, buildingBlob, put, shadow, merge });
-      model.scale.set(BUILDING_SCALE.width, BUILDING_SCALE.height, BUILDING_SCALE.depth);
-      buildingTemplates.set(key, model);
-      return place(model.clone());
-    }
     const group = new THREE.Group();
     const v = item.variant % 5, shop = item.type === "shop";
     const { width: w, height: h, depth: d, floors } = buildingProfile(item, street);
