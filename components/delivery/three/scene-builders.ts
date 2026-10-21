@@ -423,6 +423,18 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
       add(rbox(.6, .08, .6, ink, .03), side * (width / 2 + .1), .04);
     }
     for (const x of [-width / 4, width / 4]) add(rbox(.5, .42, .05, mat("#ffd23d", .5), .03), x, 1.05);
+  } else if (placement.kind === "balloon") {
+    // Balloon bunches tethered to sandbags, floating head-high: walk under them, a jump pops into them.
+    const colors = ["#ff5d8f", "#ffc83d", "#4fb7e8"];
+    for (let lane = 0; lane < obstacleSpan(placement); lane++) {
+      const cx = (lane - (obstacleSpan(placement) - 1) / 2) * DELIVERY_GAME_CONFIG.laneSpacing;
+      add(rbox(.4, .24, .4, ink, .06), cx, .12);
+      add(rbox(.025, 1.95, .025, white, .01), cx, 1.2);
+      colors.forEach((color, i) => {
+        const balloon = add(new THREE.Mesh(new THREE.SphereGeometry(.46, 18, 14), mat(color, .25)), cx + (i - 1) * .55, 2.25 + (i === 1 ? .35 : 0));
+        balloon.scale.y = 1.18;
+      });
+    }
   } else if (placement.kind === "plank") {
     // Speed-bump board: sunny yellow with white chevrons and red end reflectors.
     add(rbox(width, .24, .55, mat("#ffcf33", .2), .08), 0, .17);

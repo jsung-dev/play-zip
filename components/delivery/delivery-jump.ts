@@ -19,7 +19,15 @@ export const OBSTACLE_CLEARANCE: Record<ObstaclePlacement["kind"], number | null
   plank: 0.4,
   crates: 0.6, // drawn 25% taller
   overhead: null, // a low bar across the road: duck under it, jumping does not help
+  balloon: null, // low floating balloons: pass them on the ground; anything airborne above BALLOON_AIR hits them
 };
+
+// Swiping down mid-jump drops the bike this many times faster than the normal fall.
+export const SLAM_RATE = 3;
+export const BALLOON_AIR = .4;
+
+/** Jump clock after a down-swipe at `elapsed`: a rising bike is mirrored onto the same height of its fall. */
+export const slamElapsed = (elapsed: number, power = 1) => Math.max(elapsed, jumpDuration(power) - elapsed);
 
 // A ramp launches with more power: higher and longer than a tap jump.
 export const RAMP_POWER = 1.7;
@@ -33,6 +41,7 @@ export function jumpHeightAt(elapsed: number | null, power = 1) {
 
 export function clearsObstacle(kind: ObstaclePlacement["kind"], height: number, ducking = false) {
   if (kind === "overhead") return ducking;
+  if (kind === "balloon") return height <= BALLOON_AIR;
   const clearance = OBSTACLE_CLEARANCE[kind];
   return clearance !== null && height > clearance;
 }

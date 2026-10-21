@@ -15,7 +15,7 @@ import { advanceDeliveryTargets, completedDeliveryCount } from "./delivery-progr
 import { nextDeliveryLane, settledDeliveryLane, laneTargetX, type TravelDirection, type TurnChoice } from "./delivery-turns";
 import { DeliverySwipe } from "./DeliverySwipe";
 import type { SwipeAction } from "./delivery-swipe";
-import { clearsObstacle, DUCK_SECONDS, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER } from "./delivery-jump";
+import { clearsObstacle, DUCK_SECONDS, jumpDuration, jumpHeightAt, obstacleCenterX, obstacleHitHalfWidth, RAMP_POWER, SLAM_RATE, slamElapsed } from "./delivery-jump";
 import { sectionEntered, starsFor } from "./delivery-course";
 import { BOOST, boosterHit, FALL_SECONDS, gapUnder, RAMP_MAX_SPEED, RAMP_MIN_SPEED, rampHit } from "./delivery-pickups";
 import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose, snapToLane, TIMED } from "./delivery-movers";
@@ -52,6 +52,7 @@ type RuntimeState = {
   moverStarts: Record<string, number>;
   moverTargets: Record<string, number>;
   jumpPower: number;
+  jumpSlam: boolean;
   collected: Set<number>;
   fallElapsed: number | null;
   fallRespawn: number;
@@ -61,7 +62,7 @@ type RuntimeState = {
 };
 
 
-const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, duckElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
+const makeRuntime = (): RuntimeState => ({ position: 0, speed: 0, laneX: 0, laneFromX: 0, laneTarget: 1, laneStartedAt: 0, collisionId: null, collisionCount: 0, slowdownUntil: 0, stopIndex: 0, quizPassedStops: [], completedStops: [], skippedStops: [], stopDwell: 0, deliveryPulse: 0, deliverySuccessRemaining: 0, detour: "main", driveway: null, travelDirection: 1, turnChoice: null, jumpElapsed: null, duckElapsed: null, clock: 0, moverStarts: {}, moverTargets: {}, jumpPower: 1, jumpSlam: false, collected: new Set(), boostRemaining: 0, fallElapsed: null, fallRespawn: 0, toast: null, cleared: new Set() });
 
 let toastId = 0;
 // Short on-screen callouts (praise, penalties, section names); the latest wins.
@@ -164,6 +165,7 @@ export function DeliveryGame() {
     if (runtime.jumpElapsed !== null || runtime.duckElapsed !== null || runtime.fallElapsed !== null) return;
     runtime.jumpElapsed = 0;
     runtime.jumpPower = 1;
+    runtime.jumpSlam = false;
     playSfx("jump");
     setFrame({ ...runtime });
   }, [paused, status]);
@@ -171,6 +173,14 @@ export function DeliveryGame() {
   const duck = useCallback(() => {
     if (status !== "playing" || paused) return;
     const runtime = runtimeRef.current;
+    if (runtime.jumpElapsed !== null && runtime.jumpPower === 1 && !runtime.jumpSlam && runtime.fallElapsed === null) {
+      // Down-swipe in the air: drop straight to the road.
+      runtime.jumpSlam = true;
+      runtime.jumpElapsed = slamElapsed(runtime.jumpElapsed);
+      showToast(runtime, "급하강!", "good", .8);
+      setFrame({ ...runtime });
+      return;
+    }
     if (runtime.duckElapsed !== null || runtime.jumpElapsed !== null || runtime.fallElapsed !== null) return;
     runtime.duckElapsed = 0;
     playSfx("land");
@@ -210,7 +220,7 @@ export function DeliveryGame() {
       }
       const boosting = runtime.boostRemaining > 0;
       if (runtime.jumpElapsed !== null) {
-        runtime.jumpElapsed += deltaSeconds;
+        runtime.jumpElapsed += deltaSeconds * (runtime.jumpSlam ? SLAM_RATE : 1);
         if (runtime.jumpElapsed >= jumpDuration(runtime.jumpPower)) {
           if (runtime.jumpPower > 1) { showToast(runtime, "착지 성공!", "good"); playSfx("nice"); } else playSfx("land");
           runtime.jumpElapsed = null;
@@ -322,7 +332,7 @@ export function DeliveryGame() {
       {
         // The ramp is the only way over a collapsed road; it tops up speed so the flight always clears it.
         if (rampHit(previousPosition, runtime.position, runtime.laneX, runtime.detour, runtime.jumpElapsed !== null)) {
-          runtime.jumpElapsed = 0; runtime.jumpPower = RAMP_POWER; jumpHeight = 0;
+          runtime.jumpElapsed = 0; runtime.jumpPower = RAMP_POWER; runtime.jumpSlam = false; jumpHeight = 0;
           runtime.speed = Math.min(RAMP_MAX_SPEED, Math.max(runtime.speed, RAMP_MIN_SPEED));
           playSfx("ramp");
         }

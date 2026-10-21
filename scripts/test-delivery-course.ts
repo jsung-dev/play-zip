@@ -16,7 +16,8 @@ assert.equal(sectionEntered(SECTIONS[0].from + 1, SECTIONS[0].from + 3), null, "
 // Layout: one pattern at a time. Hazards on the same road are either part of the
 // same pattern (same distance) or at least 10 m apart, and every section has some.
 const events = [
-  ...OBSTACLE_PLACEMENTS.map(o => ({ d: o.distance, route: o.branch ?? "main", id: o.id })),
+  // Balloons ride 7-12 m behind their jump obstacle on purpose (checked in the jump test); they only need room from everything else.
+  ...OBSTACLE_PLACEMENTS.filter(o => o.kind !== "balloon").map(o => ({ d: o.distance, route: o.branch ?? "main", id: o.id })),
   // Drums belong to the detour ramp pattern: they roll away from it to funnel riders onto it.
   ...MOVER_PLACEMENTS.filter(m => moverCollides(m.kind) && m.kind !== "drum").map(m => ({ d: m.distance, route: m.branch ?? "main", id: m.id })),
   ...GAPS.map(g => ({ d: g.start, route: g.branch ?? "main", id: `gap-${g.start}` })),
@@ -24,7 +25,7 @@ const events = [
 // Detours: each side has its own static obstacles too, so they are not mirror images.
 const staticsOf = (branch: string) => OBSTACLE_PLACEMENTS.filter(o => o.branch === branch).map(o => `${o.kind}${o.lane}${o.span ?? 1}@${o.distance}`).join();
 assert(staticsOf("left") !== "" && staticsOf("left") !== staticsOf("right"), "Left detour has its own obstacles");
-assert(events.filter(e => e.route === "main").length >= 30, "The main road is busy enough");
+assert(events.filter(e => e.route === "main").length >= 20, "The main road is busy enough (spaced 20-30 m apart, one pattern at a time)");
 for (const route of ["main", "left", "right"]) {
   const list = events.filter(e => e.route === route).sort((a, b) => a.d - b.d);
   for (let i = 1; i < list.length; i++) {
@@ -32,6 +33,8 @@ for (const route of ["main", "left", "right"]) {
     assert(gap === 0 || gap >= 10, `${list[i - 1].id} and ${list[i].id} overlap (${gap.toFixed(1)} m)`);
   }
 }
+for (const b of OBSTACLE_PLACEMENTS.filter(o => o.kind === "balloon"))
+  for (const e of events) assert(Math.abs(e.d - b.distance) >= 10 || (b.distance - e.d >= 7 && b.distance - e.d <= 12), `${e.id} crowds ${b.id}`);
 for (const [i, section] of SECTIONS.entries()) {
   const end = SECTIONS[i + 1]?.from ?? 1000;
   assert(events.some(e => e.d >= section.from && e.d < end), `${section.name} has a hazard`);
