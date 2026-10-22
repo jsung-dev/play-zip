@@ -351,14 +351,18 @@ export function createSceneArt() {
   }
 
   function bicycle(brand: DeliveryBrand, label: THREE.Texture, productMaterial: THREE.Material) {
-    // v5 GLB rider + bike at final size (front = -Z); wheels, crank and legs turn on their GLB pivots.
+    // v7 GLB rider + bike (front = -Z); wheels, crank and legs turn on their GLB pivots.
     const group = glbAsset("rider_bike"), part = (name: string) => group.getObjectByName(name)!;
     shadow(group, 2.16, 3.15, .22, .14);
     const groundShadow = group.children[group.children.length - 1];
     // Brand area stays brand-coloured: the GLB box, label and basket cartons are swapped for the
-    // original brand-coloured box/label/cartons (authored at 1/0.9 scale, so drawn in a 0.9 group).
+    // original brand-coloured box/label/cartons (authored at 1/0.9 scale, so drawn in 0.9 groups),
+    // shifted onto the v7 rack (box centre y 1.65, z .99) and basket (floor y 1.11).
     for (const name of ["delivery_box", "brand_label", "basket_items"]) part(name).visible = false;
-    const brandParts = new THREE.Group(); brandParts.scale.setScalar(.9); group.add(brandParts);
+    const cartons = new THREE.Group(), brandBox = new THREE.Group();
+    cartons.scale.setScalar(.9); cartons.position.set(0, -.12, -.03);
+    brandBox.scale.setScalar(.9); brandBox.position.set(0, .3, .07);
+    group.add(cartons, brandBox);
     for (const x of [-.23, .23]) {
       const carton = new THREE.Group();
       put(carton, box(.37, .63, .32, brand.secondaryColor, .025), 0, .32, 0);
@@ -366,16 +370,16 @@ export function createSceneArt() {
       cap.rotation.y = Math.PI / 4; put(carton, cap, 0, .73, 0);
       const labelMesh = new THREE.Mesh(geometry("carton-label", () => new THREE.PlaneGeometry(.32, .53)), productMaterial);
       put(carton, labelMesh, 0, .35, .168);
-      put(brandParts, carton, x, 1.37, -1.11);
+      put(cartons, carton, x, 1.37, -1.11);
     }
-    put(brandParts, box(1.44, .94, .9, brand.secondaryColor, .075), 0, 1.5, 1.02);
-    put(brandParts, box(1.49, .16, .96, brand.primaryColor, .055), 0, 2.0, 1.02);
-    for (const x of [-.6, .6]) put(brandParts, box(.075, .91, .025, "#c8a88a", .012), x, 1.48, 1.49);
+    put(brandBox, box(1.44, .94, .9, brand.secondaryColor, .075), 0, 1.5, 1.02);
+    put(brandBox, box(1.49, .16, .96, brand.primaryColor, .055), 0, 2.0, 1.02);
+    for (const x of [-.6, .6]) put(brandBox, box(.075, .91, .025, "#c8a88a", .012), x, 1.48, 1.49);
     const backLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.23, .72), new THREE.MeshBasicMaterial({ map: label, toneMapped: false }));
-    put(brandParts, backLabel, 0, 1.49, 1.481);
-    mergeStatic(brandParts);
-    // 70% of the GLB (rider ~2.1 m tall) so it sits in scale with the obstacles; hitboxes are separate numbers.
-    group.scale.setScalar(.7);
+    put(brandBox, backLabel, 0, 1.49, 1.481);
+    mergeStatic(cartons); mergeStatic(brandBox);
+    // 85% of the GLB (rider ~2.55 m tall) to sit in scale with the obstacles; hitboxes are separate numbers.
+    group.scale.setScalar(.85);
     return { group, wheels: [part("wheel_front"), part("wheel_rear")], pedal: part("crank"), leftLeg: part("leg_left"), rightLeg: part("leg_right"), spine: part("spine"), groundShadow };
   }
 

@@ -231,7 +231,7 @@ export function DeliveryScene3D({
       const squash = reduceMotion ? 0 : Math.sin(Math.min(1, landingElapsed / .18) * Math.PI) * .04;
       // Ducking bends the rider's upper body forward and down on the GLB spine pivot (no squashing).
       const duck = live ? duckAmountAt(live.duckElapsed) : 0;
-      world.bicycle.spine.rotation.x = -duck * .95;
+      world.bicycle.spine.rotation.x = -duck * 1.1;
       world.bicycle.spine.position.y = spineRestY - duck * .25;
       world.bicycle.group.scale.set(bikeScale * (1 + squash * .5), bikeScale * (1 - squash), bikeScale * (1 + squash * .5));
       world.bicycle.group.rotation.y = routeFrame.yaw;
