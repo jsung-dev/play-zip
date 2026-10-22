@@ -382,18 +382,16 @@ function createBus(placement: BusPlacement, art: SceneArt, resources: OutdoorAdR
   return group;
 }
 
-function createObstacle(placement: ObstaclePlacement): ObstacleRig {
+function createObstacle(placement: ObstaclePlacement, art: SceneArt): ObstacleRig {
   const group = markDistance(new THREE.Group(), placement.distance);
   group.position.x = obstacleCenterX(placement);
   group.position.z = -placement.distance;
   group.userData.obstacleId = placement.id;
-  // Bright, toy-like props with soft edges. Materials stay transparent so a hit
-  // can fade the obstacle; each prop is ~25% taller/deeper so it reads early.
+  // Materials stay transparent so a hit can fade the obstacle (GLB props get their own fadeable copy).
   const mat = (color: string, emissive = 0) => new THREE.MeshLambertMaterial({ color, emissive: emissive ? color : "#000000", emissiveIntensity: emissive, transparent: true, opacity: 1 });
   const rbox = (w: number, h: number, d: number, material: THREE.Material, radius = .05) =>
     new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(radius, w / 3, h / 3, d / 3)), material);
   const add = (mesh: THREE.Mesh, x: number, y: number, z = 0) => { mesh.position.set(x, y, z); group.add(mesh); return mesh; };
-  const white = mat("#ffffff", .25), ink = mat("#3f4d4b");
   const shadow = new THREE.MeshBasicMaterial({ color: "#344944", transparent: true, opacity: 0.2 });
   const width = obstacleSpan(placement) * DELIVERY_GAME_CONFIG.laneSpacing - 0.3;
   const shadowMesh = placement.span && placement.span > 1
@@ -403,64 +401,28 @@ function createObstacle(placement: ObstaclePlacement): ObstacleRig {
   shadowMesh.position.y = 0.025;
   group.add(shadowMesh);
 
-  if (placement.kind === "cones") {
-    const orange = mat("#ff7a1a", .18);
-    for (const x of [-0.76, 0, 0.76]) {
-      add(rbox(.62, .1, .62, ink, .04), x, .05);
-      add(new THREE.Mesh(new THREE.ConeGeometry(0.27, 0.86, 18), orange), x, 0.54);
-      add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.1, 18), white), x, 0.42);
-      add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.08, 18), white), x, 0.7);
-      add(new THREE.Mesh(new THREE.SphereGeometry(.06, 10, 8), orange), x, .97);
+  const GLB = { cones: "obstacle_cones", barrier: "obstacle_barrier", plank: "obstacle_plank", crates: "obstacle_crates", overhead: "obstacle_overhead", signbeam: "obstacle_signbeam" } as const;
+  if (placement.kind in GLB) {
+    // v5 GLBs at their final size (heights match OBSTACLE_CLEARANCE). Beams span the road;
+    // one-lane props repeat once per lane.
+    const name = GLB[placement.kind as keyof typeof GLB], fullRoad = placement.kind === "overhead" || placement.kind === "signbeam";
+    const span = fullRoad ? 1 : obstacleSpan(placement);
+    for (let lane = 0; lane < span; lane++) {
+      const prop = art.glbAsset(name, true);
+      prop.position.x = (lane - (span - 1) / 2) * DELIVERY_GAME_CONFIG.laneSpacing;
+      group.add(prop);
     }
-  } else if (placement.kind === "barrier") {
-    const red = mat("#ff4d5a", .15);
-    add(rbox(2.3, .8, .2, red, .08), 0, .95);
-    for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) add(rbox(.2, .78, .22, white, .03), x, .95, .01).rotation.z = -0.55;
-    for (const x of [-0.83, 0.83]) { add(rbox(.14, .86, .16, ink, .04), x, .45); add(rbox(.5, .08, .5, ink, .03), x, .04); }
-    add(new THREE.Mesh(new THREE.SphereGeometry(.12, 12, 10), mat("#ffd23d", .8)), -.85, 1.45);
-  } else if (placement.kind === "overhead") {
-    // A low striped beam on two posts across the whole road, with hanging flags: duck under it.
-    const red = mat("#ff4d5a", .2);
-    add(rbox(width + .3, .5, .42, red, .1), 0, 1.5);
-    for (let x = -width / 2 + .5; x <= width / 2 - .4; x += .9) add(rbox(.34, .52, .44, white, .03), x, 1.5).rotation.z = -.55;
-    for (const side of [-1, 1]) {
-      add(rbox(.26, 1.75, .3, ink, .05), side * (width / 2 + .1), .88);
-      add(rbox(.6, .08, .6, ink, .03), side * (width / 2 + .1), .04);
-    }
-    for (const x of [-width / 4, width / 4]) add(rbox(.5, .42, .05, mat("#ffd23d", .5), .03), x, 1.05);
-  } else if (placement.kind === "signbeam") {
-    // A raised height-limit beam on two posts: ride under it, a jump hits it.
-    const yellow = mat("#ffcf33", .2);
-    add(rbox(width + .3, .8, .42, yellow, .1), 0, 2.3);
-    for (let x = -width / 2 + .5; x <= width / 2 - .4; x += .9) add(rbox(.3, .82, .44, ink, .03), x, 2.3).rotation.z = -.55;
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), new THREE.MeshBasicMaterial({ map: makeTextTexture({ title: "높이 제한", background: "#2f7fd6", foreground: "#ffffff", width: 512, height: 192 }), toneMapped: false }));
-    add(plate, 0, 2.3, .23);
-    for (const side of [-1, 1]) {
-      add(rbox(.26, 2.7, .3, ink, .05), side * (width / 2 + .1), 1.35);
-      add(rbox(.6, .08, .6, ink, .03), side * (width / 2 + .1), .04);
-    }
-  } else if (placement.kind === "plank") {
-    // Speed-bump board: sunny yellow with white chevrons and red end reflectors.
-    add(rbox(width, .24, .55, mat("#ffcf33", .2), .08), 0, .17);
-    for (let x = -width / 2 + .45; x <= width / 2 - .4; x += .75) add(rbox(.32, .03, .5, white, .01), x, .3).rotation.y = .5;
-    for (const side of [-1, 1]) add(rbox(.22, .2, .57, mat("#ff4d5a", .3), .05), side * (width / 2 - .11), .18);
-  } else if (placement.kind === "crates") {
-    // A row of plain milk crates in bright colours; no logos or brand marks.
-    const colours = ["#38b6ff", "#ff6fa8", "#5fd36a", "#ffb02e"].map(c => mat(c, .15)), slot = mat("#ffffff", .05);
-    const count = Math.round(width / 0.62);
-    for (let index = 0; index < count; index += 1) {
-      const x = -width / 2 + (index + 0.5) * (width / count), w = width / count - 0.06;
-      add(rbox(w, .44, .6, colours[(index + Math.round(placement.distance)) % colours.length], .05), x, .22);
-      add(rbox(w + .02, .06, .62, white, .02), x, .44);
-      for (const y of [.14, .28]) add(rbox(w * .62, .05, .02, slot, .01), x, y, .31);
+    if (placement.kind === "signbeam") {
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.0), new THREE.MeshBasicMaterial({ map: makeTextTexture({ title: "높이 제한", background: "#2f7fd6", foreground: "#ffffff", width: 512, height: 192 }), toneMapped: false }));
+      add(plate, 0, 2.85, .3);
     }
   } else {
     const kraft = mat("#f0b273", .12), tape = mat("#fff3c4", .2);
     add(rbox(1.15, .92, .94, kraft, .05), 0, .48).rotation.y = .18;
     add(rbox(.18, .94, .96, tape, .02), 0, .48).rotation.y = .18;
   }
-  // Taller and deeper (not wider: lanes stay readable side by side).
-  group.scale.set(1, 1.25, 1.25);
+  // The procedural box is drawn ~25% taller/deeper so it reads early; GLB props are already final size.
+  if (!(placement.kind in GLB)) group.scale.set(1, 1.25, 1.25);
 
   return { id: placement.id, distance: placement.distance, x: group.position.x, halfWidth: 1.2 + (obstacleSpan(placement) - 1) * DELIVERY_GAME_CONFIG.laneSpacing / 2, group };
 }
@@ -932,7 +894,7 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   }
 
   for (const placement of OBSTACLE_PLACEMENTS) {
-    const obstacle = createObstacle(placement);
+    const obstacle = createObstacle(placement, art);
     placeOnRoute(obstacle.group, placement.distance, placement.branch);
     obstacles.push(obstacle);
     worldObjects.push(obstacle.group);

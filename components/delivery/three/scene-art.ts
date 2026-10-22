@@ -196,10 +196,12 @@ export function createSceneArt() {
   }
 
   // A converted v5 asset at its real size: one mesh per named part on its pivot, anchors in userData.
-  function glbAsset(name: AssetName) {
+  // fadeable: an own transparent copy of the material, so a hit can fade just this object.
+  function glbAsset(name: AssetName, fadeable = false) {
     const model = ASSET_MODELS[name], group = new THREE.Group();
+    const material = fadeable ? Object.assign(glbMaterial.clone(), { transparent: true, onBeforeCompile: glbMaterial.onBeforeCompile, customProgramCacheKey: glbMaterial.customProgramCacheKey }) : glbMaterial;
     for (const part of model.parts) {
-      const mesh = new THREE.Mesh(geometry(`asset:${name}:${part.name}`, () => decodeGlbPart(part)), glbMaterial);
+      const mesh = new THREE.Mesh(geometry(`asset:${name}:${part.name}`, () => decodeGlbPart(part)), material);
       mesh.name = part.name; mesh.position.fromArray(part.t); group.add(mesh);
     }
     group.userData.anchors = model.anchors;
