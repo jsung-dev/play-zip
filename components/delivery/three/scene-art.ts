@@ -44,7 +44,7 @@ export function createSceneArt() {
   };
   buildingMaterial.customProgramCacheKey = () => "building-vertex-colour";
   // GLB street buildings: same lighting as above, but flat-shaded so the geometry needs no normals.
-  const glbMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false, flatShading: true });
+  const glbMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, toneMapped: false, flatShading: true, side: THREE.DoubleSide });
   glbMaterial.onBeforeCompile = buildingMaterial.onBeforeCompile;
   glbMaterial.customProgramCacheKey = () => "glb-building-vertex-colour";
   const paint = (geo: THREE.BufferGeometry, color: string, top = color) => {
@@ -187,6 +187,13 @@ export function createSceneArt() {
     put(group, box(width + .24, .07, .17, "#c8c8b6"), x, y - height / 2 - .19, z + .025);
   }
 
+  // One merged-friendly mesh of a GLB building: uniform scale to `height`, frontage stretched in x.
+  function glbBuilding(variant: number, height: number, stretch: number, mirror: boolean, maxDepth = Infinity) {
+    const { scale, depth } = glbBuildingSize(variant, height, 1), mesh = new THREE.Mesh(glbBuildingGeometry(variant, mirror), glbMaterial);
+    mesh.scale.set(scale * stretch, scale, scale * Math.min(1, maxDepth / depth));
+    return new THREE.Group().add(mesh);
+  }
+
   const buildingTemplates = new Map<string, THREE.Group>();
   function building(item: SceneryItem, street = false) {
     const key = `${item.type}:${item.variant % 5}:${street}`;
@@ -198,10 +205,8 @@ export function createSceneArt() {
       return model;
     };
     if (street) {
-      const look = item as SceneryItem & Partial<StreetLook>, { scale } = glbBuildingSize(item.variant, look.tall ?? 10, 1);
-      const mesh = new THREE.Mesh(glbBuildingGeometry(item.variant, look.mirror ?? false), glbMaterial);
-      mesh.scale.set(scale * (look.stretch ?? 1), scale, scale);
-      return place(new THREE.Group().add(mesh));
+      const look = item as SceneryItem & Partial<StreetLook>;
+      return place(glbBuilding(item.variant, look.tall ?? 10, look.stretch ?? 1, look.mirror ?? false));
     }
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());
@@ -469,7 +474,7 @@ export function createSceneArt() {
     return merge(group);
   }
 
-  return { box, buildingBox, buildingBlob, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, tree, lamp, shelter, bicycle, horizon };
+  return { box, buildingBox, buildingBlob, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, glbBuilding, tree, lamp, shelter, bicycle, horizon };
 }
 
 export type SceneArt = ReturnType<typeof createSceneArt>;

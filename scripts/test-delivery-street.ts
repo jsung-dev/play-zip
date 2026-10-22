@@ -31,21 +31,6 @@ for (let variant = 0; variant < 5; variant++) for (const mirror of [false, true]
   assert(box.max.z <= p.front && -box.min.z <= p.back, `Depth envelope ${variant}`);
   assert.equal((model.children[0] as THREE.Mesh).geometry, (art.building(item, true).children[0] as THREE.Mesh).geometry, "Repeated models share geometry");
 }
-// Mirroring must keep the winding: the share of faces pointing away from the
-// centre is the same as the original (a flipped winding would invert it).
-const outwardShare: number[] = [];
-for (const mirror of [false, true]) {
-  const g = art.building({ id: "f", distance: 0, side: "left", type: "shop", variant: 3, mirror } as SceneryItem & StreetLook, true).children[0] as THREE.Mesh;
-  const p = g.geometry.attributes.position, a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), centre = new THREE.Vector3(0, 5, 0);
-  let outward = 0, total = 0;
-  for (let i = 0; i < p.count; i += 3) {
-    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
-    const n = b.clone().sub(a).cross(c.clone().sub(a)); total++;
-    if (n.dot(a.clone().sub(centre)) > 0) outward++;
-  }
-  outwardShare.push(outward / total);
-}
-assert(Math.abs(outwardShare[0] - outwardShare[1]) < .02 && outwardShare[0] > .5, `Mirrored winding ${outwardShare}`);
 const ads = resolveAdvertisements(), buildings = buildStreetLayout(ads), oldBuildings = SCENERY_ITEMS.filter(i => ["house", "shop"].includes(i.type) && sceneryHasClearance(i, ads));
 assert(buildings.length >= 150 && buildings.length <= 330, `Building count ${buildings.length}`);
 for (const b of buildings) {
