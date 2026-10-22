@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Pause, Play, RotateCcw, Route, Volume2, VolumeX } from "lucide-react";
+import { MapPin, Music, Music2, Pause, Play, RotateCcw, Route, Volume2, VolumeX } from "lucide-react";
 import { DELIVERY_STOPS } from "@/data/delivery-map";
 import { DELIVERY_GAME_CONFIG } from "@/data/delivery-game";
 import { useDialogFocus } from "./DeliveryCampaign";
@@ -8,8 +8,8 @@ import { PlatformReturnLink } from "./PlatformReturnLink";
 import shared from "./DeliveryCampaign.module.css";
 import styles from "./DeliveryNavigation.module.css";
 
-export function DeliveryPauseMenu({ stopIndex, soundOn, onToggleSound, onResume, onReplay, onRestart }: {
-  stopIndex: number; soundOn: boolean; onToggleSound: () => void; onResume: () => void; onReplay: () => void; onRestart: () => void;
+export function DeliveryPauseMenu({ stopIndex, soundOn, onToggleSound, musicOn, onToggleMusic, onResume, onReplay, onRestart }: {
+  stopIndex: number; soundOn: boolean; onToggleSound: () => void; musicOn: boolean; onToggleMusic: () => void; onResume: () => void; onReplay: () => void; onRestart: () => void;
 }) {
   const ref = useDialogFocus();
   const next = DELIVERY_STOPS[stopIndex];
@@ -20,7 +20,11 @@ export function DeliveryPauseMenu({ stopIndex, soundOn, onToggleSound, onResume,
       <div className={styles.settings}>
         <p className={styles.settingHint}>좌우로 밀면 차선 이동 · 위로 밀거나 탭하면 점프 · 아래로 밀면 숙이기</p>
         <button type="button" className={styles.settingRow} aria-pressed={soundOn} data-sound-toggle onClick={onToggleSound}>
-          <span className={styles.settingLabel}>{soundOn ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}소리·진동</span>
+          <span className={styles.settingLabel}>{soundOn ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}효과음·진동</span>
+          <span className={styles.switch} aria-hidden="true"><i /></span>
+        </button>
+        <button type="button" className={styles.settingRow} aria-pressed={musicOn} data-music-toggle onClick={onToggleMusic}>
+          <span className={styles.settingLabel}>{musicOn ? <Music aria-hidden="true" /> : <Music2 aria-hidden="true" />}배경 음악</span>
           <span className={styles.switch} aria-hidden="true"><i /></span>
         </button>
       </div>

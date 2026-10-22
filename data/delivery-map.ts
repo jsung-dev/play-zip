@@ -28,6 +28,7 @@ export const DELIVERY_STOPS: DeliveryStop[] = [
 export const ROAD_CLOSURE = {
   distance: 570,
   junctionDistance: 495,
+  switchMeters: 35, // after the split a lane change still moves to the next road until they visibly part (~7.7 m apart)
   stopBeforeMeters: 3,
   detourOffset: 17,
   rampMeters: 75,

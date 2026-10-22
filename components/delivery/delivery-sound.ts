@@ -1,25 +1,37 @@
 // Tiny synthesized sound set (no audio files, nothing to license) plus phone
-// vibration. One on/off switch for both, remembered on this device.
+// vibration. Separate on/off switches for effects (+vibration) and music, remembered on this device.
 type Sfx = "jump" | "land" | "hit" | "deliver" | "correct" | "boost" | "ramp" | "nice";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
 let enabled = true;
+let musicOn = true;
 let musicTimer: number | null = null;
 
-try { enabled = localStorage.getItem("delivery-sound") !== "off"; } catch { /* storage blocked: default on */ }
+try {
+  enabled = localStorage.getItem("delivery-sound") !== "off";
+  musicOn = localStorage.getItem("delivery-music") !== "off";
+} catch { /* storage blocked: default on */ }
 
 export const soundEnabled = () => enabled;
+export const musicEnabled = () => musicOn;
 
 export function setSoundEnabled(on: boolean) {
   enabled = on;
   try { localStorage.setItem("delivery-sound", on ? "on" : "off"); } catch { /* not persisted */ }
+}
+
+export function setMusicEnabled(on: boolean) {
+  musicOn = on;
+  try { localStorage.setItem("delivery-music", on ? "on" : "off"); } catch { /* not persisted */ }
   if (!on) stopMusic();
 }
 
 /** Browsers only allow audio after a tap; call from a user gesture. */
 export function unlockSound() {
   if (typeof window === "undefined") return;
+  // iPhone mutes Web Audio while the silent switch is on unless the page asks for "playback" (Safari 16.4+).
+  try { (navigator as Navigator & { audioSession?: { type: string } }).audioSession!.type = "playback"; } catch { /* unsupported */ }
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return;
   if (!context) {
@@ -62,14 +74,14 @@ export function playSfx(name: Sfx) {
 const MELODY = [523, 659, 784, 659, 587, 698, 880, 698, 523, 659, 784, 1047, 988, 784, 659, 587];
 const BASS = [131, 131, 147, 147, 131, 131, 196, 196];
 export function startMusic() {
-  if (!enabled || musicTimer !== null || !context) return;
+  if (!musicOn || musicTimer !== null || !context) return;
   let step = 0, next = context.currentTime + .05;
   const beat = .26;
   musicTimer = window.setInterval(() => {
     if (!context || context.state !== "running") return;
     while (next < context.currentTime + .3) {
-      tone(MELODY[step % MELODY.length], MELODY[step % MELODY.length], next, beat * .9, "triangle", .045);
-      if (step % 2 === 0) tone(BASS[(step / 2) % BASS.length], BASS[(step / 2) % BASS.length], next, beat * 1.8, "sine", .06);
+      tone(MELODY[step % MELODY.length], MELODY[step % MELODY.length], next, beat * .9, "triangle", .09);
+      if (step % 2 === 0) tone(BASS[(step / 2) % BASS.length], BASS[(step / 2) % BASS.length], next, beat * 1.8, "sine", .12);
       step++; next += beat;
     }
   }, 100);

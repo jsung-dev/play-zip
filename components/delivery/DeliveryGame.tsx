@@ -19,7 +19,7 @@ import { clearsObstacle, DUCK_SECONDS, jumpDuration, jumpHeightAt, obstacleCente
 import { sectionEntered, starsFor } from "./delivery-course";
 import { BOOST, boosterHit, FALL_SECONDS, gapUnder, RAMP_MAX_SPEED, RAMP_MIN_SPEED, rampHit } from "./delivery-pickups";
 import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose, snapToLane, TIMED } from "./delivery-movers";
-import { playSfx, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
+import { musicEnabled, playSfx, setMusicEnabled, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
 
@@ -90,7 +90,13 @@ export function DeliveryGame() {
   const [sessionKey, setSessionKey] = useState(0);
   const [guidanceReplay, setGuidanceReplay] = useState(0);
   const [soundOn, setSoundOn] = useState(true);
-  useEffect(() => setSoundOn(soundEnabled()), []);
+  const [musicOn, setMusicOn] = useState(true);
+  useEffect(() => { setSoundOn(soundEnabled()); setMusicOn(musicEnabled()); }, []);
+  const toggleMusic = useCallback(() => {
+    const next = !musicEnabled();
+    setMusicEnabled(next); setMusicOn(next);
+    if (next) unlockSound();
+  }, []);
   const toggleSound = useCallback(() => {
     const next = !soundEnabled();
     setSoundEnabled(next); setSoundOn(next);
@@ -267,8 +273,14 @@ export function DeliveryGame() {
       }
 
       // All three roads at the fork are open: the lane before the split picks left / middle / right.
-      if (runtime.position <= ROAD_CLOSURE.junctionDistance) {
-        runtime.detour = runtime.laneTarget < 1 ? "left" : runtime.laneTarget > 1 ? "right" : "main";
+      // Until the roads visibly part, a lane change still moves to the neighbouring road;
+      // shifting the eased lane start keeps the bike's world position continuous.
+      if (runtime.position <= ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.switchMeters) {
+        const detour: DetourChoice = runtime.laneTarget < 1 ? "left" : runtime.laneTarget > 1 ? "right" : "main";
+        if (detour !== runtime.detour) {
+          const shift = getDetourOffset(runtime.position, runtime.detour) - getDetourOffset(runtime.position, detour);
+          runtime.laneX += shift; runtime.laneFromX += shift; runtime.detour = detour;
+        }
       }
 
       if (runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
@@ -457,9 +469,9 @@ export function DeliveryGame() {
   }, [clearInputs, paused, status]);
 
   useEffect(() => {
-    if ((status === "playing" || status === "quiz") && !paused && soundOn) startMusic(); else stopMusic();
+    if ((status === "playing" || status === "quiz") && !paused && musicOn) startMusic(); else stopMusic();
     return stopMusic;
-  }, [paused, soundOn, status]);
+  }, [musicOn, paused, status]);
 
   const togglePause = () => {
     clearInputs();
@@ -590,7 +602,7 @@ export function DeliveryGame() {
 
         {status === "ready" && <DeliveryBrandStart onStart={startGame} />}
 
-        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} soundOn={soundOn} onToggleSound={toggleSound} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
+        {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} soundOn={soundOn} onToggleSound={toggleSound} musicOn={musicOn} onToggleMusic={toggleMusic} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
         {status === "quiz" && nextStop && <DeliveryBrandQuiz key={frame.stopIndex} brand={deliveryBrand} stopIndex={frame.stopIndex} address={nextStop.address} onCorrect={completeQuiz} />}
         {status === "completed" && <DeliveryPurchaseAd brand={deliveryBrand} completedDeliveries={completedDeliveries} hits={frame.collisionCount} stars={starsFor(frame.collisionCount, completedDeliveries, totalDeliveries)} onRestart={returnToStart} />}
