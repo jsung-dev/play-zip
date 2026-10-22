@@ -4,6 +4,11 @@ import { BUILDING_MODELS } from "./building-models";
 const bytes = (base64: string) => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 const cache = new Map<string, THREE.BufferGeometry>();
 
+// Colour boost for the GLB palettes (1 = as exported); tune here, the models stay untouched.
+export const BUILDING_SATURATION = 1.15;
+const hsl = { h: 0, s: 0, l: 0 };
+const saturate = (c: THREE.Color) => c.getHSL(hsl) && c.setHSL(hsl.h, Math.min(1, hsl.s * BUILDING_SATURATION), hsl.l);
+
 // Street building geometry: flat colours per triangle, no normals/uv (the material
 // derives flat normals), so a merged block stays small on phones. The material is
 // double-sided, so mirroring needs no winding fix.
@@ -12,7 +17,7 @@ export function glbBuildingGeometry(variant: number, mirror: boolean) {
   if (cached) return cached;
   const model = BUILDING_MODELS[variant % BUILDING_MODELS.length];
   const pos = new Int16Array(bytes(model.positions).buffer), idx = new Uint16Array(bytes(model.indices).buffer), tri = bytes(model.colors);
-  const palette = model.palette.map(hex => new THREE.Color(hex)), triangles = tri.length;
+  const palette = model.palette.map(hex => saturate(new THREE.Color(hex))), triangles = tri.length;
   const position = new Float32Array(triangles * 9), color = new Uint8Array(triangles * 9), flip = mirror ? -1 : 1;
   for (let t = 0; t < triangles; t++) for (let k = 0; k < 3; k++) {
     const vertex = idx[t * 3 + k], out = t * 9 + k * 3, c = palette[tri[t]];
