@@ -469,9 +469,10 @@ export function DeliveryGame() {
   }, [clearInputs, paused, status]);
 
   useEffect(() => {
+    // No cleanup here: quiz -> playing must keep the running tune instead of restarting it.
     if ((status === "playing" || status === "quiz") && !paused && musicOn) startMusic(); else stopMusic();
-    return stopMusic;
   }, [musicOn, paused, status]);
+  useEffect(() => stopMusic, []);
 
   const togglePause = () => {
     clearInputs();
