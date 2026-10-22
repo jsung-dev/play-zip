@@ -4,9 +4,8 @@ import { OUTDOOR_ADS, OUTDOOR_AD_FORMATS, OVERHEAD_ADS } from "../data/delivery-
 import { createSceneArt } from "../components/delivery/three/scene-art";
 import { createOutdoorAdResources } from "../components/delivery/three/outdoor-ad-material";
 import { createOutdoorAdvertisement, createOverheadAdvertisement } from "../components/delivery/three/outdoor-ad-model";
-import { createAdvertisementBuilding } from "../components/delivery/three/advertisement-building";
 import { getRouteFrame } from "../data/delivery-map";
-import { buildStreetLayout, polygonsOverlap, rectangle, advertisementSightlines } from "../components/delivery/three/street-layout";
+import { buildStreetLayout, polygonsOverlap, rectangle } from "../components/delivery/three/street-layout";
 import { advertisementTransform, isLandmark } from "../components/delivery/three/scene-layout";
 const context = { createRadialGradient: () => ({ addColorStop() {} }), fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, fill() {}, fillText() {}, measureText: (s: string) => ({ width: s.length * 40 }) };
 Object.assign(globalThis, { document: { createElement: () => ({ width: 0, height: 0, getContext: () => context }) } });
@@ -27,14 +26,6 @@ for (const ad of OUTDOOR_ADS) {
   const corner = isLandmark(ad), halfWidth = (ad.width + (corner ? 1.85 : 1.1)) / 2;
   assert(bounds.min.x >= -halfWidth - .001 && bounds.max.x <= halfWidth + .001, `${ad.id}: width envelope`);
   assert(bounds.min.z >= (corner ? -6.5 : -1.25) - .001 && bounds.max.z <= (corner ? 1.2 : 1.05) + .001, `${ad.id}: depth envelope`);
-  if(corner){
-    const host=createAdvertisementBuilding(ad,art);
-    host.position.copy(transform.position);host.rotation.y=transform.yaw;host.updateMatrixWorld(true);
-    for(const {from,to} of advertisementSightlines([ad])){
-      const direction=to.clone().sub(from),ray=new THREE.Raycaster(from,direction.clone().normalize(),0,direction.length()-.05);
-      assert.equal(ray.intersectObject(host,true).length,0,`${ad.id}: redesigned host must not hide the unchanged creative`);
-    }
-  }
 }
 for(const ad of OVERHEAD_ADS){
 const overhead=createOverheadAdvertisement(ad,art,resources), frame=getRouteFrame(ad.distance,ad.route??"main");

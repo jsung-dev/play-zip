@@ -1,10 +1,9 @@
 import * as THREE from "three";
 import { OUTDOOR_AD_STYLE, OUTDOOR_AD_FORMATS, type OutdoorAdPlacement, type OverheadAdPlacement } from "@/data/delivery-outdoor-ads";
 import { getRouteFrame } from "@/data/delivery-map";
-import { advertisementLayout, advertisementTransform, isLandmark } from "./scene-layout";
+import { advertisementLayout, advertisementTransform } from "./scene-layout";
 import { TOWN_COLORS, type SceneArt } from "./scene-art";
 import type { OutdoorAdResources } from "./outdoor-ad-material";
-import { createAdvertisementBuilding } from "./advertisement-building";
 
 // One frame/creative model for every ratio. Host architecture is independent of
 // image content: replacing an image cannot recolour buildings or delivery boxes.
@@ -22,10 +21,8 @@ export function createOutdoorAdvertisement(ad: OutdoorAdPlacement, art: SceneArt
     art.put(group, light, x, y + h / 2 + .43, .4);
     art.put(group, art.box(.29, .025, .24, "#fff2c9"), x, y + h / 2 + .34, .4);
   }
-  // Square landmark ads only fit two small host buildings; they stand on posts instead.
-  if (isLandmark(ad) && ad.format !== "square") {
-    group.add(createAdvertisementBuilding(ad, art));
-  } else {
+  // Every ad stands on posts; the small host buildings under landmark ads were removed.
+  {
     const postX = ad.type === "projecting" ? [w / 2 + .23] : [-w * .34, w * .34];
     for (const x of postX) {
       art.put(group, art.box(.16, y + h / 2 + .3, .2, TOWN_COLORS.metal), x, (y + h / 2 + .3) / 2, -.3);
