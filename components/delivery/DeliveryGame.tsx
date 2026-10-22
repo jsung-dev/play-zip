@@ -20,6 +20,7 @@ import { sectionEntered, starsFor } from "./delivery-course";
 import { BOOST, boosterHit, FALL_SECONDS, gapUnder, RAMP_MAX_SPEED, RAMP_MIN_SPEED, rampHit } from "./delivery-pickups";
 import { MOVER_PLACEMENTS, MOVER_SHAPE, moverCollides, moverPose, snapToLane, TIMED } from "./delivery-movers";
 import { musicEnabled, playSfx, setMusicEnabled, setSoundEnabled, soundEnabled, startMusic, stopMusic, unlockSound } from "./delivery-sound";
+import { applyCourse, generateCourse } from "./delivery-random-course";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
 
@@ -88,6 +89,7 @@ export function DeliveryGame() {
   const [status, setStatus] = useState<GameStatus>("ready");
   const [paused, setPaused] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
+  const [courseSeed, setCourseSeed] = useState(0);
   const [guidanceReplay, setGuidanceReplay] = useState(0);
   const [soundOn, setSoundOn] = useState(true);
   const [musicOn, setMusicOn] = useState(true);
@@ -121,6 +123,10 @@ export function DeliveryGame() {
   const startGame = useCallback((brand: DeliveryChoiceId) => {
     unlockSound();
     setSelectedBrand(brand);
+    // Every ride gets its own obstacle layout (rules in delivery-random-course.ts).
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    applyCourse(generateCourse(seed));
+    setCourseSeed(seed);
     resetRuntime();
     setSessionKey((current) => current + 1);
     setStatus("playing");
@@ -516,6 +522,7 @@ export function DeliveryGame() {
         data-stop-dwell={frame.stopDwell.toFixed(3)}
         data-delivery-pulse={frame.deliveryPulse}
         data-delivery-success-remaining={frame.deliverySuccessRemaining.toFixed(3)}
+        data-course-seed={courseSeed}
         data-detour={frame.detour}
         data-drive-by={driveByPhase(frame.position, frame.stopIndex)}
       >
@@ -581,6 +588,7 @@ export function DeliveryGame() {
             playing={status === "playing"}
             arriving={status === "arriving"}
             sessionKey={sessionKey}
+            courseSeed={courseSeed}
             laneX={frame.laneX}
             collisionId={frame.collisionId}
             detour={frame.detour}

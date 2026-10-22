@@ -48,6 +48,7 @@ export function DeliveryScene3D({
   playing,
   arriving,
   sessionKey,
+  courseSeed,
   laneX,
   collisionId,
   detour,
@@ -64,7 +65,7 @@ export function DeliveryScene3D({
   jumpHeight,
   deliveryBrand,
   liveRef,
-}: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime } }) {
+}: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime }; /** A new random course needs its world rebuilt. */ courseSeed: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const speedLinesRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, travelDirection, turnChoice, completedStops, jumpHeight });
@@ -447,7 +448,7 @@ export function DeliveryScene3D({
       skyTexture.dispose();
       renderer.dispose();
     };
-  }, [deliveryBrand, liveRef]);
+  }, [courseSeed, deliveryBrand, liveRef]);
 
   return (
     <section className={styles.scene3d} data-paused={paused ? "true" : "false"} aria-label="3D 배달 동네">

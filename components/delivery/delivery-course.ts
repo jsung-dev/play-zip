@@ -10,7 +10,9 @@ export function starsFor(hits: number, deliveries: number, totalDeliveries: numb
 
 // Named stretches give the ride a shape: warm-up, a first gap, lane work,
 // the fork, moving hazards, then the finale. A banner shows on entry.
-export const SECTIONS = [
+export type CourseSection = { from: number; name: string };
+// Default (authored) ride; delivery-random-course.ts swaps these in place for each new ride.
+export const SECTIONS: CourseSection[] = [
   { from: 70, name: "1구간 · 점프 연습" },
   { from: 198, name: "2구간 · 지그재그" },
   { from: 245, name: "3구간 · 차단기와 무너진 도로" },
@@ -20,7 +22,7 @@ export const SECTIONS = [
   { from: 692, name: "7구간 · 버스와 수박 소나기" },
   { from: 830, name: "8구간 · 신호 차선" },
   { from: 882, name: "마지막 · 무너진 도로와 고양이·오리 가족" },
-] as const;
+];
 
 export function sectionEntered(previous: number, position: number) {
   return SECTIONS.find(section => previous < section.from && position >= section.from) ?? null;
