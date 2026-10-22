@@ -261,3 +261,28 @@ Make it a detailed, cute Korean town bus instead of a box:
 - Colours: two-tone (cream lower body, mint or green upper band), dark window glass, orange indicators.
 Triangle budget: 5,000.
 ```
+
+---
+
+## 8. v7 라이더 — 시안 이미지 기반 (2026-10-22)
+
+시안: `ref/rider-concept.png` (Figma). 이 이미지를 Codex에 같이 첨부해 주세요. 0번 공통 규칙도 앞에 붙여 주세요.
+
+```
+Asset: rider_bike (v7). Recreate the attached concept image as a low-poly GLB as faithfully as possible:
+a cute chibi girl courier (big head ~40% of rider height, large brown eyes, rosy cheeks, open smile,
+brown hair in a low ponytail) wearing a mint-green helmet with vents and chin strap, a green zip jacket with
+cream and coral stripes on the sleeves and chest, dark gloves, a small black backpack strap, rolled blue jeans and
+white-green sneakers; riding a cream city bike with green mudguards and chain guard, dark tyres with cream
+8-spoke wheels, a brown saddle, grey handlebar with brown grips, a dark wicker front basket holding two
+milk cartons, an amber headlight, and a cream/green delivery box with coral straps on the rear rack.
+Soft faceted low-poly look like the image, flat colours only (no textures).
+
+Same rules as v6: final size, origin at ground centre, FACES -Z, height 3.0 m, length 2.7 m, width <= 1.5 m;
+wheels radius 0.45 m at y = 0.5, z = ±0.9. Same node names and pivots:
+bicycle_frame, wheel_front, wheel_rear, crank (pedals, pivot at bottom bracket), delivery_box, brand_label,
+basket_items, rider, spine (child of rider, pivot AT THE HIPS ~ (0, 1.55, 0.25), holding torso, arms, head,
+ponytail and backpack), leg_left, leg_right (pivots at the hips).
+delivery_box stays 1.3 x 0.85 x 0.8 m at (0, 1.35, 0.92) with brand_label 1.1 x 0.65 m on its back face (+Z).
+Triangle budget: 14,000.
+```
