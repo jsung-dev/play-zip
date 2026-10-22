@@ -697,10 +697,6 @@ function createDestination(brand: DeliveryBrand, art: SceneArt) {
     art.put(group, plane, at[0] + offset.x, at[1] + offset.y, at[2] + offset.z + mesh.geometry.boundingBox!.max.z + .04);
   };
   board("햇살 아파트 101동", apartment.getObjectByName("sign")!, signAt, 8, 1.1, new THREE.Vector3());
-  // Forecourt with the finish arch: its origin is its centre, so it starts at the apartment's front wall.
-  const yard = art.glbAsset("destination_frontyard"), yardZ = 2.7 + 4.5;
-  yard.position.z = yardZ; group.add(yard);
-  board("배달 완료!", yard.getObjectByName("arch_banner")!, yard.userData.anchors.arch_banner as [number, number, number], 4.8, .9, new THREE.Vector3(0, 0, yardZ));
   const arrivalZone = new THREE.Mesh(new THREE.PlaneGeometry(9.3, 9), new THREE.MeshBasicMaterial({ color: "#f7dfa1", transparent: true, opacity: .5, depthWrite: false, side: THREE.DoubleSide }));
   arrivalZone.rotation.x = -Math.PI / 2; art.put(group, arrivalZone, 0, .06, 7.5);
   art.merge(group);
