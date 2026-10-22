@@ -374,6 +374,8 @@ export function createSceneArt() {
     const backLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.23, .72), new THREE.MeshBasicMaterial({ map: label, toneMapped: false }));
     put(brandParts, backLabel, 0, 1.49, 1.481);
     mergeStatic(brandParts);
+    // 70% of the GLB (rider ~2.1 m tall) so it sits in scale with the obstacles; hitboxes are separate numbers.
+    group.scale.setScalar(.7);
     return { group, wheels: [part("wheel_front"), part("wheel_rear")], pedal: part("crank"), leftLeg: part("leg_left"), rightLeg: part("leg_right"), spine: part("spine"), groundShadow };
   }
 

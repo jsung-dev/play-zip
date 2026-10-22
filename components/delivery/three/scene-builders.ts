@@ -397,6 +397,8 @@ function createObstacle(placement: ObstaclePlacement, art: SceneArt): ObstacleRi
     const span = fullRoad ? 1 : obstacleSpan(placement);
     for (let lane = 0; lane < span; lane++) {
       const prop = art.glbAsset(name, true);
+      // Visual only: lift the duck beam's underside from 1.55 m to ~1.9 m so the 70% rider reads as fitting under it ducked.
+      if (placement.kind === "overhead") prop.scale.y = 1.9 / 1.55;
       prop.position.x = (lane - (span - 1) / 2) * DELIVERY_GAME_CONFIG.laneSpacing;
       group.add(prop);
     }
