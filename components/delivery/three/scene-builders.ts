@@ -450,35 +450,28 @@ function createMover(placement: MoverPlacement, art: SceneArt, resources: Outdoo
   return createCat(placement, art);
 }
 
-function createDuck(art: SceneArt, scale: number, body: string) {
-  // Faces -x (the family walks right to left across the road).
-  const duck = new THREE.Group();
-  const torso = art.sphere(.26, body); torso.scale.set(1.25, .9, 1); torso.position.y = .3; duck.add(torso);
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(.1, .2, 6), art.material(body)); tail.rotation.z = -Math.PI / 2.6; tail.position.set(.33, .38, 0); duck.add(tail);
-  art.put(duck, art.sphere(.16, body), -.24, .56, 0);
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(.06, .16, 6), art.material("#f39a3d")); beak.rotation.z = Math.PI / 2; beak.position.set(-.42, .53, 0); duck.add(beak);
-  for (const z of [-.08, .08]) art.put(duck, art.sphere(.028, "#2f3a37"), -.33, .62, z);
-  const feet = [-.07, .07].map(z => art.put(duck, art.box(.12, .03, .07, "#f39a3d"), -.02, .02, z));
-  duck.scale.setScalar(scale);
-  return { duck, feet };
+function createDuck(art: SceneArt, mother: boolean) {
+  // GLB faces +Z; turned to face -x (the family walks right to left across the road).
+  const duck = new THREE.Group(), model = art.glbAsset(mother ? "mover_duck_mother" : "mover_duckling");
+  model.rotation.y = -Math.PI / 2; duck.add(model);
+  return { duck };
 }
 
 function createDucks(placement: MoverPlacement, art: SceneArt): MoverRig {
   const group = new THREE.Group(), facing = new THREE.Group(); group.add(facing);
   art.shadow(facing, 4, .8);
   // Mother leads five ducklings: a line ~3.6 m long to time a gap around.
-  const family = [createDuck(art, 1.45, "#fff8ec"), ...[.66, .62, .6, .58, .55].map(scale => createDuck(art, scale, "#ffd84a"))];
+  const family = [createDuck(art, true), ...[0, 1, 2, 3, 4].map(() => createDuck(art, false))];
   family.forEach(({ duck }, n) => { duck.position.x = n === 0 ? -1.5 : -.8 + n * .55; facing.add(duck); });
   let lastX = 0;
   return { placement, group, animate: (t, moving, seconds, pose) => {
     // Built facing -x; turn around when walking the other way.
     if (Math.abs(pose.x - lastX) > .001) facing.rotation.y = pose.x > lastX ? Math.PI : 0;
     lastX = pose.x;
-    family.forEach(({ duck, feet }, n) => {
+    family.forEach(({ duck }, n) => {
       const step = moving ? t * 11 + n * 1.3 : seconds * 2 + n;
       duck.rotation.x = Math.sin(step) * (moving ? .12 : .03);
       duck.position.y = moving ? Math.abs(Math.sin(step)) * .03 : 0;
-      feet.forEach((foot, side) => { foot.position.y = .02 + (moving ? Math.max(0, Math.sin(step + side * Math.PI)) * .05 : 0); });
     });
   } };
 }
@@ -579,18 +572,12 @@ function createRamp(ramp: Ramp, art: SceneArt) {
 // Railway-style boom gate: striped arm over the whole road, posts on both kerbs,
 // red lamps that flash while the arm is down.
 function createBoomGate(placement: MoverPlacement, art: SceneArt): MoverRig {
-  const group = new THREE.Group(), half = DELIVERY_GAME_CONFIG.roadWidth / 2 + .9;
-  for (const side of [-1, 1]) {
-    art.put(group, art.box(.45, 1.5, .45, "#f4f1e8", .08), side * half, .75, 0);
-    art.put(group, art.box(.6, .12, .6, "#3f4d4b", .04), side * half, .06, 0);
-  }
+  const group = art.glbAsset("mover_boom"), half = DELIVERY_GAME_CONFIG.roadWidth / 2 + .9;
+  const pivot = group.getObjectByName("arm")!; // GLB pivot sits on the left post at y=1.0
   const lamps = [-1, 1].map(side => {
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(.16, 12, 10), new THREE.MeshBasicMaterial({ color: "#ff3b3b", toneMapped: false }));
-    lamp.position.set(side * half, 1.65, .15); group.add(lamp); return lamp;
+    lamp.position.set(side * half, 1.45, .15); group.add(lamp); return lamp;
   });
-  const pivot = new THREE.Group(); pivot.position.set(-half, 1.0, 0); group.add(pivot);
-  const length = half * 2 - .3;
-  for (let n = 0; n < 10; n++) art.put(pivot, art.box(length / 10 + .01, .18, .14, n % 2 ? "#ffffff" : "#ff4d5a", .05), (n + .5) * length / 10, 0, 0);
   return { placement, group, animate: (_t, _moving, seconds, pose) => {
     pivot.rotation.z = pose.lift * Math.PI * .45;
     lamps.forEach((lamp, n) => { lamp.visible = pose.lift < .9 && Math.sin(seconds * 9 + n * Math.PI) > 0; });
@@ -599,13 +586,11 @@ function createBoomGate(placement: MoverPlacement, art: SceneArt): MoverRig {
 
 // A red-and-white barrier on castors that sweeps across all three lanes.
 function createSlider(placement: MoverPlacement, art: SceneArt): MoverRig {
-  const group = new THREE.Group();
+  const group = art.glbAsset("mover_slider");
   art.shadow(group, 2.8, 1.1);
-  art.put(group, art.box(2.3, .9, .3, "#ff4d5a", .1), 0, .85, 0);
-  for (const x of [-.8, -.4, 0, .4, .8]) { const stripe = art.box(.2, .88, .32, "#ffffff", .04); stripe.rotation.z = -.55; art.put(group, stripe, x, .85, .005); }
-  for (const x of [-.9, .9]) { art.put(group, art.box(.12, .5, .12, "#3f4d4b"), x, .3, 0); art.put(group, art.cylinder(.12, .12, .1, "#3f4d4b"), x, .1, 0); }
-  const lamp = new THREE.Mesh(new THREE.SphereGeometry(.13, 12, 10), new THREE.MeshBasicMaterial({ color: "#ffb33b", toneMapped: false }));
-  lamp.position.set(0, 1.42, 0); group.add(lamp);
+  // Blinks over the GLB's amber lamp.
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(.11, 12, 10), new THREE.MeshBasicMaterial({ color: "#ffb33b", toneMapped: false }));
+  lamp.position.set(-.92, 1.52, 0); group.add(lamp);
   return { placement, group, animate: (_t, _moving, seconds) => { lamp.visible = Math.sin(seconds * 8) > 0; } };
 }
 
@@ -616,23 +601,7 @@ function createDropper(placement: MoverPlacement, art: SceneArt): MoverRig {
   const group = new THREE.Group();
   const shadow = art.shadow(group, 1.8, 1.6);
   const thing = new THREE.Group(); group.add(thing);
-  if (placement.look === "pot") {
-    art.put(thing, art.cylinder(.55, .38, .62, "#d9733f"), 0, .31, 0);
-    art.put(thing, art.cylinder(.62, .62, .12, "#e8895a"), 0, .66, 0);
-    art.put(thing, art.sphere(.5, "#5fbf6a"), 0, 1.0, 0);
-    for (const [x, z, c] of [[-.3, .1, "#ff6fa8"], [.28, -.12, "#ffd23d"], [.05, .3, "#ff6fa8"]] as const) art.put(thing, art.sphere(.16, c), x, 1.32, z);
-  } else if (placement.look === "melon") {
-    const melon = art.sphere(.62, "#4fb85f"); melon.scale.set(1.15, .95, 1); art.put(thing, melon, 0, .6, 0);
-    for (const rot of [0, Math.PI / 3, -Math.PI / 3]) {
-      const stripe = new THREE.Mesh(new THREE.TorusGeometry(.62, .035, 6, 24), art.material("#2f8f45"));
-      stripe.scale.set(1.15, .95, 1); stripe.rotation.set(0, rot, 0); stripe.position.y = .6; thing.add(stripe);
-    }
-    art.put(thing, art.cylinder(.05, .06, .16, "#7a5a2b"), 0, 1.2, 0);
-  } else {
-    art.put(thing, art.box(1.3, .95, 1.1, "#f0b273", .06), 0, .48, 0);
-    art.put(thing, art.box(.2, .97, 1.12, "#fff3c4", .02), 0, .48, 0);
-    art.put(thing, art.box(1.32, .2, .2, "#fff3c4", .02), 0, .97, 0);
-  }
+  thing.add(art.glbAsset(placement.look === "pot" ? "mover_dropper_pot" : placement.look === "melon" ? "mover_dropper_melon" : "mover_dropper_parcel"));
   return { placement, group, animate: (_t, moving, _seconds, pose) => {
     thing.visible = moving; shadow.visible = moving;
     thing.position.y = pose.y;
@@ -645,9 +614,8 @@ function createDropper(placement: MoverPlacement, art: SceneArt): MoverRig {
 // A manhole in one lane: the cover rattles and puffs (warning), then a column of
 // steam blasts up. Three side by side, on staggered timers, make a rolling wave.
 function createGeyser(placement: MoverPlacement, art: SceneArt): MoverRig {
-  const group = new THREE.Group();
-  art.put(group, art.cylinder(.78, .78, .04, "#3f4d4b"), 0, .02, 0);
-  const cover = art.cylinder(.6, .6, .06, "#8a9a96"); art.put(group, cover, 0, .07, 0);
+  const group = art.glbAsset("mover_geyser");
+  const cover = group.getObjectByName("cover")!, coverY = cover.position.y;
   const steam = new THREE.MeshBasicMaterial({ color: "#f2fbff", transparent: true, opacity: .8, toneMapped: false, depthWrite: false });
   const plume = new THREE.Mesh(new THREE.CylinderGeometry(.5, .72, 3, 14, 1, true), steam); group.add(plume);
   const cap = new THREE.Mesh(new THREE.SphereGeometry(.85, 14, 10), steam); group.add(cap);
@@ -655,14 +623,14 @@ function createGeyser(placement: MoverPlacement, art: SceneArt): MoverRig {
   return { placement, group, animate: (_t, _moving, seconds, pose) => {
     const blast = pose.lift, warn = pose.y;
     plume.visible = cap.visible = blast > .02;
-    plume.scale.set(1, Math.max(.01, blast), 1); plume.position.y = 1.5 * blast;
-    cap.position.y = 3 * blast + .2; cap.scale.setScalar(.6 + .4 * blast);
-    cover.position.y = .07 + (warn > 0 ? Math.abs(Math.sin(seconds * 40)) * .05 * warn : 0) + blast * .12;
+    plume.scale.set(1, Math.max(.01, blast), 1); plume.position.y = coverY + 1.5 * blast;
+    cap.position.y = coverY + 3 * blast + .2; cap.scale.setScalar(.6 + .4 * blast);
+    cover.position.y = coverY + (warn > 0 ? Math.abs(Math.sin(seconds * 40)) * .05 * warn : 0) + blast * .12;
     cover.rotation.z = warn > 0 ? Math.sin(seconds * 37) * .08 * warn : 0;
     puffs.forEach((puff, n) => {
       puff.visible = warn > 0 && blast < .1;
       const f = (seconds * 1.4 + n / 3) % 1;
-      puff.position.set((n - 1) * .25, .25 + f * 1.1 * warn, 0); puff.scale.setScalar(.5 + f * warn);
+      puff.position.set((n - 1) * .25, coverY + .2 + f * 1.1 * warn, 0); puff.scale.setScalar(.5 + f * warn);
     });
   } };
 }
@@ -670,15 +638,8 @@ function createGeyser(placement: MoverPlacement, art: SceneArt): MoverRig {
 // One barrier arm over one lane, with a red/green lamp. Three of these on
 // staggered timers: read the lamps and slip through whichever lane is open.
 function createLaneGate(placement: MoverPlacement, art: SceneArt): MoverRig {
-  const group = new THREE.Group(), half = DELIVERY_GAME_CONFIG.laneSpacing / 2 - .08;
-  art.put(group, art.box(.4, 1.6, .4, "#f4f1e8", .08), -half, .8, 0);
-  art.put(group, art.box(.5, .1, .5, "#3f4d4b", .04), -half, .05, 0);
-  art.put(group, art.box(.14, .55, .14, "#f4f1e8", .04), half, .28, 0);
-  const lamp = (color: string) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.15, 12, 10), new THREE.MeshBasicMaterial({ color, toneMapped: false })); m.position.set(-half, 1.78, .1); group.add(m); return m; };
-  const red = lamp("#ff3b3b"), green = lamp("#3be07a");
-  const pivot = new THREE.Group(); pivot.position.set(-half, 1.0, 0); group.add(pivot);
-  const length = half * 2;
-  for (let n = 0; n < 6; n++) art.put(pivot, art.box(length / 6 + .01, .18, .14, n % 2 ? "#ffffff" : "#ff4d5a", .05), (n + .5) * length / 6, 0, 0);
+  const group = art.glbAsset("mover_lanegate");
+  const pivot = group.getObjectByName("arm")!, red = group.getObjectByName("lamp_red")!, green = group.getObjectByName("lamp_green")!;
   return { placement, group, animate: (_t, _moving, seconds, pose) => {
     pivot.rotation.z = pose.lift * Math.PI * .45;
     const closed = pose.lift < .35;
@@ -691,20 +652,15 @@ function createLaneGate(placement: MoverPlacement, art: SceneArt): MoverRig {
 function createCart(placement: MoverPlacement, art: SceneArt): MoverRig {
   const group = new THREE.Group(), facing = new THREE.Group(); group.add(facing);
   art.shadow(facing, 1.6, 1.2);
-  const body = new THREE.Group(); body.position.y = .12; facing.add(body);
-  art.put(body, art.box(1.2, .06, .8, "#cfd8d6", .02), 0, .3, 0);
-  for (const [x, z, w, d] of [[0, .4, 1.2, .05], [0, -.4, 1.2, .05], [.6, 0, .05, .8], [-.6, 0, .05, .8]] as const) art.put(body, art.box(w, .5, d, "#e8eeec", .02), x, .56, z);
-  art.put(body, art.box(.08, .08, .9, "#3f4d4b", .02), -.7, .98, 0);
-  art.put(body, art.box(.06, .7, .06, "#3f4d4b"), -.66, .66, .4); art.put(body, art.box(.06, .7, .06, "#3f4d4b"), -.66, .66, -.4);
-  for (const [x, c] of [[-.25, "#38b6ff"], [.25, "#ff6fa8"]] as const) art.put(body, art.box(.42, .36, .6, c, .04), x, .55, 0);
-  art.put(body, art.box(.4, .3, .55, "#ffb02e", .04), 0, .88, 0);
-  const wheels = [[.45, .35], [.45, -.35], [-.45, .35], [-.45, -.35]].map(([x, z]) => { const w = art.cylinder(.12, .12, .08, "#3f4d4b"); w.rotation.x = Math.PI / 2; art.put(body, w, x, .0, z); return w; });
+  // The GLB rolls along +Z (wheel axles on x); turned so it races along +x.
+  const body = art.glbAsset("mover_cart"); body.rotation.y = Math.PI / 2; facing.add(body);
+  const wheels = ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"].map(name => body.getObjectByName(name)!);
   let lastX = 0, dir = 1;
   return { placement, group, animate: (t, moving, _seconds, pose) => {
     if (Math.abs(pose.x - lastX) > .001) dir = pose.x > lastX ? 1 : -1;
     lastX = pose.x; facing.rotation.y = dir > 0 ? 0 : Math.PI;
-    wheels.forEach(w => { w.rotation.y = moving ? t * 22 : 0; });
-    body.rotation.z = moving ? Math.sin(t * 17) * .03 : 0; body.position.y = .12 + (moving ? Math.abs(Math.sin(t * 17)) * .03 : 0);
+    wheels.forEach(w => { w.rotation.x = moving ? t * 22 : 0; });
+    body.rotation.z = moving ? Math.sin(t * 17) * .03 : 0; body.position.y = moving ? Math.abs(Math.sin(t * 17)) * .03 : 0;
   } };
 }
 
@@ -713,61 +669,29 @@ function createDrum(placement: MoverPlacement, art: SceneArt): MoverRig {
   const group = new THREE.Group();
   art.shadow(group, 1.3, 1);
   const roll = new THREE.Group(); roll.position.y = .42; group.add(roll);
-  const body = art.cylinder(.42, .42, 1, "#3fa7e0"); body.rotation.z = Math.PI / 2; roll.add(body);
-  for (const x of [-.3, .3]) { const band = art.cylinder(.44, .44, .1, "#ffffff"); band.rotation.z = Math.PI / 2; band.position.x = x; roll.add(band); }
-  const cap = art.cylinder(.2, .2, .06, "#1f6fa8"); cap.rotation.z = Math.PI / 2; cap.position.x = .53; roll.add(cap);
+  // GLB axis runs along z with its base at y=0: turned onto x and centred on the roll axis.
+  const drum = art.glbAsset("mover_drum"); drum.rotation.y = Math.PI / 2; drum.position.y = -.42; roll.add(drum);
   return { placement, group, animate: (t, moving) => { roll.rotation.x = moving ? -Math.min(26, 7 * t) / .42 : 0; } };
 }
 
 function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
-  // Faces +x (it walks across the road). Rounded parts, cream belly and muzzle,
-  // jointed legs and a swaying tail; slightly larger than life so it reads.
-  const group = new THREE.Group(), fur = "#ffa64a", dark = "#e07a2a", cream = "#fff4e2", pink = "#f4a3a8", ink = "#2f3a37";
+  // GLB faces +Z; turned to face +x (it walks across the road).
+  const group = new THREE.Group();
   art.shadow(group, 1.25, .7);
-  const body = new THREE.Group(); body.position.y = .42; group.add(body);
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.19, .5, 6, 14), art.material(fur));
-  torso.rotation.z = Math.PI / 2; body.add(torso);
-  const belly = new THREE.Mesh(new THREE.CapsuleGeometry(.15, .38, 6, 12), art.material(cream));
-  belly.rotation.z = Math.PI / 2; belly.position.y = -.06; body.add(belly);
-  for (const x of [-.18, 0, .18]) {
-    const stripe = new THREE.Mesh(new THREE.TorusGeometry(.19, .025, 6, 16, Math.PI * .9), art.material(dark));
-    stripe.rotation.set(0, Math.PI / 2, Math.PI * .05); stripe.position.set(x, .005, 0); body.add(stripe);
-  }
-  const head = new THREE.Group(); head.position.set(.42, .2, 0); body.add(head);
-  head.add(art.sphere(.2, fur));
-  for (const z of [-.1, .1]) {
-    art.put(head, art.sphere(.08, cream), .13, -.06, z * .7);
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(.075, .16, 4), art.material(fur)); ear.position.set(.02, .2, z); ear.rotation.y = Math.PI / 4; head.add(ear);
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(.04, .1, 4), art.material(pink)); inner.position.set(.05, .19, z); inner.rotation.y = Math.PI / 4; head.add(inner);
-    art.put(head, art.sphere(.035, ink), .17, .05, z * .75);
-    art.put(head, art.sphere(.012, "#ffffff"), .2, .065, z * .7);
-  }
-  art.put(head, art.sphere(.03, pink), .21, -.02, 0);
-  const legs = [[.22, .11], [.22, -.11], [-.22, .11], [-.22, -.11]].map(([x, z]) => {
-    const hip = new THREE.Group(); hip.position.set(x, -.12, z); body.add(hip);
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(.045, .2, 4, 8), art.material(fur)); leg.position.y = -.14; hip.add(leg);
-    art.put(hip, art.sphere(.055, cream), 0, -.28, 0);
-    return hip;
-  });
-  const tail: THREE.Group[] = [];
-  let joint: THREE.Object3D = body;
-  for (let n = 0; n < 5; n++) {
-    const segment = new THREE.Group(); segment.position.set(n ? -.1 : -.42, n ? .02 : .08, 0); joint.add(segment);
-    art.put(segment, art.sphere(.05 - n * .004, n === 4 ? dark : fur), -.05, 0, 0);
-    tail.push(segment); joint = segment;
-  }
-  group.scale.setScalar(1.3);
+  const turn = new THREE.Group(); group.add(turn);
+  const cat = art.glbAsset("mover_cat"); cat.rotation.y = Math.PI / 2; turn.add(cat);
+  const body = cat.getObjectByName("body_head")!, bodyY = body.position.y, tail = cat.getObjectByName("tail")!;
+  const legs = ["leg_fl", "leg_fr", "leg_bl", "leg_br"].map(name => cat.getObjectByName(name)!);
   let lastX = 0;
   return { placement, group, animate: (t, moving, seconds, pose) => {
-    // Built facing +x; turn around at each kerb.
-    if (Math.abs(pose.x - lastX) > .001) group.children.forEach(child => { child.rotation.y = pose.x < lastX ? Math.PI : 0; });
+    // Turn around at each kerb.
+    if (Math.abs(pose.x - lastX) > .001) turn.rotation.y = pose.x < lastX ? Math.PI : 0;
     lastX = pose.x;
     const stride = moving ? t * 9 : 0;
-    // Diagonal pairs swing together, like a real walk.
-    legs.forEach((hip, n) => { hip.rotation.z = moving ? Math.sin(stride + (n === 0 || n === 3 ? 0 : Math.PI)) * .5 : 0; });
-    body.position.y = .42 + (moving ? Math.abs(Math.sin(stride)) * .025 : 0);
-    head.rotation.z = moving ? Math.sin(stride * 2) * .05 : Math.sin(seconds * 1.5) * .08;
-    tail.forEach((segment, n) => { segment.rotation.z = .35 + Math.sin(seconds * 3 - n * .6) * .18; segment.rotation.y = Math.sin(seconds * 2 - n * .5) * .15; });
+    // Diagonal pairs swing together, like a real walk (about the model's own x axis).
+    legs.forEach((hip, n) => { hip.rotation.x = moving ? Math.sin(stride + (n === 0 || n === 3 ? 0 : Math.PI)) * .5 : 0; });
+    body.position.y = bodyY + (moving ? Math.abs(Math.sin(stride)) * .025 : 0);
+    tail.rotation.y = Math.sin(seconds * 3) * .3; tail.rotation.x = Math.sin(seconds * 2) * .1;
   } };
 }
 
