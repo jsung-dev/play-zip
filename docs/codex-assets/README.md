@@ -41,6 +41,19 @@ Add an empty node named "entrance" at the outside centre of the door, at y = 1.3
 Triangle budget: 6,000 each.
 ```
 
+### 마지막 종착지 — 햇살 아파트 101동 (참고 없음, 코스 끝 1000m 지점)
+
+```
+Asset: destination_apartment. The final delivery destination "햇살 아파트 101동": a friendly 4–5 storey Korean
+apartment block, wide and symmetric, cream walls with a mint central stair core, rows of windows with small
+balconies and plants, a flat roof with a little rooftop structure. It must read as the clear "goal" at the end of the road.
+Bounding box: width 17 m (X) × height 11–13 m (Y) × depth ≤ 5.4 m (Z).
+Central core about 4.1 m wide on the +Z face with the main entrance: door 3.4 m wide × 2.9 m tall, bottom at y = 0.
+Leave a blank flat panel 8 × 1.1 m above the entrance for the name sign (we draw the text in code); name the node "sign".
+Add an empty node named "entrance" at the outside centre of the door, y = 1.3 m.
+Do not model the ground pad (we draw an 18 × 9 m pad in code). Triangle budget: 10,000.
+```
+
 ---
 
 ## 2. 고정 장애물 (6종)
