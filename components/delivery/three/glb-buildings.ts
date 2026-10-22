@@ -15,9 +15,16 @@ const saturate = (c: THREE.Color) => c.getHSL(hsl) && c.setHSL(hsl.h, Math.min(1
 export function glbBuildingGeometry(variant: number, mirror: boolean) {
   const key = `${variant % BUILDING_MODELS.length}:${mirror}`, cached = cache.get(key);
   if (cached) return cached;
-  const model = BUILDING_MODELS[variant % BUILDING_MODELS.length];
+  const geometry = decodeGlbPart(BUILDING_MODELS[variant % BUILDING_MODELS.length], mirror, saturate);
+  cache.set(key, geometry);
+  return geometry;
+}
+
+type EncodedPart = { positions: string; indices: string; colors: string; palette: readonly string[] };
+// Shared decoder for converted GLB data (scripts/convert-*.mjs): int16 positions at 1/2048 m, per-triangle palette colour.
+export function decodeGlbPart(model: EncodedPart, mirror = false, tint = (c: THREE.Color) => c) {
   const pos = new Int16Array(bytes(model.positions).buffer), idx = new Uint16Array(bytes(model.indices).buffer), tri = bytes(model.colors);
-  const palette = model.palette.map(hex => saturate(new THREE.Color(hex))), triangles = tri.length;
+  const palette = model.palette.map(hex => tint(new THREE.Color(hex))), triangles = tri.length;
   const position = new Float32Array(triangles * 9), color = new Uint8Array(triangles * 9), flip = mirror ? -1 : 1;
   for (let t = 0; t < triangles; t++) for (let k = 0; k < 3; k++) {
     const vertex = idx[t * 3 + k], out = t * 9 + k * 3, c = palette[tri[t]];
@@ -27,7 +34,6 @@ export function glbBuildingGeometry(variant: number, mirror: boolean) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(position, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(color, 3, true));
-  cache.set(key, geometry);
   return geometry;
 }
 

@@ -313,7 +313,12 @@ function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourCh
 export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: SceneArt, brand: DeliveryBrand, road: THREE.Material) {
   const index = DELIVERY_STOPS.findIndex((item) => item.id === stop.id);
   const houseTransform = getDeliveryHouseTransform(index);
-  const house = art.building({ id: stop.id, distance: stop.distance, side: stop.side, type: "house", variant: index });
+  const house = art.glbAsset((["delivery_house_01", "delivery_house_02", "delivery_house_03"] as const)[index % 3]);
+  const [doorX, doorY, doorZ] = house.userData.anchors.entrance as number[];
+  house.userData.entranceLocal = [doorX, doorY, doorZ + .2];
+  house.userData.roofMarkerLocal = [0, new THREE.Box3().setFromObject(house).max.y + .6, 0];
+  art.shadow(house, 9.1, 7.1);
+  house.userData.routeDistance = stop.distance; // distance culling hides objects without it
   house.position.copy(houseTransform.position);
   house.rotation.y = houseTransform.yaw;
   house.name = `delivery-house-${stop.id}`;
@@ -826,24 +831,19 @@ function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
 
 function createDestination(brand: DeliveryBrand, art: SceneArt) {
   const group = markDistance(new THREE.Group(), DELIVERY_GAME_CONFIG.totalDistance);
-  group.userData.entranceLocal = [0, 1.64, 3.1];
   art.shadow(group, 25, 14);
+  // The pad sits under the GLB block (base at y=0), so it is raised to y=.3 on top of the pad.
   art.put(group, art.box(18, .3, 9, TOWN_COLORS.pavement, .1), 0, .15, 1.2);
-  art.put(group, art.box(17, 11, 5.4, "#f1e8d5", .12), 0, 5.65, 0);
-  art.put(group, art.box(4.1, 11.15, 5.6, "#c7dcd2", .08), 0, 5.68, .02);
-  art.put(group, art.box(17.6, .37, 5.9, "#70948b", .08), 0, 11.32, 0);
-  for (let row = 0; row < 5; row++) {
-    for (const x of [-6.7, -4.45, 4.45, 6.7]) art.windowOn(group, x, 1.75 + row * 1.85, 2.74, 1.12, 1.1);
-    if (row > 1) art.windowOn(group, 0, 1.75 + row * 1.85, 2.85, 1.55, 1.1);
-  }
-  art.put(group, art.box(3.4, 2.9, .16, "#5c8680", .06), 0, 1.6, 2.95);
-  art.put(group, art.box(2.7, 2.3, .045, "#91bdb6"), 0, 1.64, 3.05);
-  art.put(group, art.box(.09, 2.4, .045, "#fbf4df"), 0, 1.64, 3.1);
-  art.put(group, art.box(5.0, .22, 2.0, "#73968a", .05), 0, 3.2, 3.15);
+  const apartment = art.glbAsset("destination_apartment");
+  apartment.position.y = .3; group.add(apartment);
+  const { entrance, sign: signAt } = apartment.userData.anchors as Record<string, [number, number, number]>;
+  group.userData.entranceLocal = [entrance[0], entrance[1] + .3, entrance[2] + .2];
+  const signPanel = apartment.getObjectByName("sign") as THREE.Mesh;
+  signPanel.geometry.computeBoundingBox();
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.1), new THREE.MeshBasicMaterial({
     map: makeTextTexture({ title: "햇살 아파트 101동", background: "#fbf6e6", foreground: "#42645a", width: 1024, height: 160 }), toneMapped: false,
   }));
-  art.put(group, sign, 0, 4.3, 2.97);
+  art.put(group, sign, signAt[0], signAt[1] + .3, signAt[2] + signPanel.geometry.boundingBox!.max.z + .04);
   for (const side of [-1, 1]) {
     art.put(group, art.box(3.3, .65, 1.4, "#c9b89a", .09), side * 6.7, .65, 3.6);
     for (const x of [-.9, 0, .9]) { const bush = art.sphere(.8, "#83a383"); bush.scale.y = .8; art.put(group, bush, side * 6.7 + x, 1.35, 3.6); }

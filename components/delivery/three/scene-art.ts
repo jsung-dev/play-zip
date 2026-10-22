@@ -5,7 +5,8 @@ import { DELIVERY_GAME_CONFIG, type DeliveryBrand, type SceneryItem } from "@/da
 import { BUILDING_SCALE } from "./scene-layout";
 import { buildingProfile, type StreetLook } from "./street-layout";
 import { ROAD_SURFACE } from "./road-surface";
-import { glbBuildingGeometry, glbBuildingSize } from "./glb-buildings";
+import { decodeGlbPart, glbBuildingGeometry, glbBuildingSize } from "./glb-buildings";
+import { ASSET_MODELS, type AssetName } from "./asset-models";
 
 export const TOWN_COLORS = {
   sky: "#50bff0", haze: "#d9eceb", lawn: "#b8d998", road: ROAD_SURFACE.color,
@@ -192,6 +193,17 @@ export function createSceneArt() {
     const { scale } = glbBuildingSize(variant, height, 1), mesh = new THREE.Mesh(glbBuildingGeometry(variant, mirror), glbMaterial);
     mesh.scale.set(scale * stretch, scale, scale);
     return new THREE.Group().add(mesh);
+  }
+
+  // A converted v5 asset at its real size: one mesh per named part on its pivot, anchors in userData.
+  function glbAsset(name: AssetName) {
+    const model = ASSET_MODELS[name], group = new THREE.Group();
+    for (const part of model.parts) {
+      const mesh = new THREE.Mesh(geometry(`asset:${name}:${part.name}`, () => decodeGlbPart(part)), glbMaterial);
+      mesh.name = part.name; mesh.position.fromArray(part.t); group.add(mesh);
+    }
+    group.userData.anchors = model.anchors;
+    return group;
   }
 
   const buildingTemplates = new Map<string, THREE.Group>();
@@ -474,7 +486,7 @@ export function createSceneArt() {
     return merge(group);
   }
 
-  return { box, buildingBox, buildingBlob, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, glbBuilding, tree, lamp, shelter, bicycle, horizon };
+  return { box, buildingBox, buildingBlob, sphere, cylinder, put, rod, material, shadow, merge, windowOn, building, glbBuilding, glbAsset, tree, lamp, shelter, bicycle, horizon };
 }
 
 export type SceneArt = ReturnType<typeof createSceneArt>;
