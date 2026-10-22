@@ -8,8 +8,8 @@ import { BUILDING_SCALE, advertisementLayout, advertisementPanelCorners, adverti
 
 // World architecture only. Never used by driving, collision or camera code.
 export const STREET_BUILDINGS = {
-  minHeight: 8, // the five GLB buildings are scaled into this 8–13 m band
-  maxHeight: 13,
+  minHeight: 13, // the GLB buildings are scaled into this 13–20 m band (rider is ~1.7 m)
+  maxHeight: 20,
   minStretch: .82, // frontage varies in code (x scale), the models themselves are untouched
   maxStretch: 1.18,
   gapRatio: .3,
