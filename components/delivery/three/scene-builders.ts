@@ -508,13 +508,9 @@ function createPigeons(placement: MoverPlacement, art: SceneArt): MoverRig {
 
 // Milk boosters: a glowing milk bottle with a halo ring, bobbing and spinning.
 function createBoosterField(root: THREE.Group, art: SceneArt): BoosterField {
-  const profile = [[0, 0], [.2, 0], [.24, .06], [.24, .42], [.2, .52], [.1, .62], [.09, .76], [0, .76]].map(([x, y]) => new THREE.Vector2(x, y));
-  const glass = new THREE.MeshLambertMaterial({ color: "#fbfdff", emissive: "#bfe6ff", emissiveIntensity: .55 });
   const bottles = BOOSTERS.map(booster => {
     const group = new THREE.Group();
-    const bottle = new THREE.Mesh(new THREE.LatheGeometry(profile, 16), glass); bottle.scale.setScalar(1.6); group.add(bottle);
-    art.put(group, art.cylinder(.16, .16, .1, "#3fa7e0"), 0, 1.27, 0); // cap
-    const label = art.cylinder(.39, .39, .22, "#3fa7e0"); label.position.y = .45; group.add(label);
+    const bottle = art.glbAsset("prop_booster_milk_bottle"); group.add(bottle); // children[0]: bobs in update()
     const halo = new THREE.Mesh(new THREE.TorusGeometry(.75, .05, 8, 32), new THREE.MeshBasicMaterial({ color: "#9fdcff", transparent: true, opacity: .7, toneMapped: false }));
     halo.rotation.x = Math.PI / 2; halo.position.y = .05; group.add(halo);
     art.shadow(group, 1.2, 1.2);
@@ -562,9 +558,8 @@ function createGap(gap: Gap, art: SceneArt) {
   const board = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.7), new THREE.MeshBasicMaterial({
     map: makeTextTexture({ title: "도로 붕괴!", subtitle: "가운데 점프대로 건너세요", background: "#ffe08a", foreground: "#7a3d1c", width: 640, height: 300 }), toneMapped: false,
   }));
-  board.position.y = 2.6; sign.add(board);
-  art.put(sign, art.box(3.8, 1.9, .1, "#6f7768"), 0, 2.6, -.07);
-  art.put(sign, art.box(.12, 1.8, .12, "#6f7768"), 0, .9, -.07);
+  board.scale.set(3.5 / 3.6, 1.6 / 1.7, 1); board.position.set(0, 1.83, .12); sign.add(board); // on the GLB's blank front panel
+  sign.add(art.glbAsset("prop_road_closed_sign"));
   sign.position.x = DELIVERY_GAME_CONFIG.roadWidth / 2 + 1.2;
   placeOnRoute(sign, gap.start - 32, gap.branch); objects.push(sign);
   return objects;
@@ -572,24 +567,9 @@ function createGap(gap: Gap, art: SceneArt) {
 
 // Orange launch ramp with white chevrons and corner flags; its high end is the launch point.
 function createRamp(ramp: Ramp, art: SceneArt) {
-  const group = markDistance(new THREE.Group(), ramp.distance), rise = .8, length = 3.2;
-  const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(length, 0), new THREE.Vector2(length, rise)]);
-  const wedge = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 2.2, bevelEnabled: false }), art.material("#ff9a3c"));
-  wedge.rotation.y = Math.PI / 2; wedge.position.set(-1.1, .02, length / 2); group.add(wedge);
-  const slope = Math.atan2(rise, length);
-  for (let n = 0; n < 3; n++) {
-    // Chevron (two angled bars) pointing up the slope.
-    const z = length / 2 - .75 - n * .95, y = .04 + rise * (length / 2 - z) / length;
-    for (const side of [-1, 1]) {
-      // Each bar slants inward toward the front, so the chevron points up the ramp.
-      const bar = art.box(.95, .03, .2, "#ffffff"); bar.rotation.set(slope, -side * .45, 0);
-      bar.position.set(side * .4, y + .02, z); group.add(bar);
-    }
-  }
-  for (const side of [-1, 1]) {
-    art.put(group, art.cylinder(.035, .035, 1.3, "#f4f1e8"), side * 1.15, .85, -length / 2);
-    const flag = art.box(.02, .3, .42, "#ef5b5b"); art.put(group, flag, side * 1.15, 1.35, -length / 2 + .22);
-  }
+  const group = markDistance(new THREE.Group(), ramp.distance), length = 3.2;
+  // GLB wedge (3.2 m long, .8 m rise) climbs toward -Z, the launch end.
+  group.add(art.glbAsset("prop_ramp"));
   art.shadow(group, 2.8, 3.8);
   group.position.x = (ramp.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing;
   placeOnRoute(group, ramp.distance - length / 2, ramp.branch);

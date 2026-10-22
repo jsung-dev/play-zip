@@ -322,28 +322,17 @@ export function createSceneArt() {
   }
 
   function tree(item: SceneryItem) {
-    const group = new THREE.Group(), v = item.variant % 3;
-    const greens = ["#77b755", "#4fa875", "#94be5b"];
+    const group = glbAsset((["prop_tree_01", "prop_tree_02", "prop_tree_03"] as const)[item.variant % 3]);
     shadow(group, 4.2, 3.8, .35, -.1);
-    put(group, cylinder(.74, .84, .19, "#e4dbc4"), 0, .15, 0);
-    put(group, cylinder(.13, .21, 2.05, "#a18968"), 0, 1.1, 0);
-    rod(group, [0, 1.5, 0], [.6, 2.4, .1], .095, "#a18968");
-    for (const [x, y, z, scale] of [[0, 2.8, 0, 1.18], [-.6, 2.45, .08, .83], [.6, 2.62, -.05, .92]]) {
-      const crown = sphere(1, greens[v]); crown.scale.set(scale, scale * 1.12, scale * .88);
-      put(group, crown, x, y + v * .15, z);
-    }
     merge(group); group.position.x = (item.side === "left" ? -1 : 1) * (DELIVERY_GAME_CONFIG.roadWidth / 2 + 4.95);
     group.userData.routeDistance = item.distance; return group;
   }
 
   function lamp(item: SceneryItem) {
     const group = new THREE.Group(), side = item.side === "left" ? -1 : 1;
+    // The GLB lamp head points +X: toward the road for left-side lamps, so right-side ones turn round.
+    const head = glbAsset("prop_street_lamp"); head.rotation.y = side > 0 ? Math.PI : 0; group.add(head);
     shadow(group, 1.4, 1.6);
-    put(group, cylinder(.16, .24, .35, TOWN_COLORS.metal), 0, .25, 0);
-    put(group, cylinder(.055, .085, 4.8, TOWN_COLORS.metal), 0, 2.55, 0);
-    rod(group, [0, 4.85, 0], [-side * .9, 4.85, 0], .055, TOWN_COLORS.metal);
-    put(group, box(.72, .13, .4, TOWN_COLORS.metal, .06), -side * .86, 4.84, 0);
-    put(group, box(.55, .04, .3, "#fff3d1", .025), -side * .86, 4.75, 0);
     merge(group); group.position.x = side * (DELIVERY_GAME_CONFIG.roadWidth / 2 + 3.9);
     group.userData.routeDistance = item.distance; return group;
   }
