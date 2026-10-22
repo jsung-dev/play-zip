@@ -22,7 +22,8 @@ export function createOutdoorAdvertisement(ad: OutdoorAdPlacement, art: SceneArt
     art.put(group, light, x, y + h / 2 + .43, .4);
     art.put(group, art.box(.29, .025, .24, "#fff2c9"), x, y + h / 2 + .34, .4);
   }
-  if (isLandmark(ad)) {
+  // Square landmark ads only fit two small host buildings; they stand on posts instead.
+  if (isLandmark(ad) && ad.format !== "square") {
     group.add(createAdvertisementBuilding(ad, art));
   } else {
     const postX = ad.type === "projecting" ? [w / 2 + .23] : [-w * .34, w * .34];
