@@ -354,24 +354,11 @@ export function createDeliveryStop(stop: (typeof DELIVERY_STOPS)[number], art: S
 
 
 function createBus(placement: BusPlacement, art: SceneArt, resources: OutdoorAdResources) {
-  const brand = DELIVERY_BRANDS[placement.brandId], group = new THREE.Group();
+  // v5 GLB bus in its own colours (2.6 x 3.0 x 6.0 m, the same box the ad panels were placed on).
+  // Its front is +Z; mirrored front-to-back (not turned) so it drives toward -Z with indicator_left still on the left.
+  const group = new THREE.Group(), model = art.glbAsset("mover_bus");
+  model.scale.z = -1; group.add(model);
   art.shadow(group, 4.1, 7.8, .2, .1);
-  art.put(group, art.box(2.6, 2.05, 6.0, brand.primaryColor, .19), 0, 1.48, 0);
-  art.put(group, art.box(2.5, .24, 5.8, "#fff7e7", .1), 0, 2.58, 0);
-  art.put(group, art.box(2.4, .14, 5.6, TOWN_COLORS.metal, .045), 0, .59, 0);
-  for (const side of [-1, 1]) {
-    for (const z of [-1.9, -.6, .7, 2.0]) art.put(group, art.box(.045, .68, 1.08, "#517878", .04), side * 1.312, 2.08, z);
-    for (const z of [-1.9, 1.9]) {
-      const tire = art.cylinder(.46, .46, .22, "#354d49"); tire.rotation.z = Math.PI / 2; art.put(group, tire, side * 1.33, .5, z);
-      const hub = art.cylinder(.23, .23, .235, "#e4e3d2"); hub.rotation.z = Math.PI / 2; art.put(group, hub, side * 1.35, .5, z);
-    }
-    for (const z of [-3.015, 3.015]) art.put(group, art.box(.38, .17, .04, z < 0 ? "#fff3cd" : "#db816b", .03), side * .82, .9, z);
-  }
-  for (const z of [-3.01, 3.01]) {
-    art.put(group, art.box(2.1, .77, .025, "#6a9a98", .07), 0, 2.05, z);
-    art.put(group, art.box(.55, .18, .035, "#f8eed7", .025), 0, .85, z * 1.004);
-  }
-  art.merge(group);
   for (const slot of BUS_AD_PANELS.filter(ad => ad.busId === placement.id)) {
     const panel = resources.panel(slot, slot.width);
     panel.position.set(...slot.position);
@@ -433,9 +420,8 @@ function createObstacle(placement: ObstaclePlacement, art: SceneArt): ObstacleRi
 function createMover(placement: MoverPlacement, art: SceneArt, resources: OutdoorAdResources): MoverRig {
   if (placement.kind === "bus") {
     const group = createBus({ id: `mover-${placement.id}`, distance: placement.distance, brandId: "green", mode: "moving", side: "right", speed: 8 }, art, resources);
-    // Left indicator at the front corner: blinks while the bus pulls out.
-    const indicator = new THREE.Mesh(new THREE.BoxGeometry(.32, .22, .1), new THREE.MeshBasicMaterial({ color: "#ffb33b", toneMapped: false }));
-    indicator.position.set(-1.2, .95, -3.06); group.add(indicator);
+    // The GLB's left indicator blinks while the bus pulls out.
+    const indicator = group.getObjectByName("indicator_left")!;
     return { placement, group, animate: (t, moving) => { indicator.visible = moving && t < 5 && Math.sin(t * 9) > 0; } };
   }
   if (placement.kind === "ducks") return createDucks(placement, art);
