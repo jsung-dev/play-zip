@@ -182,3 +182,82 @@ No ground shadow (we add it in code). Triangle budget: 8,000.
 - **교체:** 장애물과 이동 장애물의 보이는 모양만 바꿉니다. 판정 값(`delivery-jump.ts`, `delivery-movers.ts`)은 그대로 둡니다.
 - **라이더:** 바퀴·페달·다리 회전축과 그림자를 유지합니다.
 - **배달집:** `entrance` 노드를 기존 `entranceLocal` 위치로 씁니다.
+
+---
+
+## 7. v6 수정 요청 (2026-10-22)
+
+0번 공통 규칙을 그대로 앞에 붙여 주세요. 노드 이름과 회전축 위치는 v5와 같아야 코드 수정 없이 교체됩니다.
+
+### rider_bike — 품질 상향 + 숙이기 자세
+
+지금 문제는 두 가지입니다.
+- **품질:** 너무 단순합니다.
+- **숙이기:** 게임은 숙일 때 모델 전체를 위아래로 눌러서(높이 30% 감소) 캐릭터가 뭉개져 보입니다. 이건 코드 쪽 문제라, 새 모델의 `spine` 노드를 받으면 누르지 않고 상체만 숙이도록 코드를 바꾸겠습니다.
+
+```
+Asset: rider_bike (v6). Same size, origin, -Z facing and node names as v5
+(bicycle_frame, wheel_front, wheel_rear, crank, delivery_box, brand_label, basket_items, rider, leg_left, leg_right).
+Raise the quality to a polished, cute chibi character in the style of the street buildings:
+- Rider: a proper head (about 1/3 of rider height) with a friendly face (eyes, small smile, rosy cheeks),
+  hair showing under a mint helmet with a visor and vents, a delivery jacket with collar, zipper and pocket
+  details, gloves, rolled trousers and sneakers. Arms reach the handlebar grips.
+- Bike: a real city bicycle silhouette – curved frame tubes, chain guard, chain ring, mudguards,
+  spoked wheels (8–12 spokes), saddle, bell, headlight, rear rack holding delivery_box, wicker-look front basket.
+- NEW node "spine": a child of "rider" with its origin at the hips (~ (0, 1.55, 0.25)), holding the torso,
+  arms and head, so the game can bend the upper body forward to duck without squashing the model.
+  Everything above the hips must be under "spine"; legs stay under leg_left / leg_right.
+- Keep delivery_box 1.3 x 0.85 x 0.8 m at (0, 1.35, 0.92) and brand_label 1.1 x 0.65 m on its back face
+  (the game draws the brand box over it, so the shape just has to sit on the rack).
+Triangle budget: 12,000.
+```
+
+### destination_apartment — 상자 같은 모양 개선
+
+```
+Asset: destination_apartment (v6). Same footprint (width 17 m, depth <= 5.4 m), origin, +Z front and nodes
+(apartment_mesh, entrance, sign) as v5. Height 12–15 m.
+Make it read as a charming Korean apartment building, not a box:
+- Break the mass: stepped roofline (penthouse / rooftop garden in the middle), slightly recessed central
+  stair core, projecting balconies with railings and plants on every floor, window frames and sills,
+  air-conditioner units and laundry poles on a few balconies.
+- Ground floor: a covered main entrance canopy with columns, glass doors, mailboxes, a ramp and two
+  steps, planters either side.
+- Roof: parapet with cap, water tank, small greenhouse or bench garden.
+- Colours: warm cream walls, mint core and trims, terracotta accents (same palette as the delivery houses).
+- Keep the blank "sign" panel 8 x 1.1 m above the entrance (we draw the name in code).
+Triangle budget: 14,000.
+```
+
+### destination_plaza — 종착지 앞마당 (새 에셋)
+
+```
+Asset: destination_plaza (new). The forecourt in front of the destination apartment that makes the finish feel
+like a celebration. Origin = centre of the forecourt's back edge (where the apartment front wall stands),
+forecourt extends toward +Z.
+Footprint: width 18 m (X) x depth 9 m (Z), ground pieces at most 0.3 m high, decorations up to 5 m.
+Leave a clear 9 m wide x 9 m deep driving lane in the centre (x = -4.5 .. 4.5) – nothing there taller than 0.05 m
+except a finish arch.
+Contents: paving pattern, low hedges and flower beds on both sides, 2 benches, 2 street lamps, a bike rack with
+2 parked bikes, a small playground corner (slide or spring rider) on one side, string lights / bunting between
+lamps, and a celebration "finish" arch over the centre lane at z = 7 m
+(inner clearance at least 7 m wide x 3.6 m tall) with an empty banner panel 6 x 0.8 m on top (text is drawn in code;
+name that node "arch_banner").
+Triangle budget: 10,000.
+```
+
+### mover_bus — 상자 같은 모양 개선
+
+```
+Asset: mover_bus (v6). Same size (2.6 x 3.0 x 6.0 m), origin, +Z front and node names as v5
+(bus_body, wheel_fl, wheel_fr, wheel_rl, wheel_rr, indicator_left).
+Make it a detailed, cute Korean town bus instead of a box:
+- Rounded front and rear corners and roof edges, a slightly curved windscreen with wipers and a destination
+  display, side mirrors on arms, bumpers, headlights / tail lights, door with folding glass panels and steps,
+  a row of side windows with pillars, roof AC unit, wheel arches.
+- Our bus ads are drawn in code as flat panels 4.8 m long x 1.2 m tall on both sides, centred at y = 1.12, z = 0,
+  sitting at x = ±1.318. Keep the body side flat at x = ±1.30 over that area (y 0.52–1.72, z -2.4..2.4):
+  no mirrors, handles or trims sticking out there.
+- Colours: two-tone (cream lower body, mint or green upper band), dark window glass, orange indicators.
+Triangle budget: 5,000.
+```
