@@ -21,7 +21,7 @@ function bounds(object: THREE.Object3D) {
   });
   return result;
 }
-// Five real GLB models, scaled in code into the 8–13 m band with ±18% frontage.
+// Ten real GLB models (5 main + 5 sub), scaled in code into the 18–26 m band with ±18% frontage.
 for (let variant = 0; variant < 5; variant++) for (const mirror of [false, true]) {
   const item = { id: "fixture", distance: 0, side: "left", type: "shop", variant, tall: 10, stretch: 1, mirror } as SceneryItem & StreetLook;
   const model = art.building(item, true), box = bounds(model), p = buildingProfile(item, true);
@@ -32,7 +32,7 @@ for (let variant = 0; variant < 5; variant++) for (const mirror of [false, true]
   assert.equal((model.children[0] as THREE.Mesh).geometry, (art.building(item, true).children[0] as THREE.Mesh).geometry, "Repeated models share geometry");
 }
 const ads = resolveAdvertisements(), buildings = buildStreetLayout(ads), oldBuildings = SCENERY_ITEMS.filter(i => ["house", "shop"].includes(i.type) && sceneryHasClearance(i, ads));
-assert(buildings.length >= 150 && buildings.length <= 330, `Building count ${buildings.length}`);
+assert(buildings.length >= 120 && buildings.length <= 330, `Building count ${buildings.length}`);
 for (const b of buildings) {
   assert(b.tall >= STREET_BUILDINGS.minHeight && b.tall <= STREET_BUILDINGS.maxHeight, `Height band ${b.id}`);
   assert(b.stretch >= STREET_BUILDINGS.minStretch && b.stretch <= STREET_BUILDINGS.maxStretch, `Stretch band ${b.id}`);
@@ -67,7 +67,7 @@ for (const side of ["left", "right"]) {
     // Normal frontage only: driveways/intersections and deliberate ad setbacks
     // are exceptions, rather than silently labelling their open spaces as gaps.
     const p = buildingProfile(b, true), q = buildingProfile(a, true);
-    if (a.route !== "main" || b.route !== "main" || b.distance - a.distance > 12 || Math.abs(a.offset - (10.65 + q.front)) > .01 || Math.abs(b.offset - (10.65 + p.front)) > .01) continue;
+    if (a.route !== "main" || b.route !== "main" || b.distance - a.distance > (p.halfWidth + q.halfWidth) * 1.3 + 2 || Math.abs(a.offset - (10.65 + q.front)) > .01 || Math.abs(b.offset - (10.65 + p.front)) > .01) continue;
     const direction = getRouteFrame(b.distance).tangent, axis = new THREE.Vector2(direction.x, direction.z);
     const gap = Math.min(...b.footprint.map(v => v.dot(axis))) - Math.max(...a.footprint.map(v => v.dot(axis)));
     const ratio = gap / (p.halfWidth + q.halfWidth);
@@ -75,7 +75,7 @@ for (const side of ["left", "right"]) {
     gaps.push(gap); ratios.push(ratio);
   }
 }
-assert(gaps.length > 60, "Enough genuinely continuous frontage outside exceptions");
+assert(gaps.length >= 50, "Enough genuinely continuous frontage outside exceptions");
 // Phones draw about a quarter of the street at once (-38..180 m); hold the total.
 const triangles = buildings.reduce((sum, b) => sum + (art.building(b, true).children[0] as THREE.Mesh).geometry.attributes.position.count / 3, 0);
 assert(triangles <= 1_700_000, `Street triangle budget: ${triangles}`);

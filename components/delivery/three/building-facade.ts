@@ -7,7 +7,7 @@ export type BuildingKit = {
   put: (g: THREE.Group, o: THREE.Object3D, x: number, y: number, z: number) => THREE.Object3D;
   shadow: (g: THREE.Group, w: number, d: number, x?: number, z?: number) => THREE.Object3D;
   merge: (g: THREE.Group) => THREE.Group;
-  glbBuilding?: (variant: number, height: number, stretch: number, mirror: boolean, maxDepth?: number) => THREE.Group;
+  glbBuilding?: (variant: number, height: number, stretch: number, mirror: boolean) => THREE.Group;
 };
 
 // A–E reference sheet palette. Only scenery architecture uses these finishes.

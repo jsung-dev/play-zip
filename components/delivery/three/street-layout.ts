@@ -8,8 +8,9 @@ import { BUILDING_SCALE, advertisementLayout, advertisementPanelCorners, adverti
 
 // World architecture only. Never used by driving, collision or camera code.
 export const STREET_BUILDINGS = {
-  minHeight: 13, // the GLB buildings are scaled into this 13–20 m band (rider is ~1.7 m)
-  maxHeight: 20,
+  minHeight: 18, // the GLB buildings are scaled into this 18–26 m band (rider is ~1.7 m)
+  maxHeight: 26,
+  subShare: .08, // share of street lots that use the colourful sub models (BUILDING_MODELS 5–9)
   minStretch: .82, // frontage varies in code (x scale), the models themselves are untouched
   maxStretch: 1.18,
   gapRatio: .3,
@@ -21,10 +22,10 @@ export const STREET_BUILDINGS = {
 
 // Street=true is the reserved legacy LOT envelope. Architecture may be smaller,
 // but keeping this planner stable preserves all existing roads and ad sightlines.
-export type StreetLook = { tall: number; stretch: number; mirror: boolean };
+export type StreetLook = { tall: number; stretch: number; mirror: boolean; model: number };
 export function buildingProfile(item: Pick<SceneryItem, "variant" | "type"> & Partial<StreetLook>, street = false) {
   if (street) {
-    const tall = item.tall ?? STREET_BUILDINGS.minHeight, size = glbBuildingSize(item.variant, tall, item.stretch ?? 1);
+    const tall = item.tall ?? STREET_BUILDINGS.minHeight, size = glbBuildingSize(item.model ?? item.variant, tall, item.stretch ?? 1);
     return { width: size.width, height: tall, depth: size.depth, floors: 3, halfWidth: size.width / 2 + .1, front: size.depth / 2 + .1, back: size.depth / 2 + .1, solidHeight: tall };
   }
   const v = item.variant % 5, shop = item.type === "shop";
@@ -95,6 +96,7 @@ function makeBuilding(distance: number, side: "left" | "right", index: number, e
     tall: STREET_BUILDINGS.minHeight + (STREET_BUILDINGS.maxHeight - STREET_BUILDINGS.minHeight) * rnd(0),
     stretch: STREET_BUILDINGS.minStretch + (STREET_BUILDINGS.maxStretch - STREET_BUILDINGS.minStretch) * rnd(1),
     mirror: rnd(2) > .5,
+    model: rnd(3) < STREET_BUILDINGS.subShare ? variant + 5 : variant,
   };
   const profile = buildingProfile({ variant, type, ...look }, true);
   const route = distance > ROAD_CLOSURE.junctionDistance - 18 && distance < ROAD_CLOSURE.mergeEnd + 18 ? side : "main";

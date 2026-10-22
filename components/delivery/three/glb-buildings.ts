@@ -8,9 +8,9 @@ const cache = new Map<string, THREE.BufferGeometry>();
 // derives flat normals), so a merged block stays small on phones. The material is
 // double-sided, so mirroring needs no winding fix.
 export function glbBuildingGeometry(variant: number, mirror: boolean) {
-  const key = `${variant % 5}:${mirror}`, cached = cache.get(key);
+  const key = `${variant % BUILDING_MODELS.length}:${mirror}`, cached = cache.get(key);
   if (cached) return cached;
-  const model = BUILDING_MODELS[variant % 5];
+  const model = BUILDING_MODELS[variant % BUILDING_MODELS.length];
   const pos = new Int16Array(bytes(model.positions).buffer), idx = new Uint16Array(bytes(model.indices).buffer), tri = bytes(model.colors);
   const palette = model.palette.map(hex => new THREE.Color(hex)), triangles = tri.length;
   const position = new Float32Array(triangles * 9), color = new Uint8Array(triangles * 9), flip = mirror ? -1 : 1;
@@ -28,7 +28,7 @@ export function glbBuildingGeometry(variant: number, mirror: boolean) {
 
 // Lot size for a street building of the given height (m) and frontage stretch.
 export function glbBuildingSize(variant: number, height: number, stretch: number) {
-  const model = BUILDING_MODELS[variant % 5], scale = height / model.h;
+  const model = BUILDING_MODELS[variant % BUILDING_MODELS.length], scale = height / model.h;
   return { scale, width: model.w * scale * stretch, depth: model.d * scale };
 }
 

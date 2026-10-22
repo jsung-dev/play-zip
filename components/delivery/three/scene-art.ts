@@ -188,9 +188,9 @@ export function createSceneArt() {
   }
 
   // One merged-friendly mesh of a GLB building: uniform scale to `height`, frontage stretched in x.
-  function glbBuilding(variant: number, height: number, stretch: number, mirror: boolean, maxDepth = Infinity) {
-    const { scale, depth } = glbBuildingSize(variant, height, 1), mesh = new THREE.Mesh(glbBuildingGeometry(variant, mirror), glbMaterial);
-    mesh.scale.set(scale * stretch, scale, scale * Math.min(1, maxDepth / depth));
+  function glbBuilding(variant: number, height: number, stretch: number, mirror: boolean) {
+    const { scale } = glbBuildingSize(variant, height, 1), mesh = new THREE.Mesh(glbBuildingGeometry(variant, mirror), glbMaterial);
+    mesh.scale.set(scale * stretch, scale, scale);
     return new THREE.Group().add(mesh);
   }
 
@@ -206,7 +206,7 @@ export function createSceneArt() {
     };
     if (street) {
       const look = item as SceneryItem & Partial<StreetLook>;
-      return place(glbBuilding(item.variant, look.tall ?? 10, look.stretch ?? 1, look.mirror ?? false));
+      return place(glbBuilding(look.model ?? item.variant, look.tall ?? 10, look.stretch ?? 1, look.mirror ?? false));
     }
     const template = buildingTemplates.get(key);
     if (template) return place(template.clone());

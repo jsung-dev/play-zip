@@ -14,13 +14,23 @@ export function createAdvertisementBuilding(ad: OutdoorAdPlacement, art: Buildin
   const width = w + 1.05, height = centerY - panelHeight / 2 - .55, first = Math.floor(ad.distance / 10) + (ad.side === "right" ? 2 : 0);
   g.userData.architecture = { kind: "advertisement-shop", height, width };
   art.shadow(g, width + 5, 11, 0, -1.7);
-  const natural = glbBuildingSize(first % 5, height, 1).width, count = Math.max(1, Math.round(width / natural)), piece = width / count;
-  for (let n = 0; n < count; n++) {
-    const variant = (first + n) % 5, size = glbBuildingSize(variant, height, 1);
-    const model = art.glbBuilding(variant, height, piece / size.width, (first + n) % 2 === 1, 6);
-    model.position.set((n - (count - 1) / 2) * piece, 0, -.43 - Math.min(size.depth, 6) / 2);
-    g.add(model);
+  // Uniform scale only (no stretch/squash): each model is as tall as fits under the panel
+  // and within the 6 m footprint depth; whole models fill the width, leftover becomes gaps.
+  const pieces: { variant: number; height: number; width: number; depth: number }[] = [];
+  for (let n = 0, used = 0; n < 5; n++) {
+    const variant = (first + n) % 5, fit = Math.min(height, height * 6 / glbBuildingSize(variant, height, 1).depth);
+    let size = glbBuildingSize(variant, fit, 1), h = fit;
+    if (!pieces.length && size.width > width) { h = fit * width / size.width; size = glbBuildingSize(variant, h, 1); }
+    if (used + size.width > width) break;
+    pieces.push({ variant, height: h, width: size.width, depth: size.depth }); used += size.width;
   }
+  const gap = (width - pieces.reduce((sum, p) => sum + p.width, 0)) / (pieces.length + 1);
+  let x = -width / 2 + gap;
+  pieces.forEach((p, n) => {
+    const model = art.glbBuilding(p.variant, p.height, 1, (first + n) % 2 === 1);
+    model.position.set(x + p.width / 2, 0, -.43 - p.depth / 2);
+    g.add(model); x += p.width + gap;
+  });
   for (const x of [-w * .32, w * .32]) {
     // Roof-mounted supports stay BEHIND the unchanged advertising surface.
     const top = centerY + panelHeight / 2;
