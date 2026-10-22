@@ -25,10 +25,10 @@ import { BOOSTERS, GAPS, RAMPS, type Gap, type Ramp } from "../delivery-pickups"
 
 export type BikeRig = {
   group: THREE.Group;
-  wheels: THREE.Group[];
-  pedal: THREE.Group;
-  leftLeg: THREE.Group;
-  rightLeg: THREE.Group;
+  wheels: THREE.Object3D[];
+  pedal: THREE.Object3D;
+  leftLeg: THREE.Object3D;
+  rightLeg: THREE.Object3D;
   groundShadow: THREE.Object3D;
 };
 

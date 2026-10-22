@@ -351,54 +351,14 @@ export function createSceneArt() {
   }
 
   function bicycle(brand: DeliveryBrand, label: THREE.Texture, productMaterial: THREE.Material) {
-    const group = new THREE.Group(), wheels: THREE.Group[] = [];
-    const steel = TOWN_COLORS.ink, frame = "#e59779", cream = "#fff4db";
-    shadow(group, 2.4, 3.5, .25, .15);
+    // v5 GLB rider + bike at final size (front = -Z); wheels, crank and legs turn on their GLB pivots.
+    const group = glbAsset("rider_bike"), part = (name: string) => group.getObjectByName(name)!;
+    shadow(group, 2.16, 3.15, .22, .14);
     const groundShadow = group.children[group.children.length - 1];
-    for (const z of [-1.0, 1.0]) {
-      const wheel = new THREE.Group();
-      const tire = new THREE.Mesh(geometry("bike-tire", () => new THREE.TorusGeometry(.49, .068, 10, 32)), material("#384e4b"));
-      tire.rotation.y = Math.PI / 2; wheel.add(tire);
-      const rim = new THREE.Mesh(geometry("bike-rim", () => new THREE.TorusGeometry(.405, .022, 8, 28)), material("#d2d9c8"));
-      rim.rotation.y = Math.PI / 2; wheel.add(rim);
-      for (let n = 0; n < 8; n++) {
-        const angle = n * Math.PI / 4;
-        rod(wheel, [0, 0, 0], [0, Math.cos(angle) * .4, Math.sin(angle) * .4], .009, "#c1cfc4");
-      }
-      const hub = cylinder(.07, .07, .23, steel); hub.rotation.z = Math.PI / 2; wheel.add(hub);
-      put(group, wheel, 0, .56, z); wheels.push(wheel);
-      const fender = new THREE.Mesh(geometry("bike-fender", () => new THREE.TorusGeometry(.59, .035, 6, 20, Math.PI)), material(cream));
-      fender.rotation.set(0, Math.PI / 2, 0); put(group, fender, 0, .56, z);
-    }
-    for (const [a, b] of [
-      [[0, .56, 1], [0, .76, 0]], [[0, .56, 1], [0, 1.35, .4]],
-      [[0, 1.35, .4], [0, .76, 0]], [[0, 1.35, .4], [0, 1.4, -.75]],
-      [[0, .76, 0], [0, 1.4, -.75]], [[0, .56, -1], [0, 1.52, -.75]],
-    ]) rod(group, a, b, .06, frame);
-    for (const side of [-1, 1]) {
-      rod(group, [side * .17, .6, 1], [side * .38, 1.1, .85], .028, steel);
-      rod(group, [side * .35, 1.15, .85], [side * .35, 1.15, 1.6], .025, steel);
-    }
-    put(group, box(.53, .14, .39, "#775d50", .06), 0, 1.45, .4);
-    rod(group, [-.58, 1.64, -.84], [.58, 1.64, -.84], .035, steel);
-    for (const x of [-.52, .52]) put(group, box(.23, .09, .12, "#bd9271", .03), x, 1.64, -.84);
-    const headlight = sphere(.13, cream); headlight.scale.z = .5; put(group, headlight, 0, 1.5, -1.31);
-    const pedal = new THREE.Group();
-    const crank = cylinder(.16, .16, .11, steel); crank.rotation.z = Math.PI / 2; pedal.add(crank);
-    for (const side of [-1, 1]) {
-      rod(pedal, [0, 0, 0], [side * .14, side * .25, 0], .026, steel);
-      put(pedal, box(.28, .055, .13, cream, .015), side * .19, side * .25, 0);
-    }
-    put(group, pedal, 0, .79, .03);
-    // Open basket with rails, instead of a wireframe box.
-    put(group, box(1.0, .07, .71, "#ba9974", .035), 0, 1.32, -1.1);
-    for (const y of [1.43, 1.64, 1.83]) {
-      for (const z of [-1.47, -.75]) put(group, box(1.05, .045, .04, "#bfa27a", .018), 0, y, z);
-      for (const x of [-.5, .5]) put(group, box(.04, .045, .72, "#bfa27a", .018), x, y, -1.1);
-    }
-    for (const x of [-.48, -.24, 0, .24, .48]) {
-      for (const z of [-1.46, -.76]) put(group, box(.027, .5, .03, "#c4ad89"), x, 1.57, z);
-    }
+    // Brand area stays brand-coloured: the GLB box, label and basket cartons are swapped for the
+    // original brand-coloured box/label/cartons (authored at 1/0.9 scale, so drawn in a 0.9 group).
+    for (const name of ["delivery_box", "brand_label", "basket_items"]) part(name).visible = false;
+    const brandParts = new THREE.Group(); brandParts.scale.setScalar(.9); group.add(brandParts);
     for (const x of [-.23, .23]) {
       const carton = new THREE.Group();
       put(carton, box(.37, .63, .32, brand.secondaryColor, .025), 0, .32, 0);
@@ -406,55 +366,15 @@ export function createSceneArt() {
       cap.rotation.y = Math.PI / 4; put(carton, cap, 0, .73, 0);
       const labelMesh = new THREE.Mesh(geometry("carton-label", () => new THREE.PlaneGeometry(.32, .53)), productMaterial);
       put(carton, labelMesh, 0, .35, .168);
-      put(group, carton, x, 1.37, -1.11);
+      put(brandParts, carton, x, 1.37, -1.11);
     }
-    put(group, box(1.44, .94, .9, brand.secondaryColor, .075), 0, 1.5, 1.02);
-    put(group, box(1.49, .16, .96, brand.primaryColor, .055), 0, 2.0, 1.02);
-    for (const x of [-.6, .6]) put(group, box(.075, .91, .025, "#c8a88a", .012), x, 1.48, 1.49);
+    put(brandParts, box(1.44, .94, .9, brand.secondaryColor, .075), 0, 1.5, 1.02);
+    put(brandParts, box(1.49, .16, .96, brand.primaryColor, .055), 0, 2.0, 1.02);
+    for (const x of [-.6, .6]) put(brandParts, box(.075, .91, .025, "#c8a88a", .012), x, 1.48, 1.49);
     const backLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.23, .72), new THREE.MeshBasicMaterial({ map: label, toneMapped: false }));
-    put(group, backLabel, 0, 1.49, 1.481);
-    put(group, box(.21, .08, .05, "#db806c", .024), 0, .91, 1.51);
-
-    // This original placeholder courier can be replaced independently of the bike.
-    const rider = new THREE.Group(); rider.name = "replaceable-delivery-rider";
-    const torso = new THREE.Mesh(geometry("courier-body", () => new THREE.CapsuleGeometry(.37, .53, 6, 16)), material("#5d9483"));
-    torso.rotation.x = -.17; put(rider, torso, 0, 2.0, .06);
-    const collar = cylinder(.27, .31, .15, cream); put(rider, collar, 0, 2.37, -.02);
-    const head = sphere(.39, "#f2c6a3"); head.scale.set(1, 1.05, 1); put(rider, head, 0, 2.73, -.15);
-    const hair = sphere(.397, "#665247"); hair.scale.set(1, .65, .82); put(rider, hair, 0, 2.82, -.04);
-    const helmet = new THREE.Mesh(geometry("courier-helmet", () => new THREE.SphereGeometry(.47, 24, 14, 0, Math.PI * 2, 0, Math.PI * .59)), material("#a9c6a6"));
-    helmet.scale.z = 1.1; put(rider, helmet, 0, 2.87, -.18);
-    const helmetRim = new THREE.Mesh(geometry("helmet-rim", () => new THREE.TorusGeometry(.445, .03, 8, 28)), material("#64826b"));
-    helmetRim.rotation.x = Math.PI / 2; helmetRim.scale.y = 1.1; put(rider, helmetRim, 0, 2.76, -.18);
-    for (const x of [-.19, .19]) {
-      const vent = box(.055, .04, .38, "#6b8e73", .02); vent.rotation.x = -.18; put(rider, vent, x, 3.295, -.15);
-    }
-    const helmetStripe = new THREE.Mesh(geometry("helmet-stripe", () => new THREE.TorusGeometry(.475, .032, 6, 24, Math.PI)), material(cream));
-    helmetStripe.rotation.y = Math.PI / 2; helmetStripe.scale.x = 1.1; put(rider, helmetStripe, 0, 2.87, -.18);
-    put(rider, box(.52, .045, .3, "#a9c6a6", .035), 0, 2.83, -.63);
-    put(rider, box(.24, .075, .025, cream, .025), 0, 2.92, .33);
-    put(rider, box(.37, .085, .035, "#eae4b8", .025), 0, 2.18, .427);
-    for (const side of [-1, 1]) {
-      put(rider, sphere(.09, "#edb792"), side * .39, 2.69, -.13);
-      rod(rider, [side * .29, 2.18, -.08], [side * .46, 1.81, -.53], .12, "#5d9483");
-      rod(rider, [side * .46, 1.81, -.53], [side * .5, 1.65, -.84], .085, "#f2c6a3");
-      put(rider, sphere(.1, "#f2c6a3"), side * .5, 1.65, -.84);
-    }
-    const makeLeg = (side: number) => {
-      const leg = new THREE.Group();
-      rod(leg, [0, 0, 0], [0, -.46, -.3], .14, "#526f71");
-      rod(leg, [0, -.46, -.3], [0, -.87, -.05], .095, "#edbe9d");
-      put(leg, cylinder(.1, .1, .22, cream), 0, -.83, -.06);
-      put(leg, box(.25, .17, .42, cream, .06), 0, -.97, -.17);
-      put(rider, leg, side * .2, 1.54, .2); return leg;
-    };
-    const leftLeg = makeLeg(-1), rightLeg = makeLeg(1);
-    group.add(rider);
-    // ~110 separate parts cost one draw call each; batch the static ones.
-    for (const part of [...wheels, pedal, leftLeg, rightLeg]) mergeStatic(part);
-    mergeStatic(group, [...wheels, pedal, leftLeg, rightLeg]);
-    group.scale.setScalar(.9);
-    return { group, wheels, pedal, leftLeg, rightLeg, groundShadow };
+    put(brandParts, backLabel, 0, 1.49, 1.481);
+    mergeStatic(brandParts);
+    return { group, wheels: [part("wheel_front"), part("wheel_rear")], pedal: part("crank"), leftLeg: part("leg_left"), rightLeg: part("leg_right"), groundShadow };
   }
 
   function horizon() {
