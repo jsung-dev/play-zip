@@ -29,6 +29,7 @@ export type BikeRig = {
   pedal: THREE.Object3D;
   leftLeg: THREE.Object3D;
   rightLeg: THREE.Object3D;
+  spine: THREE.Object3D;
   groundShadow: THREE.Object3D;
 };
 
@@ -684,22 +685,22 @@ function createCat(placement: MoverPlacement, art: SceneArt): MoverRig {
 function createDestination(brand: DeliveryBrand, art: SceneArt) {
   const group = markDistance(new THREE.Group(), DELIVERY_GAME_CONFIG.totalDistance);
   art.shadow(group, 25, 14);
-  // The pad sits under the GLB block (base at y=0), so it is raised to y=.3 on top of the pad.
-  art.put(group, art.box(18, .3, 9, TOWN_COLORS.pavement, .1), 0, .15, 1.2);
-  const apartment = art.glbAsset("destination_apartment");
-  apartment.position.y = .3; group.add(apartment);
+  const apartment = art.glbAsset("destination_apartment"); group.add(apartment);
   const { entrance, sign: signAt } = apartment.userData.anchors as Record<string, [number, number, number]>;
-  group.userData.entranceLocal = [entrance[0], entrance[1] + .3, entrance[2] + .2];
-  const signPanel = apartment.getObjectByName("sign") as THREE.Mesh;
-  signPanel.geometry.computeBoundingBox();
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.1), new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: "햇살 아파트 101동", background: "#fbf6e6", foreground: "#42645a", width: 1024, height: 160 }), toneMapped: false,
-  }));
-  art.put(group, sign, signAt[0], signAt[1] + .3, signAt[2] + signPanel.geometry.boundingBox!.max.z + .04);
-  for (const side of [-1, 1]) {
-    art.put(group, art.box(3.3, .65, 1.4, "#c9b89a", .09), side * 6.7, .65, 3.6);
-    for (const x of [-.9, 0, .9]) { const bush = art.sphere(.8, "#83a383"); bush.scale.y = .8; art.put(group, bush, side * 6.7 + x, 1.35, 3.6); }
-  }
+  group.userData.entranceLocal = [entrance[0], entrance[1], entrance[2] + .2];
+  // Name boards are drawn in code just in front of the GLBs' blank panels.
+  const board = (title: string, panel: THREE.Object3D, at: [number, number, number], width: number, height: number, offset: THREE.Vector3) => {
+    const mesh = panel as THREE.Mesh; mesh.geometry.computeBoundingBox();
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({
+      map: makeTextTexture({ title, background: "#fbf6e6", foreground: "#42645a", width: 1024, height: Math.round(1024 * height / width) }), toneMapped: false,
+    }));
+    art.put(group, plane, at[0] + offset.x, at[1] + offset.y, at[2] + offset.z + mesh.geometry.boundingBox!.max.z + .04);
+  };
+  board("햇살 아파트 101동", apartment.getObjectByName("sign")!, signAt, 8, 1.1, new THREE.Vector3());
+  // Forecourt with the finish arch: its origin is its centre, so it starts at the apartment's front wall.
+  const yard = art.glbAsset("destination_frontyard"), yardZ = 2.7 + 4.5;
+  yard.position.z = yardZ; group.add(yard);
+  board("배달 완료!", yard.getObjectByName("arch_banner")!, yard.userData.anchors.arch_banner as [number, number, number], 4.8, .9, new THREE.Vector3(0, 0, yardZ));
   const arrivalZone = new THREE.Mesh(new THREE.PlaneGeometry(9.3, 9), new THREE.MeshBasicMaterial({ color: "#f7dfa1", transparent: true, opacity: .5, depthWrite: false, side: THREE.DoubleSide }));
   arrivalZone.rotation.x = -Math.PI / 2; art.put(group, arrivalZone, 0, .06, 7.5);
   art.merge(group);

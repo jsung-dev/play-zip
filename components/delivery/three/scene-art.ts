@@ -374,7 +374,7 @@ export function createSceneArt() {
     const backLabel = new THREE.Mesh(new THREE.PlaneGeometry(1.23, .72), new THREE.MeshBasicMaterial({ map: label, toneMapped: false }));
     put(brandParts, backLabel, 0, 1.49, 1.481);
     mergeStatic(brandParts);
-    return { group, wheels: [part("wheel_front"), part("wheel_rear")], pedal: part("crank"), leftLeg: part("leg_left"), rightLeg: part("leg_right"), groundShadow };
+    return { group, wheels: [part("wheel_front"), part("wheel_rear")], pedal: part("crank"), leftLeg: part("leg_left"), rightLeg: part("leg_right"), spine: part("spine"), groundShadow };
   }
 
   function horizon() {

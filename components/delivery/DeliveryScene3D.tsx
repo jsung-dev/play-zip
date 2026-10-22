@@ -154,7 +154,7 @@ export function DeliveryScene3D({
       });
     };
     let wasAirborne = false;
-    const bikeScale = world.bicycle.group.scale.x;
+    const bikeScale = world.bicycle.group.scale.x, spineRestY = world.bicycle.spine.position.y;
     const shownMovingBuses = new Set<string>();
 
     const resetMovingBuses = () => {
@@ -229,9 +229,11 @@ export function DeliveryScene3D({
       if (!current.paused) landingElapsed += deltaSeconds;
       // Brief squash on landing only; the camera rail ignores jump height.
       const squash = reduceMotion ? 0 : Math.sin(Math.min(1, landingElapsed / .18) * Math.PI) * .04;
-      // Ducking squashes the rider low and leans them forward.
+      // Ducking bends the rider's upper body forward and down on the GLB spine pivot (no squashing).
       const duck = live ? duckAmountAt(live.duckElapsed) : 0;
-      world.bicycle.group.scale.set(bikeScale * (1 + squash * .5), bikeScale * (1 - squash - duck * .3), bikeScale * (1 + squash * .5));
+      world.bicycle.spine.rotation.x = -duck * .95;
+      world.bicycle.spine.position.y = spineRestY - duck * .25;
+      world.bicycle.group.scale.set(bikeScale * (1 + squash * .5), bikeScale * (1 - squash), bikeScale * (1 + squash * .5));
       world.bicycle.group.rotation.y = routeFrame.yaw;
       const laneVelocity = (current.laneX - previousLaneX) / Math.max(deltaSeconds, 0.001);
       previousLaneX = current.laneX;
@@ -254,7 +256,7 @@ export function DeliveryScene3D({
         (d.puff.material as THREE.MeshBasicMaterial).opacity = Math.max(0, .75 * (1 - d.age / .6));
         if (d.age > .6) d.puff.visible = false;
       }
-      world.bicycle.group.rotation.x = impactBump + current.jumpHeight * .06 + duck * .22;
+      world.bicycle.group.rotation.x = impactBump + current.jumpHeight * .06;
       wheelPhase -= (current.speed * deltaSeconds) / 0.43;
       for (const wheel of world.bicycle.wheels) wheel.rotation.x = wheelPhase;
       world.bicycle.pedal.rotation.x = wheelPhase * 1.35;
