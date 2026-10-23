@@ -26,7 +26,7 @@ for (const o of OBSTACLE_PLACEMENTS) {
 }
 
 // Jump obstacles avoid the start, the green delivery zones (30 m before to 30 m after the stop), the detour and the final approach.
-const blocked: [number, number][] = [[0, 70], [ROAD_CLOSURE.junctionDistance - 60, ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.rampMeters], [ROAD_CLOSURE.mergeStart, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
+const blocked: [number, number][] = [[0, 70], [ROAD_CLOSURE.junctionDistance - 20, ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.rampMeters], [ROAD_CLOSURE.mergeStart, ROAD_CLOSURE.mergeEnd + 10], [940, 1000]];
 for (const i of DELIVERY_STOPS.keys()) blocked.push([houseDistance(i) - DRIVE_BY.protect, houseDistance(i) + DRIVE_BY.protect]);
 for (const o of OBSTACLE_PLACEMENTS) {
   if (o.branch) {

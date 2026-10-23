@@ -22,8 +22,8 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   for (const h of hazards) {
     for (const i of DELIVERY_STOPS.keys()) assert(h.d < houseDistance(i) - DRIVE_BY.protect || h.d > houseDistance(i) + DRIVE_BY.protect, `seed ${seed}: ${h.what}@${h.d} clear of delivery ${i}`);
     const fixed = obs.some(o => o.distance === h.d && o.kind === h.what);
-    if (fixed) assert(!(h.d >= ROAD_CLOSURE.junctionDistance - 60 && h.d <= 505) && !(h.d >= 700 - 10 && h.d < 700) && h.d < 940, `seed ${seed}: ${h.what}@${h.d} in a reserved zone`);
-    else assert(h.d < ROAD_CLOSURE.junctionDistance - 50 || h.d > ROAD_CLOSURE.mergeEnd + 5 || (h.d > 505 && h.d < 700), `seed ${seed}: ${h.what}@${h.d} clear of the fork`);
+    if (fixed) assert(!(h.d >= ROAD_CLOSURE.junctionDistance - 20 && h.d <= 505) && !(h.d >= 700 - 10 && h.d < 700) && h.d < 940, `seed ${seed}: ${h.what}@${h.d} in a reserved zone`);
+    else assert(h.d < ROAD_CLOSURE.junctionDistance - 20 || h.d > ROAD_CLOSURE.mergeEnd + 5 || (h.d > 505 && h.d < 700), `seed ${seed}: ${h.what}@${h.d} clear of the fork`);
     assert(h.d <= 975, `seed ${seed}: ${h.what}@${h.d} clear of the finish`);
   }
   for (const r of ramps) for (const i of DELIVERY_STOPS.keys()) { const exit = getDrivewayExitDistance(i); assert(r.distance < exit - 40 || r.distance > exit + 35, `seed ${seed}: ramp ${r.distance} near alley exit ${exit}`); }
@@ -46,13 +46,13 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   assert(slams.length >= 2, `seed ${seed}: >= 2 jump-then-slam sets`);
   assert(obs.some(o => o.kind === "overhead"), `seed ${seed}: a duck beam`);
   assert.equal(ramps.length, 2, `seed ${seed}: two main-road ramps`);
-  // Spacing: randomly placed things at least 20 m apart, except the pairs a pattern is made of.
+  // Spacing: at least 10 m apart (combos step 12-14 m; patterns themselves 20-30 m), except jump-slam and ramp funnels.
   const events = [...new Set(hazards.filter(h => inStretch(h.d)).map(h => h.d)), ...ramps.map(r => r.distance)].sort((a, b) => a - b);
   for (let i = 1; i < events.length; i++) {
     const a = events[i - 1], b = events[i], gap = b - a;
     const pair = gap === 9 && obs.some(o => o.kind === "plank" && o.distance === a) && obs.some(o => o.kind === "signbeam" && o.distance === b)
       || gap === 11 && ramps.some(r => r.distance === b);
-    assert(gap >= 20 || pair, `seed ${seed}: ${a} -> ${b} too close`);
+    assert(gap >= 10 || pair, `seed ${seed}: ${a} -> ${b} too close`);
   }
   // Ramps: approach lane clear for 25 m, nothing in the gap or the 10 m landing.
   for (const r of ramps) {

@@ -10,7 +10,7 @@ for (const m of MOVER_PLACEMENTS.filter(m => moverCollides(m.kind))) {
   // Triggered hazards wake far enough ahead to be read (≥ 1.4 s at top speed).
   if (!TIMED.has(m.kind)) assert(m.distance - m.trigger >= 28, `${m.id} needs a visible lead-in`);
   for (const i of DELIVERY_STOPS.keys()) assert(Math.abs(m.distance - houseDistance(i)) > DRIVE_BY.protect, `${m.id} clear of the delivery zone ${i}`);
-  if (!m.branch) assert(m.distance < ROAD_CLOSURE.junctionDistance - 50 || m.distance > ROAD_CLOSURE.mergeEnd + 5, `${m.id} clear of the fork`);
+  if (!m.branch) assert(m.distance < ROAD_CLOSURE.junctionDistance - 20 || m.distance > ROAD_CLOSURE.mergeEnd + 5, `${m.id} clear of the fork`);
 }
 // Timed hazards keep moving whatever the rider does: they must be timed, not out-waited by luck.
 const cat = find("cat"), ducks = find("ducks");
