@@ -70,7 +70,7 @@ export function DeliveryBrandStart({ onStart, mode, onMode, best }: { onStart: (
   return <div className={styles.overlay}>
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.startCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-start-title" data-campaign-screen="start">
       <DeliveryHero className={styles.hero} />
-      <p className={styles.eyebrow}>{challenge ? "챌린지 · 끝없이 달리기" : "동네 배달"}</p>
+      <p className={styles.pill}>{challenge ? "챌린지 · 끝없이 달리기" : "동네 배달"}</p>
       <h1 id="delivery-start-title" className={styles.sparkTitle}><Spark />우유를 골라 주세요<Spark flip /></h1>
       <p className={styles.startHint}>{challenge ? `하트 ${CHALLENGE.hearts}개가 다 떨어질 때까지 멀리 달려요!` : "고르면 바로 출발해요!"}</p>
       <div className={styles.brandChoices}>
@@ -80,7 +80,7 @@ export function DeliveryBrandStart({ onStart, mode, onMode, best }: { onStart: (
       </div>
       {challenge
         ? <dl className={styles.missionCard}>
-          <div><Heart aria-hidden="true" /><dt>목숨</dt><dd>하트 {CHALLENGE.hearts}개</dd></div>
+          <div className={styles.heartRow} role="img" aria-label={`목숨 하트 ${CHALLENGE.hearts}개`}>{Array.from({ length: CHALLENGE.hearts }, (_, n) => <Heart key={n} aria-hidden="true" />)}</div>
           <div><Trophy aria-hidden="true" /><dt>최고 기록</dt><dd>{best.toLocaleString("ko-KR")}m</dd></div>
         </dl>
         : <dl className={styles.missionCard}>
@@ -121,14 +121,14 @@ export function DeliveryBrandQuiz({ brand, stopIndex, address, onCorrect }: {
   return <div className={styles.overlay}>
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.quizCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-quiz-title" data-brand-quiz={stopIndex} data-campaign-screen="quiz">
       <DeliveryHero badge="question" className={styles.hero} />
-      <p className={styles.eyebrow}>배달 퀴즈 {stopIndex + 1} / {DELIVERY_STOPS.length}</p>
+      <p className={styles.pill} aria-label={`배달 퀴즈 ${stopIndex + 1} / ${DELIVERY_STOPS.length}`}>{stopIndex + 1} / {DELIVERY_STOPS.length}</p>
       <div className={styles.quizProgress} role="progressbar" aria-label="현재 배달 퀴즈" aria-valuemin={0} aria-valuemax={DELIVERY_STOPS.length} aria-valuenow={stopIndex + 1}>
         {DELIVERY_STOPS.map((stop, index) => <span key={stop.id} data-reached={index <= stopIndex} />)}
       </div>
       <h2 id="delivery-quiz-title" className={styles.quizTitle}>{DELIVERY_QUIZ_QUESTIONS[stopIndex] ?? DELIVERY_QUIZ_QUESTIONS[0]}</h2>
       <p className={styles.quizAddress}><MapPin aria-hidden="true" />{address} 도착 · 정답을 맞히면 배달 완료!</p>
       <div className={styles.brandChoices}>
-        {DELIVERY_BRAND_CHOICES.map(id => <button key={wrongAnswer === id ? `${id}-wrong` : id} type="button" className={styles.brandChoice} data-quiz-answer={id} data-wrong={wrongAnswer === id} onClick={() => answer(id)}>
+        {DELIVERY_BRAND_CHOICES.map(id => <button key={wrongAnswer === id ? `${id}-wrong` : id} type="button" className={styles.brandChoice} style={brandStyle(DELIVERY_BRANDS[id])} data-quiz-answer={id} data-wrong={wrongAnswer === id} onClick={() => answer(id)}>
           <MilkCard id={id} wrong={wrongAnswer === id} />
         </button>)}
       </div>

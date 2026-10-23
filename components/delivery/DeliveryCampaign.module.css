@@ -46,6 +46,11 @@
   isolation: isolate;
 }
 .campaignCard:focus { outline: none; }
+/* Each screen gets a coloured rim: sky blue for the quiz, orange for the start, amber for results. */
+.campaignCard[data-campaign-screen] { border: 3px solid var(--ui-rim, var(--ui-mint-line)); }
+.campaignCard[data-campaign-screen="quiz"] { --ui-rim: #4bbdf2; }
+.campaignCard[data-campaign-screen="start"], .campaignCard[data-campaign-screen="mode"] { --ui-rim: #f59a3c; }
+.campaignCard[data-campaign-screen="complete"], .campaignCard[data-campaign-screen="challenge-over"] { --ui-rim: #f6b81c; }
 .campaignCard h1, .campaignCard h2, .campaignCard h3, .campaignCard p, .campaignCard dl { margin: 0; }
 .campaignCard h1, .campaignCard h2 { color: var(--ui-title); font-weight: 900; letter-spacing: -.05em; text-wrap: balance; }
 .campaignCard svg { flex-shrink: 0; width: 22px; height: 22px; stroke-width: 2.2; }
@@ -57,6 +62,7 @@
 
 .campaignCard .hero { display: block; width: min(100%, 300px); height: auto; margin: 0 auto 6px; }
 .eyebrow { color: var(--ui-green); font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.campaignCard .pill { display: inline-block; margin: 2px 0 8px; padding: 4px 18px; border-radius: 99px; background: var(--ui-mint); color: var(--ui-green); font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
 .campaignCard .sparkTitle { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 16px; font-size: 30px; line-height: 1.25; }
 .sparkTitle svg { width: 26px; height: 26px; }
 .campaignCard .startHint { margin: -8px 0 12px; color: var(--ui-body); font-size: 15px; font-weight: 650; }
@@ -96,6 +102,9 @@
 .brandChoice[data-wrong="true"] .choiceCheck { border-color: var(--ui-wrong); background: var(--ui-wrong); color: #fff; }
 .campaignCard .choiceCheck svg { width: 15px; height: 15px; stroke-width: 3.2; }
 .choiceProduct { width: 100%; height: 104px; }
+.brandChoice[data-brand-choice] { border-color: var(--ui-mint-line); }
+/* Quiz answers wear their milk's colour. */
+.brandChoice[data-quiz-answer]:not([data-wrong="true"]) { border-color: color-mix(in srgb, var(--product-tint) 35%, white); background: color-mix(in srgb, var(--product-tint) 9%, white); }
 .brandChoice strong { font-size: 16px; font-weight: 850; letter-spacing: -.04em; line-height: 1.4; }
 @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
 
@@ -103,6 +112,8 @@
 .missionCard > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; column-gap: 6px; padding: 0 6px; }
 .missionCard > div + div { border-left: 1px solid var(--ui-mint-line); }
 .campaignCard .missionCard svg { grid-row: span 2; width: 44px; height: 37px; }
+.missionCard .heartRow { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.campaignCard .missionCard .heartRow svg { grid-row: auto; width: 28px; height: 28px; fill: #f26b6b; stroke: none; }
 .missionCard dt { color: var(--ui-green); font-size: 13px; font-weight: 700; }
 .missionCard dd { margin: 0; font-size: 15px; font-weight: 850; line-height: 1.35; letter-spacing: -.03em; }
 
@@ -129,8 +140,8 @@
   text-decoration: none;
   cursor: pointer;
 }
-.campaignCard .primaryButton { min-height: 58px; border-color: var(--ui-green); background: var(--ui-green); color: #fff; font-size: 19px; box-shadow: 0 6px 0 #0a5a40; }
-.campaignCard .primaryButton:not(:disabled):active { transform: translateY(3px); box-shadow: 0 3px 0 #0a5a40; }
+.campaignCard .primaryButton { min-height: 58px; border-color: #1fbf6a; background: #1fbf6a; color: #fff; font-size: 19px; box-shadow: 0 6px 0 #12924f; }
+.campaignCard .primaryButton:not(:disabled):active { transform: translateY(3px); box-shadow: 0 3px 0 #12924f; }
 .campaignCard .primaryButton:disabled { border-color: #dfe7e3; background: #eef2f0; color: var(--ui-body); box-shadow: none; cursor: not-allowed; }
 .actions [data-platform-return] svg { width: 22px; height: 22px; }
 .campaignCard .textButton { border-color: transparent; background: var(--ui-mint); }
@@ -164,7 +175,7 @@
 .purchaseCreative p { margin-top: 4px; color: #5d4950; font-size: 13px; font-weight: 650; }
 
 @media (hover: hover) {
-  .campaignCard .primaryButton:not(:disabled):hover { background: #0c6a4b; }
+  .campaignCard .primaryButton:not(:disabled):hover { background: #19ab5e; }
   .brandChoice:not([data-wrong="true"]):hover, .actions [data-platform-return]:hover, .campaignCard .secondaryButton:hover { background: var(--ui-mint); }
 }
 

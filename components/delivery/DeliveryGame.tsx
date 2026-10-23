@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play, Trophy } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Heart, Pause, Play, Trophy } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, getDetourOffset, ROAD_CLOSURE, setRouteProvider, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
@@ -601,9 +601,8 @@ export function DeliveryGame() {
             )}
           </div>
           {mode === "challenge" ? <div className={navStyles.progress} role="img" aria-label={`하트 ${heartsLeft(frame.collisionCount)}개 남음`}>
-            <span>하트</span>
-            <div className={navStyles.segments}>
-              {Array.from({ length: CHALLENGE.hearts }, (_, index) => <i key={index} data-state={index < heartsLeft(frame.collisionCount) ? "complete" : "pending"} />)}
+            <div className={navStyles.hearts}>
+              {Array.from({ length: CHALLENGE.hearts }, (_, index) => <Heart key={index} aria-hidden="true" data-state={index < heartsLeft(frame.collisionCount) ? "full" : "lost"} />)}
             </div>
           </div> : <div className={navStyles.progress}>
             <span>배달 {completedDeliveries} / {totalDeliveries}</span>
