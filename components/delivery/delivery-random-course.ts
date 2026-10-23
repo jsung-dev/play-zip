@@ -1,6 +1,6 @@
 import { OBSTACLE_PLACEMENTS, type ObstaclePlacement } from "@/data/delivery-game";
 import { SECTIONS, type CourseSection } from "./delivery-course";
-import { MOVER_PLACEMENTS, type MoverPlacement } from "./delivery-movers";
+import { MOVER_PLACEMENTS, moverCollides, type MoverPlacement } from "./delivery-movers";
 import { BOOSTERS, GAPS, GAP_LENGTH, RAMPS, type Booster, type Ramp } from "./delivery-pickups";
 
 // A fresh main-road layout every ride, built from hand-tuned patterns under fixed rules:
@@ -147,6 +147,8 @@ export function generateCourse(seed: number): Course {
       boosters.push({ distance: at, lane: lane(rng) });
     }
     if (boosters.filter(onMain).length < 4) continue;
+    // As busy as the authored ride: >= 20 main-road hazards (same count as the course test).
+    if (obstacles.filter(x => onMain(x) && x.kind !== "signbeam").length + movers.filter(m => onMain(m) && moverCollides(m.kind) && m.kind !== "drum").length + ramps.filter(onMain).length < 20) continue;
     boosters.sort((x, y) => x.distance - y.distance);
     const sections: CourseSection[] = [
       ...DEFAULT.sections.filter(sc => sc.from === 70 || sc.from === 505), // warm-up and detour banners stay
