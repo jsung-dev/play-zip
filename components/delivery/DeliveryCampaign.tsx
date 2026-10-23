@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, House, MapPin, RotateCcw, ShoppingBag, X } from "lucide-react";
+import { ArrowLeft, Heart, House, MapPin, RotateCcw, ShoppingBag, Trophy, X } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
 import { DELIVERY_BRAND_CHOICES, DELIVERY_QUIZ_QUESTIONS, PURCHASE_AD, type DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS } from "@/data/delivery-map";
 import { BrandImage } from "./DeliveryArt";
 import { ApartmentArt, DeliveryHero, HouseArt, Spark } from "./DeliveryArtUi";
 import { PlatformReturnLink } from "./PlatformReturnLink";
+import { CHALLENGE, type GameMode } from "./delivery-challenge";
 import styles from "./DeliveryCampaign.module.css";
 
 const brandStyle = (brand: DeliveryBrand) => ({
@@ -40,23 +41,33 @@ export function useDialogFocus() {
   return ref;
 }
 
-export function DeliveryBrandStart({ onStart }: { onStart: (id: DeliveryChoiceId) => void }) {
+export function DeliveryBrandStart({ onStart, mode, onMode, best }: { onStart: (id: DeliveryChoiceId) => void; mode: GameMode; onMode: (mode: GameMode) => void; best: number }) {
   const ref = useDialogFocus();
+  const challenge = mode === "challenge";
   return <div className={styles.overlay}>
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.startCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-start-title" data-campaign-screen="start">
+      <div className={styles.buttonRow} role="radiogroup" aria-label="게임 모드">
+        {(["brand", "challenge"] as const).map(m => <button key={m} type="button" role="radio" aria-checked={mode === m} data-mode-choice={m}
+          className={mode === m ? styles.primaryButton : styles.secondaryButton} onClick={() => onMode(m)}>{m === "brand" ? "브랜드 모드" : "챌린지 모드"}</button>)}
+      </div>
       <DeliveryHero className={styles.hero} />
-      <p className={styles.eyebrow}>동네 배달</p>
+      <p className={styles.eyebrow}>{challenge ? "챌린지 · 끝없이 달리기" : "동네 배달"}</p>
       <h1 id="delivery-start-title" className={styles.sparkTitle}><Spark />우유를 골라 주세요<Spark flip /></h1>
-      <p className={styles.startHint}>고르면 바로 출발해요!</p>
+      <p className={styles.startHint}>{challenge ? `하트 ${CHALLENGE.hearts}개가 다 떨어질 때까지 멀리 달려요!` : "고르면 바로 출발해요!"}</p>
       <div className={styles.brandChoices}>
         {DELIVERY_BRAND_CHOICES.map(id => <button key={id} type="button" className={styles.brandChoice} style={brandStyle(DELIVERY_BRANDS[id])} data-brand-choice={id} onClick={() => onStart(id)}>
           <MilkCard id={id} />
         </button>)}
       </div>
-      <dl className={styles.missionCard}>
-        <div><HouseArt /><dt>경유 배달</dt><dd>동네 {stopCountLabel}</dd></div>
-        <div><ApartmentArt /><dt>마지막 목적지</dt><dd>{DELIVERY_GAME_CONFIG.destinationName}</dd></div>
-      </dl>
+      {challenge
+        ? <dl className={styles.missionCard}>
+          <div><Heart aria-hidden="true" /><dt>목숨</dt><dd>하트 {CHALLENGE.hearts}개</dd></div>
+          <div><Trophy aria-hidden="true" /><dt>최고 기록</dt><dd>{best.toLocaleString("ko-KR")}m</dd></div>
+        </dl>
+        : <dl className={styles.missionCard}>
+          <div><HouseArt /><dt>경유 배달</dt><dd>동네 {stopCountLabel}</dd></div>
+          <div><ApartmentArt /><dt>마지막 목적지</dt><dd>{DELIVERY_GAME_CONFIG.destinationName}</dd></div>
+        </dl>}
       <div className={styles.actions}><PlatformReturnLink /></div>
       <small className={styles.notice}>테스트용 디자인 · 공식 광고가 아니며 실제 구매로 연결되지 않아요</small>
     </article>
@@ -145,6 +156,29 @@ export function DeliveryPurchaseAd({ brand, completedDeliveries, hits, stars, on
         </div>
       </div>
       <small className={styles.notice}>{PURCHASE_AD.notice}</small>
+    </article>
+  </div>;
+}
+
+/** Challenge result: distance this run and the device record. */
+export function DeliveryChallengeOver({ meters, best, onRetry, onHome }: { meters: number; best: number; onRetry: () => void; onHome: () => void }) {
+  const ref = useDialogFocus();
+  const record = meters >= best && meters > 0;
+  return <div className={styles.overlay}>
+    <article ref={ref} tabIndex={-1} className={styles.campaignCard} role="dialog" aria-modal="true" aria-labelledby="challenge-over-title" data-campaign-screen="challenge-over">
+      <DeliveryHero className={styles.hero} />
+      <p className={styles.eyebrow}>{record ? "새 기록!" : "챌린지 종료"}</p>
+      <h2 id="challenge-over-title" className={styles.sparkTitle}><Spark />{Math.floor(meters).toLocaleString("ko-KR")}m 달렸어요<Spark flip /></h2>
+      <div className={styles.completionStats}>
+        <span><Trophy aria-hidden="true" />최고 기록 {best.toLocaleString("ko-KR")}m</span>
+      </div>
+      <div className={styles.actions}>
+        <button type="button" className={styles.primaryButton} onClick={onRetry} data-challenge-retry><RotateCcw aria-hidden="true" />다시 달리기</button>
+        <div className={styles.buttonRow}>
+          <button type="button" className={styles.secondaryButton} onClick={onHome}><ArrowLeft aria-hidden="true" />처음으로</button>
+          <PlatformReturnLink />
+        </div>
+      </div>
     </article>
   </div>;
 }

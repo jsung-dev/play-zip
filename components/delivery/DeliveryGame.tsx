@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play, Trophy } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
 import { DELIVERY_STOPS, getDetourOffset, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
-import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryPurchaseAd } from "./DeliveryCampaign";
+import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryChallengeOver, DeliveryPurchaseAd } from "./DeliveryCampaign";
+import { CHALLENGE, challengeSpeedFactor, heartsLeft, readBest, saveBest, type GameMode } from "./delivery-challenge";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
 import { duckWalkSeconds, DUCK } from "./three/duck-resident";
@@ -24,7 +25,7 @@ import { applyCourse, generateCourse } from "./delivery-random-course";
 import styles from "./DeliveryGame.module.css";
 import navStyles from "./DeliveryNavigation.module.css";
 
-type GameStatus = "ready" | "playing" | "quiz" | "arriving" | "completed";
+type GameStatus = "ready" | "playing" | "quiz" | "arriving" | "completed" | "gameover";
 
 type RuntimeState = {
   position: number;
@@ -90,6 +91,12 @@ export function DeliveryGame() {
   const [paused, setPaused] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
   const [courseSeed, setCourseSeed] = useState(0);
+  // Challenge mode: no stops or quiz; laps of fresh random courses, faster each lap, until the hearts run out.
+  const [mode, setMode] = useState<GameMode>("brand");
+  const modeRef = useRef<GameMode>("brand"); modeRef.current = mode;
+  const lapRef = useRef(0);
+  const [best, setBest] = useState(0);
+  useEffect(() => setBest(readBest()), []);
   const [guidanceReplay, setGuidanceReplay] = useState(0);
   const [soundOn, setSoundOn] = useState(true);
   const [musicOn, setMusicOn] = useState(true);
@@ -127,6 +134,7 @@ export function DeliveryGame() {
     const seed = Math.floor(Math.random() * 2 ** 31);
     applyCourse(generateCourse(seed));
     setCourseSeed(seed);
+    lapRef.current = 0;
     resetRuntime();
     setSessionKey((current) => current + 1);
     setStatus("playing");
@@ -253,7 +261,8 @@ export function DeliveryGame() {
       const previousLaneX = runtime.laneX;
       runtime.laneX = runtime.laneFromX + (laneTargetX(runtime.laneTarget, runtime.position) - runtime.laneFromX) * easedLaneProgress;
       // Always rolling forward; the rider only steers, jumps and ducks.
-      const desiredSpeed = DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1);
+      const challenge = modeRef.current === "challenge";
+      const desiredSpeed = DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1) * (challenge ? challengeSpeedFactor(lapRef.current) : 1);
       const rate = DELIVERY_GAME_CONFIG.accelerationPerSecond * (boosting ? 2 : 1);
 
       const slowdownActive = timestamp < runtime.slowdownUntil;
@@ -265,7 +274,7 @@ export function DeliveryGame() {
       // The bike stays put while the duck walks over (stopDwell counts that wait).
       if (runtime.stopDwell > 0) runtime.speed = 0;
       // Brake gently so the bike stops beside the house of the pending delivery.
-      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex) && runtime.speed > 0
+      if (!challenge && runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex) && runtime.speed > 0
         && !(runtime.jumpElapsed !== null && runtime.jumpPower > 1)) {
         const cap = Math.sqrt(2 * DRIVE_BY.brake * metersToStop(runtime.position, runtime.stopIndex));
         if (driveByPhase(runtime.position, runtime.stopIndex) === "warn" && runtime.speed > cap) runtime.speed = cap;
@@ -289,6 +298,16 @@ export function DeliveryGame() {
         }
       }
 
+      // shortcut: a lap restarts the same 1 km road with a new random course (and rebuilds the scene); an endless generated road replaces this later.
+      if (challenge && runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
+        lapRef.current += 1;
+        const seed = Math.floor(Math.random() * 2 ** 31);
+        applyCourse(generateCourse(seed));
+        setCourseSeed(seed);
+        Object.assign(runtime, { position: 0, detour: "main", moverStarts: {}, moverTargets: {}, collected: new Set(), cleared: new Set(), jumpElapsed: null, duckElapsed: null });
+        obstaclePassUntilRef.current.clear();
+        showToast(runtime, `${lapRef.current + 1}바퀴째 · 더 빨라져요!`, "info", 1.8);
+      }
       if (runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
         runtime.position = DELIVERY_GAME_CONFIG.totalDistance;
         runtime.speed = 0;
@@ -304,7 +323,7 @@ export function DeliveryGame() {
       const previousStopIndex = runtime.stopIndex;
       Object.assign(runtime, advanceDeliveryTargets(runtime));
       if (runtime.stopIndex !== previousStopIndex) runtime.stopDwell = 0;
-      if (runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex)) {
+      if (!challenge && runtime.stopIndex < DELIVERY_STOPS.length && !runtime.completedStops.includes(runtime.stopIndex)) {
         if (runtime.stopDwell > 0) {
           runtime.stopDwell += deltaSeconds;
           const side = DELIVERY_STOPS[runtime.stopIndex].side === "left" ? -1 : 1;
@@ -474,6 +493,14 @@ export function DeliveryGame() {
     if (status !== "playing" || paused) clearInputs();
   }, [clearInputs, paused, status]);
 
+  const challengeMeters = lapRef.current * DELIVERY_GAME_CONFIG.totalDistance + frame.position;
+  useEffect(() => {
+    if (mode !== "challenge" || status !== "playing" || heartsLeft(frame.collisionCount) > 0) return;
+    runtimeRef.current.speed = 0;
+    setBest(saveBest(lapRef.current * DELIVERY_GAME_CONFIG.totalDistance + runtimeRef.current.position));
+    setStatus("gameover");
+  }, [frame.collisionCount, mode, status]);
+
   useEffect(() => {
     // No cleanup here: quiz -> playing must keep the running tune instead of restarting it.
     if ((status === "playing" || status === "quiz") && !paused && musicOn) startMusic(); else stopMusic();
@@ -523,12 +550,24 @@ export function DeliveryGame() {
         data-delivery-pulse={frame.deliveryPulse}
         data-delivery-success-remaining={frame.deliverySuccessRemaining.toFixed(3)}
         data-course-seed={courseSeed}
+        data-mode={mode}
+        data-hearts={heartsLeft(frame.collisionCount)}
         data-detour={frame.detour}
         data-drive-by={driveByPhase(frame.position, frame.stopIndex)}
       >
         <header className={navStyles.hud} data-navigation-hud aria-label="배달 길안내">
           <div className={navStyles.card}>
           <div className={navStyles.row} data-delivery-phase={navigation.phase} data-navigation-direction={navigation.direction}>
+            {mode === "challenge" ? <>
+              <div className={navStyles.icon} aria-hidden="true"><Trophy /></div>
+              <div className={navStyles.copy}>
+                <strong>챌린지</strong>
+                <span>최고 {best.toLocaleString("ko-KR")}m</span>
+              </div>
+              <div className={navStyles.distance} title="달린 거리">
+                <strong data-challenge-meters aria-label={`${Math.floor(challengeMeters)}미터 달림`}>{Math.floor(challengeMeters).toLocaleString("ko-KR")}<small>m</small></strong>
+              </div>
+            </> : <>
             <div className={navStyles.icon} aria-hidden="true"><NavigationIcon /></div>
             <div className={navStyles.copy}>
               <strong data-navigation-instruction>{navigation.instruction}</strong>
@@ -537,6 +576,7 @@ export function DeliveryGame() {
             <div className={navStyles.distance} title="현재 경로를 따라 배달 구역까지 남은 거리">
               <strong data-navigation-remaining aria-label={`${navigation.destination} 배달 구역까지 ${navigation.remaining}미터`}>{navigation.remaining.toLocaleString("ko-KR")}<small>m</small></strong>
             </div>
+            </>}
             {canPause && (
               <button
                 className={navStyles.pause}
@@ -564,12 +604,17 @@ export function DeliveryGame() {
               </button>
             )}
           </div>
-          <div className={navStyles.progress}>
+          {mode === "challenge" ? <div className={navStyles.progress} role="img" aria-label={`하트 ${heartsLeft(frame.collisionCount)}개 남음`}>
+            <span>하트</span>
+            <div className={navStyles.segments}>
+              {Array.from({ length: CHALLENGE.hearts }, (_, index) => <i key={index} data-state={index < heartsLeft(frame.collisionCount) ? "complete" : "pending"} />)}
+            </div>
+          </div> : <div className={navStyles.progress}>
             <span>배달 {completedDeliveries} / {totalDeliveries}</span>
             <div className={navStyles.segments} role="progressbar" aria-label="배달 완료 수" aria-valuemin={0} aria-valuemax={totalDeliveries} aria-valuenow={completedDeliveries}>
               {Array.from({ length: totalDeliveries }, (_, index) => <i key={index} data-state={index < completedDeliveries ? "complete" : "pending"} />)}
             </div>
-          </div>
+          </div>}
           </div>
           <span className={styles.screenReaderOnly} role="status" aria-live="polite" aria-atomic="true">{navigation.instruction}. {navigation.destination}</span>
         </header>
@@ -609,7 +654,8 @@ export function DeliveryGame() {
           <DeliverySwipe disabled={status !== "playing" || paused} onAction={handleSwipe} />
         </div>
 
-        {status === "ready" && <DeliveryBrandStart onStart={startGame} />}
+        {status === "ready" && <DeliveryBrandStart onStart={startGame} mode={mode} onMode={setMode} best={best} />}
+        {status === "gameover" && <DeliveryChallengeOver meters={challengeMeters} best={best} onRetry={() => startGame(selectedBrand!)} /* set by the ride that just ended */ onHome={returnToStart} />}
 
         {paused && canPause && <DeliveryPauseMenu stopIndex={frame.stopIndex} soundOn={soundOn} onToggleSound={toggleSound} musicOn={musicOn} onToggleMusic={toggleMusic} onResume={() => setPaused(false)} onRestart={returnToStart} onReplay={() => { clearInputs(); setGuidanceReplay(value => value + 1); setPaused(false); }} />}
 
