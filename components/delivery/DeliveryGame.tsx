@@ -95,7 +95,6 @@ export function DeliveryGame() {
   // Challenge mode: no stops or quiz; laps of fresh random courses, faster each lap, until the hearts run out.
   const [mode, setMode] = useState<GameMode>("brand");
   const modeRef = useRef<GameMode>("brand"); modeRef.current = mode;
-  const lapRef = useRef(0);
   const [best, setBest] = useState(0);
   useEffect(() => setBest(readBest()), []);
   const [guidanceReplay, setGuidanceReplay] = useState(0);
@@ -133,11 +132,11 @@ export function DeliveryGame() {
     setSelectedBrand(brand);
     // Every ride gets its own obstacle layout (rules in delivery-random-course.ts).
     const seed = Math.floor(Math.random() * 2 ** 31);
-    applyCourse(generateCourse(seed));
+    // shortcut: challenge runs with no obstacles yet; per-chunk obstacles come in phase 4.
+    applyCourse(modeRef.current === "challenge" ? { obstacles: [], movers: [], ramps: [], boosters: [], sections: [] } : generateCourse(seed));
     // Challenge rides a seeded chunked road; brand mode keeps its fixed road.
     setRouteProvider(modeRef.current === "challenge" ? createChunkedRoute(seed) : null);
     setCourseSeed(seed);
-    lapRef.current = 0;
     resetRuntime();
     setSessionKey((current) => current + 1);
     setStatus("playing");
@@ -265,7 +264,7 @@ export function DeliveryGame() {
       runtime.laneX = runtime.laneFromX + (laneTargetX(runtime.laneTarget, runtime.position) - runtime.laneFromX) * easedLaneProgress;
       // Always rolling forward; the rider only steers, jumps and ducks.
       const challenge = modeRef.current === "challenge";
-      const desiredSpeed = DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1) * (challenge ? challengeSpeedFactor(lapRef.current) : 1);
+      const desiredSpeed = DELIVERY_GAME_CONFIG.forwardSpeedPerSecond * (boosting ? BOOST.speedFactor : 1) * (challenge ? challengeSpeedFactor(Math.floor(runtime.position / 1_000)) : 1);
       const rate = DELIVERY_GAME_CONFIG.accelerationPerSecond * (boosting ? 2 : 1);
 
       const slowdownActive = timestamp < runtime.slowdownUntil;
@@ -293,7 +292,7 @@ export function DeliveryGame() {
       // All three roads at the fork are open: the lane before the split picks left / middle / right.
       // Until the roads visibly part, a lane change still moves to the neighbouring road;
       // shifting the eased lane start keeps the bike's world position continuous.
-      if (runtime.position <= ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.switchMeters) {
+      if (!challenge && runtime.position <= ROAD_CLOSURE.junctionDistance + ROAD_CLOSURE.switchMeters) {
         const detour: DetourChoice = runtime.laneTarget < 1 ? "left" : runtime.laneTarget > 1 ? "right" : "main";
         if (detour !== runtime.detour) {
           const shift = getDetourOffset(runtime.position, runtime.detour) - getDetourOffset(runtime.position, detour);
@@ -301,18 +300,10 @@ export function DeliveryGame() {
         }
       }
 
-      // shortcut: a lap restarts the same 1 km road with a new random course (and rebuilds the scene); an endless generated road replaces this later.
-      if (challenge && runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
-        lapRef.current += 1;
-        const seed = Math.floor(Math.random() * 2 ** 31);
-        applyCourse(generateCourse(seed));
-        setRouteProvider(createChunkedRoute(seed));
-        setCourseSeed(seed);
-        Object.assign(runtime, { position: 0, detour: "main", moverStarts: {}, moverTargets: {}, collected: new Set(), cleared: new Set(), jumpElapsed: null, duckElapsed: null });
-        obstaclePassUntilRef.current.clear();
-        showToast(runtime, `${lapRef.current + 1}바퀴째 · 더 빨라져요!`, "info", 1.8);
-      }
-      if (runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
+      // The challenge road never ends; every kilometre gets a little faster.
+      const km = Math.floor(runtime.position / 1_000);
+      if (challenge && km > Math.floor(previousPosition / 1_000)) showToast(runtime, `${km}km 돌파 · 더 빨라져요!`, "info", 1.8);
+      if (!challenge && runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
         runtime.position = DELIVERY_GAME_CONFIG.totalDistance;
         runtime.speed = 0;
         runtime.jumpElapsed = null;
@@ -497,11 +488,11 @@ export function DeliveryGame() {
     if (status !== "playing" || paused) clearInputs();
   }, [clearInputs, paused, status]);
 
-  const challengeMeters = lapRef.current * DELIVERY_GAME_CONFIG.totalDistance + frame.position;
+  const challengeMeters = frame.position;
   useEffect(() => {
     if (mode !== "challenge" || status !== "playing" || heartsLeft(frame.collisionCount) > 0) return;
     runtimeRef.current.speed = 0;
-    setBest(saveBest(lapRef.current * DELIVERY_GAME_CONFIG.totalDistance + runtimeRef.current.position));
+    setBest(saveBest(runtimeRef.current.position));
     setStatus("gameover");
   }, [frame.collisionCount, mode, status]);
 
@@ -638,6 +629,7 @@ export function DeliveryGame() {
             arriving={status === "arriving"}
             sessionKey={sessionKey}
             courseSeed={courseSeed}
+            challenge={mode === "challenge"}
             laneX={frame.laneX}
             collisionId={frame.collisionId}
             detour={frame.detour}

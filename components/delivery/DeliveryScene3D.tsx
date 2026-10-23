@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG, type DeliveryBrand } from "@/data/delivery-game";
-import { DELIVERY_HOUSE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, DELIVERY_STOPS, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_HOUSE, getRouteFrame, getDrivewayFrame, getDrivewayLength, getDrivewayExitDistance, DELIVERY_STOPS, ROAD_CLOSURE, shiftRouteOrigin, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
+import { createChallengeStreet } from "./three/challenge-world";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { type TravelDirection, type TurnChoice } from "./delivery-turns";
@@ -65,7 +66,8 @@ export function DeliveryScene3D({
   jumpHeight,
   deliveryBrand,
   liveRef,
-}: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime }; /** A new random course needs its world rebuilt. */ courseSeed: number }) {
+  challenge = false,
+}: SceneState & { deliveryBrand: DeliveryBrand; liveRef?: { readonly current: LiveRuntime }; /** A new random course needs its world rebuilt. */ courseSeed: number; /** Endless chunked road instead of the 1 km town. */ challenge?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const speedLinesRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState>({ position, speed, paused, playing, arriving, sessionKey, laneX, collisionId, detour, stopIndex, stopDwell, deliveryPulse, deliverySuccessRemaining, driveway, guidanceReplay, travelDirection, turnChoice, completedStops, jumpHeight });
@@ -113,7 +115,9 @@ export function DeliveryScene3D({
     sun.position.set(-36, 65, 28);
     scene.add(hemisphere, sun);
 
-    const world = buildDeliveryWorld(scene, deliveryBrand);
+    const world = buildDeliveryWorld(scene, deliveryBrand, challenge);
+    const street = challenge ? createChallengeStreet(world.root, world.art, world.road) : null;
+    const originShift = new THREE.Vector3();
     // Upload every block once now (behind the start screen), so driving into a
     // new street section never pays a first-draw GPU upload mid-ride.
     {
@@ -213,6 +217,18 @@ export function DeliveryScene3D({
       if (current.guidanceReplay !== replaySeen) { replaySeen = current.guidanceReplay; highlightRemaining = 4; }
       if (current.playing && !current.paused) highlightRemaining = Math.max(0, highlightRemaining - deltaSeconds);
 
+      if (street) {
+        // Floating origin: once the rider is 500 m out, pull the whole world back so (0, 0) is under the bike.
+        const here = getRouteFrame(current.position).position;
+        if (here.x * here.x + here.z * here.z > 500 * 500) {
+          originShift.set(here.x, 0, here.z);
+          shiftRouteOrigin(originShift);
+          for (const child of world.root.children) child.position.sub(originShift);
+          street.shift(originShift);
+          camera.position.sub(originShift);
+        }
+        street.update(current.position);
+      }
       const mainFrame = getRouteFrame(current.position, current.detour);
       const routeFrame = current.driveway ? getDrivewayFrame(current.driveway.stopIndex, current.driveway.progress, current.driveway) : mainFrame;
       world.horizon.position.set(routeFrame.position.x, 0, routeFrame.position.z);
@@ -288,7 +304,7 @@ export function DeliveryScene3D({
         .addScaledVector(routeFrame.tangent, -DELIVERY_GAME_CONFIG.cameraFollowDistance);
       const forkApproach = THREE.MathUtils.clamp((current.position - (ROAD_CLOSURE.junctionDistance - 100)) / 55, 0, 1);
       const forkDeparture = 1 - THREE.MathUtils.clamp((current.position - (ROAD_CLOSURE.junctionDistance + 55)) / 70, 0, 1);
-      const forkView = Math.min(forkApproach, forkDeparture);
+      const forkView = challenge ? 0 : Math.min(forkApproach, forkDeparture);
       // Handover: the camera pulls back and up so bike, duck and parcel fit the frame nicely.
       const handover = current.stopDwell > 0 || (current.deliverySuccessRemaining > DELIVERY_GAME_CONFIG.deliverySuccessSeconds - DUCK.handSeconds - 1);
       deliveryCam += ((handover ? 1 : 0) - deliveryCam) * (reduceMotion ? 1 : 1 - Math.exp(-3.5 * deltaSeconds));
@@ -448,7 +464,7 @@ export function DeliveryScene3D({
       skyTexture.dispose();
       renderer.dispose();
     };
-  }, [courseSeed, deliveryBrand, liveRef]);
+  }, [challenge, courseSeed, deliveryBrand, liveRef]);
 
   return (
     <section className={styles.scene3d} data-paused={paused ? "true" : "false"} aria-label="3D 배달 동네">

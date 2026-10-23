@@ -58,11 +58,14 @@ function smoothStep(value: number) {
 
 // Challenge mode swaps in an endless chunked road; null keeps the brand road.
 let routeProvider: ChunkedRoute | null = null;
-export function setRouteProvider(provider: ChunkedRoute | null) { routeProvider = provider; }
+// Floating origin for the endless road: the scene shifts back toward (0, 0) as the rider travels.
+const routeOrigin = new THREE.Vector3();
+export function setRouteProvider(provider: ChunkedRoute | null) { routeProvider = provider; routeOrigin.set(0, 0, 0); }
+export function shiftRouteOrigin(delta: THREE.Vector3) { routeOrigin.add(delta); }
 const routeEnd = () => routeProvider ? Infinity : DELIVERY_GAME_CONFIG.totalDistance;
 
 function baseAt(distance: number) {
-  if (routeProvider) return routeProvider(distance);
+  if (routeProvider) { const base = routeProvider(distance); base.point.sub(routeOrigin); return base; }
   const t = THREE.MathUtils.clamp(distance / DELIVERY_GAME_CONFIG.totalDistance, 0, 1);
   return { point: routeCurve.getPointAt(t), tangent: routeCurve.getTangentAt(t) };
 }

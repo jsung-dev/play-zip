@@ -9,7 +9,7 @@ Object.assign(globalThis, { localStorage: { getItem: (k: string) => store.get(k)
 assert.equal(heartsLeft(0), CHALLENGE.hearts);
 assert.equal(heartsLeft(CHALLENGE.hearts + 3), 0, "Hearts never go negative");
 assert.equal(challengeSpeedFactor(0), 1);
-assert(challengeSpeedFactor(2) > challengeSpeedFactor(1), "Each lap is faster");
+assert(challengeSpeedFactor(2) > challengeSpeedFactor(1), "Each km is faster");
 assert.equal(challengeSpeedFactor(100), CHALLENGE.maxSpeedFactor, "Speed is capped");
 
 assert.equal(readBest(), 0);

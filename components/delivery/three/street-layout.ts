@@ -87,7 +87,8 @@ export function streetTransform(item: Pick<StreetBuilding, "distance" | "route" 
   const frame = getRouteFrame(item.distance, item.route), side = item.side === "left" ? -1 : 1;
   return { position: frame.position.clone().addScaledVector(frame.lateral, side * item.offset), yaw: frame.yaw - side * Math.PI / 2 };
 }
-function makeBuilding(distance: number, side: "left" | "right", index: number, extraOffset = 0): StreetBuilding {
+/** `plain`: no fork roads (the challenge road), so every lot faces the main road. */
+export function makeBuilding(distance: number, side: "left" | "right", index: number, extraOffset = 0, plain = false): StreetBuilding {
   const variant = (index + (side === "right" ? 2 : 0)) % 5;
   const type = index % 3 === 0 ? "shop" : "house";
   // Deterministic spread of height, frontage and mirroring so no two neighbours repeat.
@@ -99,7 +100,7 @@ function makeBuilding(distance: number, side: "left" | "right", index: number, e
     model: rnd(3) < STREET_BUILDINGS.subShare ? variant + 5 : variant,
   };
   const profile = buildingProfile({ variant, type, ...look }, true);
-  const route = distance > ROAD_CLOSURE.junctionDistance - 18 && distance < ROAD_CLOSURE.mergeEnd + 18 ? side : "main";
+  const route = !plain && distance > ROAD_CLOSURE.junctionDistance - 18 && distance < ROAD_CLOSURE.mergeEnd + 18 ? side : "main";
   const offset = (route === "main" ? STREET_BUILDINGS.sidewalkOuterEdge : 4.65) + profile.front + STREET_BUILDINGS.frontageSetback + extraOffset;
   const item = { id: `street-${side}-${index}`, distance, side, variant, type, route, offset, ...look } as StreetBuilding;
   const transform = streetTransform(item);

@@ -61,6 +61,8 @@ export type DeliveryWorld = {
   deliveryStops: DeliveryStopRig[];
   destination: THREE.Group;
   horizon: THREE.Group;
+  road: THREE.Material;
+  art: SceneArt;
 };
 
 const ZONE = { width: 7.8, length: 14, y: .06, color: "#2fc26e" } as const;
@@ -250,7 +252,7 @@ function roadSceneryFrame(distance: number, branch: DetourChoice = "main") {
   return frame;
 }
 
-function createRoadRibbon(width: number, material: THREE.Material, branch: DetourChoice = "main", y = 0, start: number = -45, end: number = DELIVERY_GAME_CONFIG.totalDistance, offset = 0) {
+export function createRoadRibbon(width: number, material: THREE.Material, branch: DetourChoice = "main", y = 0, start: number = -45, end: number = DELIVERY_GAME_CONFIG.totalDistance, offset = 0) {
   const segments = Math.max(12, Math.ceil((end - start) / 3));
   const positions: number[] = [], indices: number[] = [];
   for (let index = 0; index <= segments; index++) {
@@ -275,24 +277,33 @@ export function createRoad(art: SceneArt, road: THREE.Material) {
   ground.rotation.x = -Math.PI / 2; ground.position.y = -.14; group.add(ground);
   group.add(createRoadRibbon(DELIVERY_GAME_CONFIG.roadWidth, road));
   const pavedSections = [[-45, ROAD_CLOSURE.junctionDistance - 20], [ROAD_CLOSURE.mergeEnd + 18, DELIVERY_GAME_CONFIG.totalDistance]];
-  for (const [start, end] of pavedSections) {
-    for (const side of [-1, 1]) {
-      const shoulder = createRoadRibbon(3.4, restricted, "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset);
-      shoulder.name = `bus-only-shoulder:${side}:${start}`;
-      group.add(shoulder);
-      group.add(createRoadRibbon(2.3, art.material(ROAD_SURFACE.sidewalk), "main", .025, start, end, side * 8.95));
-      group.add(createRoadRibbon(.19, art.material(TOWN_COLORS.curb), "main", .052, start, end, side * 7.8));
-      group.add(createRoadRibbon(.12, art.material("#e5e4d4"), "main", .04, start, end, side * (DELIVERY_GAME_CONFIG.roadWidth / 2 - .1)));
-    }
-  }
+  for (const [start, end] of pavedSections) addRoadEdges(group, art, restricted, start, end);
   const forkStart = ROAD_CLOSURE.junctionDistance - 18, forkEnd = ROAD_CLOSURE.mergeEnd + 18;
   for (const branch of ["left", "right"] as const) {
     group.add(createRoadRibbon(9.3, art.material(ROAD_SURFACE.sidewalk), branch, -.015, forkStart, forkEnd));
     group.add(createRoadRibbon(8.2, road, branch, branch === "left" ? .027 : .029, forkStart, forkEnd));
   }
-  const dashes = new THREE.InstancedMesh(new THREE.BoxGeometry(.13, .018, 3.4), art.material("#fff8e6"), Math.ceil((DELIVERY_GAME_CONFIG.totalDistance + 40) / 10) * 2);
+  group.add(createLaneDashes(art, -32, DELIVERY_GAME_CONFIG.totalDistance));
+  return group;
+}
+
+// Bus shoulders, sidewalks, curbs and edge lines on both sides of the main road over [start, end].
+export function addRoadEdges(group: THREE.Group, art: SceneArt, restricted: THREE.Material, start: number, end: number) {
+  for (const side of [-1, 1]) {
+    const shoulder = createRoadRibbon(3.4, restricted, "main", -.015, start, end, side * DELIVERY_GAME_CONFIG.busLaneOffset);
+    shoulder.name = `bus-only-shoulder:${side}:${start}`;
+    group.add(shoulder);
+    group.add(createRoadRibbon(2.3, art.material(ROAD_SURFACE.sidewalk), "main", .025, start, end, side * 8.95));
+    group.add(createRoadRibbon(.19, art.material(TOWN_COLORS.curb), "main", .052, start, end, side * 7.8));
+    group.add(createRoadRibbon(.12, art.material("#e5e4d4"), "main", .04, start, end, side * (DELIVERY_GAME_CONFIG.roadWidth / 2 - .1)));
+  }
+}
+
+// Lane dashes every 10 m along [start, end).
+export function createLaneDashes(art: SceneArt, start: number, end: number) {
+  const dashes = new THREE.InstancedMesh(new THREE.BoxGeometry(.13, .018, 3.4), art.material("#fff8e6"), Math.ceil((end - start) / 10 + 1) * 2);
   const dummy = new THREE.Object3D(); let count = 0;
-  for (let distance = -32; distance < DELIVERY_GAME_CONFIG.totalDistance; distance += 10) {
+  for (let distance = start; distance < end; distance += 10) {
     const frame = roadSceneryFrame(distance);
     for (const offset of [-DELIVERY_GAME_CONFIG.laneSpacing / 2, DELIVERY_GAME_CONFIG.laneSpacing / 2]) {
       const point = frame.position.clone().addScaledVector(frame.lateral, offset);
@@ -300,8 +311,8 @@ export function createRoad(art: SceneArt, road: THREE.Material) {
       dashes.setMatrixAt(count++, dummy.matrix);
     }
   }
-  dashes.count = count; dashes.instanceMatrix.needsUpdate = true; group.add(dashes);
-  return group;
+  dashes.count = count; dashes.instanceMatrix.needsUpdate = true;
+  return dashes;
 }
 
 function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourChoice = "main") {
@@ -705,7 +716,8 @@ function createDestination(brand: DeliveryBrand, art: SceneArt) {
   return group;
 }
 
-export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
+/** `challenge`: skip the fixed 1 km town (road, street, ads, buses, stops, destination); challenge-world.ts streams its own. */
+export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand, challenge = false) {
   const root = new THREE.Group();
   scene.add(root);
   const worldObjects: THREE.Object3D[] = [];
@@ -718,68 +730,70 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const advertisements = resolveAdvertisements();
   const outdoorResources = createOutdoorAdResources();
   const adViews = advertisementSightlines(advertisements);
-  root.add(createRoad(art, road));
   const horizon = art.horizon();
   root.add(horizon);
+  if (!challenge) {
+    root.add(createRoad(art, road));
 
-  // Templates share geometry/materials. Batch nearby static facades by material
-  // once, then let the existing distance culling hide whole small street blocks.
-  const streetChunks = new Map<number, THREE.Group>();
-  for (const item of buildStreetLayout(advertisements)) {
-    const chunkId = Math.floor(item.distance / STREET_BUILDINGS.chunkLength);
-    let chunk = streetChunks.get(chunkId);
-    if (!chunk) {
-      chunk = markDistance(new THREE.Group(), (chunkId + .5) * STREET_BUILDINGS.chunkLength);
-      chunk.name = `commercial-street-${chunkId}`;
-      streetChunks.set(chunkId, chunk);
+    // Templates share geometry/materials. Batch nearby static facades by material
+    // once, then let the existing distance culling hide whole small street blocks.
+    const streetChunks = new Map<number, THREE.Group>();
+    for (const item of buildStreetLayout(advertisements)) {
+      const chunkId = Math.floor(item.distance / STREET_BUILDINGS.chunkLength);
+      let chunk = streetChunks.get(chunkId);
+      if (!chunk) {
+        chunk = markDistance(new THREE.Group(), (chunkId + .5) * STREET_BUILDINGS.chunkLength);
+        chunk.name = `commercial-street-${chunkId}`;
+        streetChunks.set(chunkId, chunk);
+      }
+      const model = art.building(item, true), transform = streetTransform(item);
+      model.position.copy(transform.position); model.rotation.y = transform.yaw;
+      chunk.add(model);
     }
-    const model = art.building(item, true), transform = streetTransform(item);
-    model.position.copy(transform.position); model.rotation.y = transform.yaw;
-    chunk.add(model);
-  }
-  for (const chunk of streetChunks.values()) { art.merge(chunk); root.add(chunk); worldObjects.push(chunk); }
+    for (const chunk of streetChunks.values()) { art.merge(chunk); root.add(chunk); worldObjects.push(chunk); }
 
-  for (const item of SCENERY_ITEMS) {
-    if (item.type === "house" || item.type === "shop") continue;
-    if (!sceneryHasClearance(item, advertisements)) continue;
-    let object: THREE.Object3D;
-    if (item.type === "tree") object = art.tree(item);
-    else if (item.type === "lamp") object = art.lamp(item);
-    else if (item.type === "bus-stop") object = art.shelter(item);
-    else object = art.building(item);
-    placeOnRoute(object, item.distance);
-    const bounds = new THREE.Box3().setFromObject(object);
-    if (adViews.some(({ from, to }) => {
-      const hit = new THREE.Ray(from, to.clone().sub(from).normalize()).intersectBox(bounds, new THREE.Vector3());
-      return hit && from.distanceTo(hit) < from.distanceTo(to);
-    })) continue;
-    root.add(object);
-    worldObjects.push(object);
-  }
-
-  for (const placement of advertisements) {
-    const ad = createOutdoorAdvertisement(placement, art, outdoorResources);
-    root.add(ad);
-    worldObjects.push(ad);
-  }
-  for (const placement of OVERHEAD_ADS) {
-    const overhead = createOverheadAdvertisement(placement, art, outdoorResources);
-    root.add(overhead); worldObjects.push(overhead);
-  }
-
-  for (const placement of BUS_PLACEMENTS) {
-    const bus = createBus(placement, art, outdoorResources);
-    if (placement.mode === "parked") {
-      bus.position.x = (placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset;
-      bus.position.y = 0;
-      placeOnRoute(bus, placement.distance);
-      markDistance(bus, placement.distance);
-      worldObjects.push(bus);
-    } else {
-      bus.visible = false;
-      movingBuses.push({ placement, group: bus });
+    for (const item of SCENERY_ITEMS) {
+      if (item.type === "house" || item.type === "shop") continue;
+      if (!sceneryHasClearance(item, advertisements)) continue;
+      let object: THREE.Object3D;
+      if (item.type === "tree") object = art.tree(item);
+      else if (item.type === "lamp") object = art.lamp(item);
+      else if (item.type === "bus-stop") object = art.shelter(item);
+      else object = art.building(item);
+      placeOnRoute(object, item.distance);
+      const bounds = new THREE.Box3().setFromObject(object);
+      if (adViews.some(({ from, to }) => {
+        const hit = new THREE.Ray(from, to.clone().sub(from).normalize()).intersectBox(bounds, new THREE.Vector3());
+        return hit && from.distanceTo(hit) < from.distanceTo(to);
+      })) continue;
+      root.add(object);
+      worldObjects.push(object);
     }
-    root.add(bus);
+
+    for (const placement of advertisements) {
+      const ad = createOutdoorAdvertisement(placement, art, outdoorResources);
+      root.add(ad);
+      worldObjects.push(ad);
+    }
+    for (const placement of OVERHEAD_ADS) {
+      const overhead = createOverheadAdvertisement(placement, art, outdoorResources);
+      root.add(overhead); worldObjects.push(overhead);
+    }
+
+    for (const placement of BUS_PLACEMENTS) {
+      const bus = createBus(placement, art, outdoorResources);
+      if (placement.mode === "parked") {
+        bus.position.x = (placement.side === "left" ? -1 : 1) * DELIVERY_GAME_CONFIG.busLaneOffset;
+        bus.position.y = 0;
+        placeOnRoute(bus, placement.distance);
+        markDistance(bus, placement.distance);
+        worldObjects.push(bus);
+      } else {
+        bus.visible = false;
+        movingBuses.push({ placement, group: bus });
+      }
+      root.add(bus);
+    }
   }
 
   for (const placement of OBSTACLE_PLACEMENTS) {
@@ -803,7 +817,7 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
     movers.push(mover); root.add(mover.group);
   }
 
-  for (const stop of DELIVERY_STOPS) {
+  if (!challenge) for (const stop of DELIVERY_STOPS) {
     const { house, marker, rig } = createDeliveryStop(stop, art, brand, road);
     deliveryStops.push(rig);
     root.add(house, marker);
@@ -814,9 +828,9 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand) {
   const destinationFrame = getRouteFrame(DELIVERY_GAME_CONFIG.totalDistance);
   destination.position.copy(destinationFrame.position).addScaledVector(destinationFrame.tangent, 7);
   destination.rotation.y = destinationFrame.yaw;
-  root.add(destination);
+  if (!challenge) root.add(destination);
   const bicycle = art.bicycle(brand, makeBrandPanelTexture(brand), texturedMaterial(brand.productImage, brand, brand.productName, .32 / .53));
   root.add(bicycle.group);
 
-  return { root, movers, boosters, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon } satisfies DeliveryWorld;
+  return { root, movers, boosters, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon, road, art } satisfies DeliveryWorld;
 }
