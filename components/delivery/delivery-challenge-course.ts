@@ -1,6 +1,6 @@
 import { CHUNK_METERS } from "@/data/challenge-route";
 import { OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
-import { OUTDOOR_ADS, type OutdoorAdPlacement } from "@/data/delivery-outdoor-ads";
+import { OUTDOOR_ADS, type OutdoorAdPlacement, type OverheadAdPlacement } from "@/data/delivery-outdoor-ads";
 import { SECTIONS } from "./delivery-course";
 import { MOVER_PLACEMENTS } from "./delivery-movers";
 import { BOOSTERS, GAPS, GAP_LENGTH, RAMPS, type Booster } from "./delivery-pickups";
@@ -13,10 +13,21 @@ export const CHALLENGE_COURSE = {
   rampFrom: 1_000,
   rampChance: .3,
   fullDifficultyAt: 6_000,
-  adEvery: 3, // a roadside ad every 3rd chunk (300 m)
+  adEvery: 3, // an ad every 3rd chunk (300 m), alternating an over-the-road banner and a roadside board
+  boostersPerChunk: 2, // milk boosters keep the run fast
+  boosterSpacing: 25,
 } as const;
 
-export type ChallengeChunk = Piece & { boosters: Booster[]; ads: OutdoorAdPlacement[] };
+// The street changes look every kilometre so the endless road does not read as one long loop.
+export const CHALLENGE_THEMES = [
+  { name: "도심 거리", sky: ["#2aa9f5", "#86d6fb", "#e9f8ff"], fog: "#e3f4fb", hemisphere: "#f4fbff", subShare: .08, trees: false },
+  { name: "가로수길", sky: ["#3bb6e8", "#a6e3f2", "#effbef"], fog: "#e6f6e6", hemisphere: "#f2fff2", subShare: .6, trees: true },
+  { name: "노을 거리", sky: ["#f08a5d", "#ffc59a", "#ffecd9"], fog: "#ffe3cf", hemisphere: "#ffe9d6", subShare: .3, trees: false },
+] as const;
+export type ChallengeTheme = (typeof CHALLENGE_THEMES)[number];
+export const themeAt = (distance: number): ChallengeTheme => CHALLENGE_THEMES[Math.floor(Math.max(0, distance) / 1_000) % CHALLENGE_THEMES.length];
+
+export type ChallengeChunk = Piece & { boosters: Booster[]; ads: OutdoorAdPlacement[]; overheads: OverheadAdPlacement[] };
 
 /** 0 at the start, 1 from `fullDifficultyAt` on. */
 export const difficultyAt = (distance: number) => Math.min(1, Math.max(0, distance / CHALLENGE_COURSE.fullDifficultyAt));
@@ -45,7 +56,7 @@ export function challengeChunk(index: number): ChallengeChunk {
   const s = state!;
   while (s.chunks.length <= index) {
     const i = s.chunks.length, end = (i + 1) * CHUNK_METERS, rng = s.rng;
-    const chunk: ChallengeChunk = { obstacles: [], movers: [], ramps: [], boosters: [], ads: [] };
+    const chunk: ChallengeChunk = { obstacles: [], movers: [], ramps: [], boosters: [], ads: [], overheads: [] };
     const hazards = s.hazards = s.hazards.filter(h => h > i * CHUNK_METERS - 20);
     while (s.cursor < end) {
       const at = Math.round(s.cursor), t = difficultyAt(at);
@@ -67,15 +78,18 @@ export function challengeChunk(index: number): ChallengeChunk {
       s.cursor = at + length + MIN_GAP + 12 * (1 - t) + rng() * (MAX_GAP - MIN_GAP) * (1 - t / 2);
     }
     const start = i * CHUNK_METERS;
-    if (start >= CHALLENGE_COURSE.warmUp && rng() < .5) {
-      const at = Math.round(start + 10 + rng() * 80);
+    for (let tries = 0; tries < 16 && chunk.boosters.length < CHALLENGE_COURSE.boostersPerChunk; tries++) {
+      const at = Math.round(Math.max(30, start + 5 + rng() * 90));
       const inGap = GAPS.some(g => at > g.start - 3 && at < g.end + 2);
+      const crowded = [...BOOSTERS, ...chunk.boosters].some(b => Math.abs(b.distance - at) < CHALLENGE_COURSE.boosterSpacing);
       // s.cursor is where the next piece will start.
-      if (!inGap && at <= s.cursor - 8 && hazards.every(h => Math.abs(h - at) >= 8)) chunk.boosters.push({ distance: at, lane: lane(rng) });
+      if (!inGap && !crowded && at <= s.cursor - 8 && hazards.every(h => Math.abs(h - at) >= 8)) chunk.boosters.push({ distance: at, lane: lane(rng) });
     }
+    chunk.boosters.sort((x, y) => x.distance - y.distance);
     if (i % CHALLENGE_COURSE.adEvery === CHALLENGE_COURSE.adEvery - 1) {
-      const base = MAIN_ADS[(i / CHALLENGE_COURSE.adEvery | 0) % MAIN_ADS.length];
-      chunk.ads.push({ ...base, id: `challenge-ad-${i}`, distance: start + 50, route: "main" });
+      const slot = i / CHALLENGE_COURSE.adEvery | 0;
+      if (slot % 2 === 0) chunk.overheads.push({ id: `challenge-overhead-${i}`, format: "banner", image: null, distance: start + 50, width: 12, height: 9, supportSpan: 18.5 });
+      else chunk.ads.push({ ...MAIN_ADS[(slot >> 1) % MAIN_ADS.length], id: `challenge-ad-${i}`, distance: start + 50, route: "main" });
     }
     OBSTACLE_PLACEMENTS.push(...chunk.obstacles); MOVER_PLACEMENTS.push(...chunk.movers);
     RAMPS.push(...chunk.ramps); BOOSTERS.push(...chunk.boosters);

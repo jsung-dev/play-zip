@@ -44,12 +44,31 @@ export function useDialogFocus() {
 export function DeliveryBrandStart({ onStart, mode, onMode, best }: { onStart: (id: DeliveryChoiceId) => void; mode: GameMode; onMode: (mode: GameMode) => void; best: number }) {
   const ref = useDialogFocus();
   const challenge = mode === "challenge";
+  // Two steps: pick the game first (two big cards), then the milk.
+  const [picked, setPicked] = useState(false);
+  if (!picked) return <div className={styles.overlay}>
+    <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.startCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-mode-title" data-campaign-screen="mode">
+      <DeliveryHero className={styles.hero} />
+      <h1 id="delivery-mode-title" className={styles.sparkTitle}><Spark />어떤 게임을 할까요?<Spark flip /></h1>
+      <div className={styles.modeChoices}>
+        <button type="button" className={`${styles.brandChoice} ${styles.modeChoice}`} data-mode-choice="brand" onClick={() => { onMode("brand"); setPicked(true); }}>
+          <HouseArt />
+          <strong>동네 배달</strong>
+          <span>{stopCountLabel} 배달하고<br />퀴즈 풀기</span>
+        </button>
+        <button type="button" className={`${styles.brandChoice} ${styles.modeChoice}`} data-mode-choice="challenge" onClick={() => { onMode("challenge"); setPicked(true); }}>
+          <Trophy aria-hidden="true" />
+          <strong>챌린지</strong>
+          <span>하트 {CHALLENGE.hearts}개로<br />끝없이 달리기</span>
+          <small>최고 {best.toLocaleString("ko-KR")}m</small>
+        </button>
+      </div>
+      <div className={styles.actions}><PlatformReturnLink /></div>
+      <small className={styles.notice}>테스트용 디자인 · 공식 광고가 아니며 실제 구매로 연결되지 않아요</small>
+    </article>
+  </div>;
   return <div className={styles.overlay}>
     <article ref={ref} tabIndex={-1} className={`${styles.campaignCard} ${styles.startCard}`} role="dialog" aria-modal="true" aria-labelledby="delivery-start-title" data-campaign-screen="start">
-      <div className={styles.buttonRow} role="radiogroup" aria-label="게임 모드">
-        {(["brand", "challenge"] as const).map(m => <button key={m} type="button" role="radio" aria-checked={mode === m} data-mode-choice={m}
-          className={mode === m ? styles.primaryButton : styles.secondaryButton} onClick={() => onMode(m)}>{m === "brand" ? "브랜드 모드" : "챌린지 모드"}</button>)}
-      </div>
       <DeliveryHero className={styles.hero} />
       <p className={styles.eyebrow}>{challenge ? "챌린지 · 끝없이 달리기" : "동네 배달"}</p>
       <h1 id="delivery-start-title" className={styles.sparkTitle}><Spark />우유를 골라 주세요<Spark flip /></h1>
@@ -68,7 +87,7 @@ export function DeliveryBrandStart({ onStart, mode, onMode, best }: { onStart: (
           <div><HouseArt /><dt>경유 배달</dt><dd>동네 {stopCountLabel}</dd></div>
           <div><ApartmentArt /><dt>마지막 목적지</dt><dd>{DELIVERY_GAME_CONFIG.destinationName}</dd></div>
         </dl>}
-      <div className={styles.actions}><PlatformReturnLink /></div>
+      <div className={styles.actions}><button type="button" className={styles.secondaryButton} onClick={() => setPicked(false)}><ArrowLeft aria-hidden="true" />게임 다시 고르기</button></div>
       <small className={styles.notice}>테스트용 디자인 · 공식 광고가 아니며 실제 구매로 연결되지 않아요</small>
     </article>
   </div>;

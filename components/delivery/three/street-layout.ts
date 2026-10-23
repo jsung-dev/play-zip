@@ -88,7 +88,7 @@ export function streetTransform(item: Pick<StreetBuilding, "distance" | "route" 
   return { position: frame.position.clone().addScaledVector(frame.lateral, side * item.offset), yaw: frame.yaw - side * Math.PI / 2 };
 }
 /** `plain`: no fork roads (the challenge road), so every lot faces the main road. */
-export function makeBuilding(distance: number, side: "left" | "right", index: number, extraOffset = 0, plain = false): StreetBuilding {
+export function makeBuilding(distance: number, side: "left" | "right", index: number, extraOffset = 0, plain = false, subShare: number = STREET_BUILDINGS.subShare): StreetBuilding {
   const variant = (index + (side === "right" ? 2 : 0)) % 5;
   const type = index % 3 === 0 ? "shop" : "house";
   // Deterministic spread of height, frontage and mirroring so no two neighbours repeat.
@@ -97,7 +97,7 @@ export function makeBuilding(distance: number, side: "left" | "right", index: nu
     tall: STREET_BUILDINGS.minHeight + (STREET_BUILDINGS.maxHeight - STREET_BUILDINGS.minHeight) * rnd(0),
     stretch: STREET_BUILDINGS.minStretch + (STREET_BUILDINGS.maxStretch - STREET_BUILDINGS.minStretch) * rnd(1),
     mirror: rnd(2) > .5,
-    model: rnd(3) < STREET_BUILDINGS.subShare ? variant + 5 : variant,
+    model: rnd(3) < subShare ? variant + 5 : variant,
   };
   const profile = buildingProfile({ variant, type, ...look }, true);
   const route = !plain && distance > ROAD_CLOSURE.junctionDistance - 18 && distance < ROAD_CLOSURE.mergeEnd + 18 ? side : "main";

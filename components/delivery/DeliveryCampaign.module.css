@@ -85,6 +85,12 @@
   transition: transform .12s, border-color .12s, background-color .12s;
 }
 .brandChoice:active { transform: scale(.97); }
+.modeChoices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.modeChoice { min-height: 190px; justify-content: center; padding: 18px 8px; }
+.campaignCard .modeChoice svg { width: 52px; height: 44px; color: var(--ui-green); }
+.modeChoice strong { font-size: 20px; }
+.modeChoice span { color: var(--ui-body); font-size: 14px; font-weight: 650; line-height: 1.4; }
+.modeChoice small { margin-top: 2px; padding: 3px 10px; border-radius: 99px; background: var(--ui-mint); color: var(--ui-green); font-size: 13px; font-weight: 800; }
 .brandChoice[data-wrong="true"] { border-color: var(--ui-wrong); background: #fff3f5; animation: shake .35s; }
 .choiceCheck { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #c5d6cf; border-radius: 50%; background: #fff; }
 .brandChoice[data-wrong="true"] .choiceCheck { border-color: var(--ui-wrong); background: var(--ui-wrong); color: #fff; }

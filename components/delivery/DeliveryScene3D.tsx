@@ -7,6 +7,7 @@ import { DELIVERY_HOUSE, getRouteFrame, getDrivewayFrame, getDrivewayLength, get
 import { BrandImage } from "./DeliveryArt";
 import { buildDeliveryWorld } from "./three/scene-builders";
 import { createChallengeStreet } from "./three/challenge-world";
+import { themeAt } from "./delivery-challenge-course";
 import { portraitCameraFov } from "./three/scene-layout";
 import { createRouteGuidance } from "./three/route-guidance";
 import { type TravelDirection, type TurnChoice } from "./delivery-turns";
@@ -101,9 +102,12 @@ export function DeliveryScene3D({
     const skyCanvas = document.createElement("canvas");
     skyCanvas.width = 2; skyCanvas.height = 256;
     const skyContext = skyCanvas.getContext("2d")!;
-    const skyGradient = skyContext.createLinearGradient(0, 0, 0, 256);
-    skyGradient.addColorStop(0, "#2aa9f5"); skyGradient.addColorStop(.6, "#86d6fb"); skyGradient.addColorStop(1, "#e9f8ff");
-    skyContext.fillStyle = skyGradient; skyContext.fillRect(0, 0, 2, 256);
+    const paintSky = (stops: readonly string[]) => {
+      const skyGradient = skyContext.createLinearGradient(0, 0, 0, 256);
+      skyGradient.addColorStop(0, stops[0]); skyGradient.addColorStop(.6, stops[1]); skyGradient.addColorStop(1, stops[2]);
+      skyContext.fillStyle = skyGradient; skyContext.fillRect(0, 0, 2, 256);
+    };
+    paintSky(["#2aa9f5", "#86d6fb", "#e9f8ff"]);
     const skyTexture = new THREE.CanvasTexture(skyCanvas); skyTexture.colorSpace = THREE.SRGBColorSpace;
     scene.background = skyTexture;
     scene.fog = new THREE.Fog("#e3f4fb", 95, 215);
@@ -118,6 +122,8 @@ export function DeliveryScene3D({
     const world = buildDeliveryWorld(scene, deliveryBrand, challenge);
     const street = challenge ? createChallengeStreet(world) : null;
     const originShift = new THREE.Vector3();
+    // Challenge themes change the sky, fog and fill light; colours ease over ~2 s at each km.
+    const sky = ["#2aa9f5", "#86d6fb", "#e9f8ff"].map(c => new THREE.Color(c)), skyTarget = new THREE.Color();
     // Upload every block once now (behind the start screen), so driving into a
     // new street section never pays a first-draw GPU upload mid-ride.
     {
@@ -228,6 +234,14 @@ export function DeliveryScene3D({
           camera.position.sub(originShift);
         }
         street.update(current.position);
+        const theme = themeAt(current.position), ease = 1 - Math.exp(-1.5 * deltaSeconds);
+        let changed = false;
+        sky.forEach((color, n) => { skyTarget.set(theme.sky[n]); if (Math.abs(color.r - skyTarget.r) + Math.abs(color.g - skyTarget.g) + Math.abs(color.b - skyTarget.b) > .002) { color.lerp(skyTarget, ease); changed = true; } });
+        if (changed) {
+          paintSky(sky.map(c => `#${c.getHexString()}`)); skyTexture.needsUpdate = true;
+          (scene.fog as THREE.Fog).color.lerp(skyTarget.set(theme.fog), ease);
+          hemisphere.color.lerp(skyTarget.set(theme.hemisphere), ease);
+        }
       }
       const mainFrame = getRouteFrame(current.position, current.detour);
       const routeFrame = current.driveway ? getDrivewayFrame(current.driveway.stopIndex, current.driveway.progress, current.driveway) : mainFrame;

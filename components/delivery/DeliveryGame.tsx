@@ -8,7 +8,7 @@ import { DELIVERY_STOPS, getDetourOffset, ROAD_CLOSURE, setRouteProvider, type D
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryChallengeOver, DeliveryPurchaseAd } from "./DeliveryCampaign";
 import { createChunkedRoute } from "@/data/challenge-route";
-import { startChallengeCourse } from "./delivery-challenge-course";
+import { startChallengeCourse, themeAt } from "./delivery-challenge-course";
 import { CHALLENGE, challengeSpeedFactor, heartsLeft, readBest, saveBest, type GameMode } from "./delivery-challenge";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
@@ -303,7 +303,7 @@ export function DeliveryGame() {
 
       // The challenge road never ends; every kilometre gets a little faster.
       const km = Math.floor(runtime.position / 1_000);
-      if (challenge && km > Math.floor(previousPosition / 1_000)) showToast(runtime, `${km}km 돌파 · 더 빨라져요!`, "info", 1.8);
+      if (challenge && km > Math.floor(previousPosition / 1_000)) showToast(runtime, `${km}km 돌파! ${themeAt(runtime.position).name} · 더 빨라져요`, "info", 2.2);
       if (!challenge && runtime.position >= DELIVERY_GAME_CONFIG.totalDistance) {
         runtime.position = DELIVERY_GAME_CONFIG.totalDistance;
         runtime.speed = 0;

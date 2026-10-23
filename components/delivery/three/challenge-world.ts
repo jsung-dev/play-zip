@@ -4,11 +4,11 @@ import { CHUNK_METERS } from "@/data/challenge-route";
 import { getRouteFrame } from "@/data/delivery-map";
 import { createRestrictedSurfaceMaterial } from "./road-surface";
 import { GAP_LENGTH } from "../delivery-pickups";
-import { challengeChunk } from "../delivery-challenge-course";
-import { createOutdoorAdvertisement } from "./outdoor-ad-model";
+import { challengeChunk, themeAt } from "../delivery-challenge-course";
+import { createOutdoorAdvertisement, createOverheadAdvertisement } from "./outdoor-ad-model";
 import { addRoadEdges, createGap, createLaneDashes, createMover, createObstacle, createRamp, createRoadRibbon, placeOnRoute, type DeliveryWorld } from "./scene-builders";
 import { TOWN_COLORS } from "./scene-art";
-import { STREET_BUILDINGS, adFootprint, buildingProfile, makeBuilding, pointPolygonDistance, polygonsOverlap, streetTransform, type StreetBuilding } from "./street-layout";
+import { STREET_BUILDINGS, adFootprint, advertisementSightlines, buildingBlocksRay, buildingProfile, makeBuilding, pointPolygonDistance, polygonsOverlap, streetTransform, type StreetBuilding } from "./street-layout";
 
 // Challenge mode's world: road, street, ads and obstacles built 100 m chunk by chunk ahead of the rider, disposed behind.
 export const CHALLENGE_VIEW = { behind: 40, ahead: 220 } as const;
@@ -46,21 +46,27 @@ export function createChallengeStreet(world: DeliveryWorld) {
 
     const course = challengeChunk(i);
     // This chunk's ad and the next one's (its lot may reach back here) keep buildings clear.
-    const ads = [...course.ads, ...challengeChunk(i + 1).ads].map(ad => ({ ad, footprint: adFootprint(ad) }));
+    const near = [course, challengeChunk(i + 1)];
+    const ads = near.flatMap(c => c.ads).map(ad => ({ ad, footprint: adFootprint(ad) }));
+    // Roadside boards stay in view from the approach: no building on a sightline from the rider's camera.
+    const rays = advertisementSightlines(near.flatMap(c => c.ads));
+    const overheads = near.flatMap(c => c.overheads).map(o => o.distance);
     const street = new THREE.Group();
     for (const side of ["left", "right"] as const) {
       const state = sides[side];
       for (let distance = Math.max(2, start); distance < end; distance += .25) {
-        const base = makeBuilding(distance, side, state.index, 0, true);
+        const subShare = themeAt(distance).subShare;
+        const base = makeBuilding(distance, side, state.index, 0, true, subShare);
         if (state.previous) {
           const tangent = point2(getRouteFrame(distance).tangent);
           const gap = Math.min(...base.footprint.map(p => p.dot(tangent))) - Math.max(...state.previous.footprint.map(p => p.dot(tangent)));
           if (gap < (buildingProfile(state.previous, true).halfWidth + buildingProfile(base, true).halfWidth) * STREET_BUILDINGS.gapRatio) continue;
         }
         // Inside a bend a lot steps back until it clears the road.
-        const accepted = [0, 1.5, 3, 5, 7, 9, 12].map(extra => extra === 0 ? base : makeBuilding(distance, side, state.index, extra, true))
+        const accepted = [0, 1.5, 3, 5, 7, 9, 12].map(extra => extra === 0 ? base : makeBuilding(distance, side, state.index, extra, true, subShare))
           .find(item => (!state.previous || !polygonsOverlap(item.footprint, state.previous.footprint, .35))
-            && !ads.some(a => Math.abs(a.ad.distance - distance) < 35 && polygonsOverlap(item.footprint, a.footprint, .6)) && fits(item));
+            && !ads.some(a => Math.abs(a.ad.distance - distance) < 35 && polygonsOverlap(item.footprint, a.footprint, .6))
+            && !rays.some(ray => ray.ad.distance > distance - 15 && ray.ad.distance < distance + 90 && buildingBlocksRay(item, ray.from, ray.to)) && fits(item));
         if (!accepted) continue;
         const model = art.building(accepted, true), transform = streetTransform(accepted);
         model.position.copy(transform.position); model.rotation.y = transform.yaw;
@@ -70,9 +76,19 @@ export function createChallengeStreet(world: DeliveryWorld) {
     }
     art.merge(street);
     chunk.add(street);
+    // Tree-lined theme: a tree every 14 m on both pavements, clear of banner feet and boards.
+    for (let distance = start + 7; distance < end; distance += 14) {
+      if (!themeAt(distance).trees || overheads.some(d => Math.abs(d - distance) < 6)) continue;
+      for (const side of ["left", "right"] as const) {
+        if (ads.some(a => a.ad.side === side && Math.abs(a.ad.distance - distance) < 16)) continue;
+        const tree = art.tree({ id: `challenge-tree-${side}-${distance}`, type: "tree", distance, side, variant: Math.floor(distance / 14) + (side === "left" ? 1 : 0) });
+        placeOnRoute(tree, distance); chunk.add(tree);
+      }
+    }
 
     const hazards: THREE.Object3D[] = [];
     for (const ad of course.ads) chunk.add(createOutdoorAdvertisement(ad, art, outdoorResources));
+    for (const ad of course.overheads) chunk.add(createOverheadAdvertisement(ad, art, outdoorResources));
     for (const placement of course.obstacles) {
       const obstacle = createObstacle(placement, art);
       placeOnRoute(obstacle.group, placement.distance);

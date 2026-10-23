@@ -27,7 +27,10 @@ for (let seed = 1; seed <= 200; seed++) {
     assert(hazards.every(h => Math.abs(h - b.distance) >= 8), "Boosters sit clear of hazards");
     assert(!GAPS.some(g => b.distance > g.start - 3 && b.distance < g.end + 2), "No booster over a collapsed road");
   }
-  chunks.forEach((c, i) => assert.equal(c.ads.length, i % 3 === 2 ? 1 : 0, "An ad every 300 m"));
+  chunks.forEach((c, i) => assert.equal(c.ads.length + c.overheads.length, i % 3 === 2 ? 1 : 0, "An ad every 300 m"));
+  assert(BOOSTERS.length >= 120, `Plenty of milk boosters (${BOOSTERS.length} in 10 km)`);
+  const spots = BOOSTERS.map(b => b.distance);
+  assert(spots.every((d, n) => n === 0 || d - spots[n - 1] >= 25), "Boosters stay 25 m apart");
   for (const x of [...obstacles, ...movers]) busy[Math.min(9, Math.floor(x.distance / 1_000))]++;
 }
 const first = JSON.stringify(run(77)), again = JSON.stringify(run(77));
