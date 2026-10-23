@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, GitFork, PackageCheck, Pause, Play, Trophy } from "lucide-react";
 import { DELIVERY_BRANDS, DELIVERY_GAME_CONFIG, OBSTACLE_PLACEMENTS } from "@/data/delivery-game";
 import type { DeliveryChoiceId } from "@/data/delivery-campaign";
-import { DELIVERY_STOPS, getDetourOffset, ROAD_CLOSURE, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
+import { DELIVERY_STOPS, getDetourOffset, ROAD_CLOSURE, setRouteProvider, type DetourChoice, type DrivewayState } from "@/data/delivery-map";
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryChallengeOver, DeliveryPurchaseAd } from "./DeliveryCampaign";
+import { createChunkedRoute } from "@/data/challenge-route";
 import { CHALLENGE, challengeSpeedFactor, heartsLeft, readBest, saveBest, type GameMode } from "./delivery-challenge";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
@@ -133,6 +134,8 @@ export function DeliveryGame() {
     // Every ride gets its own obstacle layout (rules in delivery-random-course.ts).
     const seed = Math.floor(Math.random() * 2 ** 31);
     applyCourse(generateCourse(seed));
+    // Challenge rides a seeded chunked road; brand mode keeps its fixed road.
+    setRouteProvider(modeRef.current === "challenge" ? createChunkedRoute(seed) : null);
     setCourseSeed(seed);
     lapRef.current = 0;
     resetRuntime();
@@ -303,6 +306,7 @@ export function DeliveryGame() {
         lapRef.current += 1;
         const seed = Math.floor(Math.random() * 2 ** 31);
         applyCourse(generateCourse(seed));
+        setRouteProvider(createChunkedRoute(seed));
         setCourseSeed(seed);
         Object.assign(runtime, { position: 0, detour: "main", moverStarts: {}, moverTargets: {}, collected: new Set(), cleared: new Set(), jumpElapsed: null, duckElapsed: null });
         obstaclePassUntilRef.current.clear();

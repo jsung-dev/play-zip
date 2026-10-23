@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { DELIVERY_GAME_CONFIG } from "./delivery-game";
+import type { ChunkedRoute } from "./challenge-route";
 
 export type DetourChoice = "main" | "left" | "right";
 
@@ -55,8 +56,15 @@ function smoothStep(value: number) {
   return t * t * (3 - 2 * t);
 }
 
-function basePointAt(distance: number) {
-  return routeCurve.getPointAt(THREE.MathUtils.clamp(distance / DELIVERY_GAME_CONFIG.totalDistance, 0, 1));
+// Challenge mode swaps in an endless chunked road; null keeps the brand road.
+let routeProvider: ChunkedRoute | null = null;
+export function setRouteProvider(provider: ChunkedRoute | null) { routeProvider = provider; }
+const routeEnd = () => routeProvider ? Infinity : DELIVERY_GAME_CONFIG.totalDistance;
+
+function baseAt(distance: number) {
+  if (routeProvider) return routeProvider(distance);
+  const t = THREE.MathUtils.clamp(distance / DELIVERY_GAME_CONFIG.totalDistance, 0, 1);
+  return { point: routeCurve.getPointAt(t), tangent: routeCurve.getTangentAt(t) };
 }
 
 function detourOffsetAt(distance: number, branch: DetourChoice) {
@@ -68,8 +76,7 @@ function detourOffsetAt(distance: number, branch: DetourChoice) {
 }
 
 function positionAt(distance: number, branch: DetourChoice) {
-  const point = basePointAt(distance);
-  const tangent = routeCurve.getTangentAt(THREE.MathUtils.clamp(distance / DELIVERY_GAME_CONFIG.totalDistance, 0, 1));
+  const { point, tangent } = baseAt(distance);
   const offset = detourOffsetAt(distance, branch);
   point.x += -tangent.z * offset;
   point.z += tangent.x * offset;
@@ -77,10 +84,10 @@ function positionAt(distance: number, branch: DetourChoice) {
 }
 
 export function getRouteFrame(distance: number, branch: DetourChoice = "main") {
-  const safeDistance = THREE.MathUtils.clamp(distance, 0, DELIVERY_GAME_CONFIG.totalDistance);
+  const safeDistance = THREE.MathUtils.clamp(distance, 0, routeEnd());
   const point = positionAt(safeDistance, branch);
   const from = positionAt(Math.max(0, safeDistance - 0.8), branch);
-  const to = positionAt(Math.min(DELIVERY_GAME_CONFIG.totalDistance, safeDistance + 0.8), branch);
+  const to = positionAt(Math.min(routeEnd(), safeDistance + 0.8), branch);
   const tangent = to.sub(from).normalize();
   const lateral = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
   return {
