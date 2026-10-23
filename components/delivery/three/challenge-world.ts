@@ -3,18 +3,24 @@ import { DELIVERY_GAME_CONFIG } from "@/data/delivery-game";
 import { CHUNK_METERS } from "@/data/challenge-route";
 import { getRouteFrame } from "@/data/delivery-map";
 import { createRestrictedSurfaceMaterial } from "./road-surface";
-import { addRoadEdges, createLaneDashes, createRoadRibbon } from "./scene-builders";
-import { TOWN_COLORS, type SceneArt } from "./scene-art";
-import { STREET_BUILDINGS, buildingProfile, makeBuilding, pointPolygonDistance, polygonsOverlap, streetTransform, type StreetBuilding } from "./street-layout";
+import { GAP_LENGTH } from "../delivery-pickups";
+import { challengeChunk } from "../delivery-challenge-course";
+import { createOutdoorAdvertisement } from "./outdoor-ad-model";
+import { addRoadEdges, createGap, createLaneDashes, createMover, createObstacle, createRamp, createRoadRibbon, placeOnRoute, type DeliveryWorld } from "./scene-builders";
+import { TOWN_COLORS } from "./scene-art";
+import { STREET_BUILDINGS, adFootprint, buildingProfile, makeBuilding, pointPolygonDistance, polygonsOverlap, streetTransform, type StreetBuilding } from "./street-layout";
 
-// Challenge mode's world: road and street built 100 m chunk by chunk ahead of the rider, disposed behind.
+// Challenge mode's world: road, street, ads and obstacles built 100 m chunk by chunk ahead of the rider, disposed behind.
 export const CHALLENGE_VIEW = { behind: 40, ahead: 220 } as const;
 
 const point2 = (v: THREE.Vector3) => new THREE.Vector2(v.x, v.z);
 
-export function createChallengeStreet(root: THREE.Group, art: SceneArt, road: THREE.Material) {
+export function createChallengeStreet(world: DeliveryWorld) {
+  const { root, art, road, outdoorResources } = world;
   const restricted = createRestrictedSurfaceMaterial(road);
   const chunks = new Map<number, THREE.Group>();
+  // Movers sit on the root (the scene positions them every frame), so they are tracked per chunk.
+  const chunkMovers = new Map<number, DeliveryWorld["movers"]>();
   // Lots run across chunk borders, so each side remembers its last building.
   const sides = { left: { index: 0, previous: undefined as StreetBuilding | undefined }, right: { index: 0, previous: undefined as StreetBuilding | undefined } };
   let built = -1;
@@ -38,6 +44,9 @@ export function createChallengeStreet(root: THREE.Group, art: SceneArt, road: TH
     addRoadEdges(chunk, art, restricted, from, end + .5);
     chunk.add(createLaneDashes(art, Math.max(-32, from), end));
 
+    const course = challengeChunk(i);
+    // This chunk's ad and the next one's (its lot may reach back here) keep buildings clear.
+    const ads = [...course.ads, ...challengeChunk(i + 1).ads].map(ad => ({ ad, footprint: adFootprint(ad) }));
     const street = new THREE.Group();
     for (const side of ["left", "right"] as const) {
       const state = sides[side];
@@ -50,7 +59,8 @@ export function createChallengeStreet(root: THREE.Group, art: SceneArt, road: TH
         }
         // Inside a bend a lot steps back until it clears the road.
         const accepted = [0, 1.5, 3, 5, 7, 9, 12].map(extra => extra === 0 ? base : makeBuilding(distance, side, state.index, extra, true))
-          .find(item => (!state.previous || !polygonsOverlap(item.footprint, state.previous.footprint, .35)) && fits(item));
+          .find(item => (!state.previous || !polygonsOverlap(item.footprint, state.previous.footprint, .35))
+            && !ads.some(a => Math.abs(a.ad.distance - distance) < 35 && polygonsOverlap(item.footprint, a.footprint, .6)) && fits(item));
         if (!accepted) continue;
         const model = art.building(accepted, true), transform = streetTransform(accepted);
         model.position.copy(transform.position); model.rotation.y = transform.yaw;
@@ -60,14 +70,39 @@ export function createChallengeStreet(root: THREE.Group, art: SceneArt, road: TH
     }
     art.merge(street);
     chunk.add(street);
+
+    const hazards: THREE.Object3D[] = [];
+    for (const ad of course.ads) chunk.add(createOutdoorAdvertisement(ad, art, outdoorResources));
+    for (const placement of course.obstacles) {
+      const obstacle = createObstacle(placement, art);
+      placeOnRoute(obstacle.group, placement.distance);
+      world.obstacles.push(obstacle); hazards.push(obstacle.group);
+    }
+    for (const ramp of course.ramps) {
+      hazards.push(createRamp(ramp, art));
+      hazards.push(...createGap({ start: ramp.distance + 1, end: ramp.distance + 1 + GAP_LENGTH }, art));
+    }
+    for (const object of hazards) { chunk.add(object); world.worldObjects.push(object); }
+    chunk.userData.hazards = hazards;
+    const movers = course.movers.map(placement => createMover(placement, art, outdoorResources));
+    for (const mover of movers) { mover.group.visible = false; root.add(mover.group); world.movers.push(mover); }
+    chunkMovers.set(i, movers);
     root.add(chunk);
     chunks.set(i, chunk);
   }
 
-  // Merged and ribbon geometry belongs to its chunk alone; shared materials stay.
-  const dispose = (chunk: THREE.Group) => {
+  // Geometry is freed with its chunk (a cached template one just re-uploads if used again); shared materials stay.
+  const freeGeometry = (object: THREE.Object3D) => object.traverse(child => { if (child instanceof THREE.Mesh) child.geometry.dispose(); });
+  const dispose = (i: number, chunk: THREE.Group) => {
     chunk.removeFromParent();
-    for (const holder of [chunk, ...chunk.children]) for (const child of holder.children) if (child instanceof THREE.Mesh) child.geometry.dispose();
+    freeGeometry(chunk);
+    const hazards = new Set<THREE.Object3D>(chunk.userData.hazards);
+    world.worldObjects.splice(0, Infinity, ...world.worldObjects.filter(o => !hazards.has(o)));
+    world.obstacles.splice(0, Infinity, ...world.obstacles.filter(o => !hazards.has(o.group)));
+    const movers = new Set(chunkMovers.get(i));
+    for (const mover of movers) { mover.group.removeFromParent(); freeGeometry(mover.group); }
+    world.movers.splice(0, Infinity, ...world.movers.filter(m => !movers.has(m)));
+    chunkMovers.delete(i);
   };
 
   return {
@@ -76,12 +111,12 @@ export function createChallengeStreet(root: THREE.Group, art: SceneArt, road: TH
       const last = Math.floor((position + CHALLENGE_VIEW.ahead) / CHUNK_METERS);
       while (built < last) build(++built);
       const first = Math.floor((position - CHALLENGE_VIEW.behind) / CHUNK_METERS);
-      for (const [i, chunk] of chunks) if (i < first) { dispose(chunk); chunks.delete(i); }
+      for (const [i, chunk] of chunks) if (i < first) { dispose(i, chunk); chunks.delete(i); }
     },
     /** Floating-origin shift: the caller moves the chunks (root children); this moves the remembered lots. */
     shift(delta: THREE.Vector3) {
       for (const state of Object.values(sides)) state.previous?.footprint.forEach(p => p.set(p.x - delta.x, p.y - delta.z));
     },
-    dispose() { for (const chunk of chunks.values()) dispose(chunk); chunks.clear(); },
+    dispose() { for (const [i, chunk] of chunks) dispose(i, chunk); chunks.clear(); },
   };
 }

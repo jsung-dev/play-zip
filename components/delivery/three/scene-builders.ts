@@ -63,6 +63,7 @@ export type DeliveryWorld = {
   horizon: THREE.Group;
   road: THREE.Material;
   art: SceneArt;
+  outdoorResources: OutdoorAdResources;
 };
 
 const ZONE = { width: 7.8, length: 14, y: .06, color: "#2fc26e" } as const;
@@ -315,7 +316,7 @@ export function createLaneDashes(art: SceneArt, start: number, end: number) {
   return dashes;
 }
 
-function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourChoice = "main") {
+export function placeOnRoute(object: THREE.Object3D, distance: number, branch: DetourChoice = "main") {
   const frame = getRouteFrame(distance, branch);
   const lateralOffset = object.position.x;
   object.position.set(frame.position.x + frame.lateral.x * lateralOffset, object.position.y, frame.position.z + frame.lateral.z * lateralOffset);
@@ -381,7 +382,7 @@ function createBus(placement: BusPlacement, art: SceneArt, resources: OutdoorAdR
   return group;
 }
 
-function createObstacle(placement: ObstaclePlacement, art: SceneArt): ObstacleRig {
+export function createObstacle(placement: ObstaclePlacement, art: SceneArt): ObstacleRig {
   const group = markDistance(new THREE.Group(), placement.distance);
   group.position.x = obstacleCenterX(placement);
   group.position.z = -placement.distance;
@@ -431,7 +432,7 @@ function createObstacle(placement: ObstaclePlacement, art: SceneArt): ObstacleRi
 
 // Original, unbranded critters/props. Groups face the route; the scene moves
 // them and calls animate(t, moving, seconds) every frame.
-function createMover(placement: MoverPlacement, art: SceneArt, resources: OutdoorAdResources): MoverRig {
+export function createMover(placement: MoverPlacement, art: SceneArt, resources: OutdoorAdResources): MoverRig {
   if (placement.kind === "bus") {
     const group = createBus({ id: `mover-${placement.id}`, distance: placement.distance, brandId: "green", mode: "moving", side: "right", speed: 8 }, art, resources);
     // The GLB's left indicator blinks while the bus pulls out.
@@ -500,8 +501,9 @@ function createPigeons(placement: MoverPlacement, art: SceneArt): MoverRig {
 }
 
 // Milk boosters: a glowing milk bottle with a halo ring, bobbing and spinning.
+// Bottles are made as BOOSTERS grows (the challenge course appends as it goes); index n matches `collected`.
 function createBoosterField(root: THREE.Group, art: SceneArt): BoosterField {
-  const bottles = BOOSTERS.map(booster => {
+  const make = (booster: (typeof BOOSTERS)[number]) => {
     const group = new THREE.Group();
     const bottle = art.glbAsset("prop_booster_milk_bottle"); group.add(bottle); // children[0]: bobs in update()
     const halo = new THREE.Mesh(new THREE.TorusGeometry(.75, .05, 8, 32), new THREE.MeshBasicMaterial({ color: "#9fdcff", transparent: true, opacity: .7, toneMapped: false }));
@@ -511,8 +513,10 @@ function createBoosterField(root: THREE.Group, art: SceneArt): BoosterField {
     const home = frame.position.addScaledVector(frame.lateral, (booster.lane - 1) * DELIVERY_GAME_CONFIG.laneSpacing);
     group.position.copy(home); root.add(group);
     return { group, bottle, halo, booster };
-  });
+  };
+  const bottles = BOOSTERS.map(make);
   return { update: (position, collected, seconds) => {
+    while (bottles.length < BOOSTERS.length) bottles.push(make(BOOSTERS[bottles.length]));
     bottles.forEach(({ group, halo, booster }, n) => {
       const relative = booster.distance - position;
       group.visible = !collected?.has(n) && relative > -15 && relative < 150;
@@ -526,7 +530,7 @@ function createBoosterField(root: THREE.Group, art: SceneArt): BoosterField {
 
 // Collapsed road: a dark pit across every lane and both kerbs, ragged asphalt
 // at the edges, and a warning sign ahead pointing riders to the centre ramp.
-function createGap(gap: Gap, art: SceneArt) {
+export function createGap(gap: Gap, art: SceneArt) {
   const objects: THREE.Object3D[] = [];
   const width = DELIVERY_GAME_CONFIG.roadWidth + 3.6, length = gap.end - gap.start, slices = Math.ceil(length / 2.5);
   for (let n = 0; n < slices; n++) {
@@ -559,7 +563,7 @@ function createGap(gap: Gap, art: SceneArt) {
 }
 
 // Orange launch ramp with white chevrons and corner flags; its high end is the launch point.
-function createRamp(ramp: Ramp, art: SceneArt) {
+export function createRamp(ramp: Ramp, art: SceneArt) {
   const group = markDistance(new THREE.Group(), ramp.distance), length = 3.2;
   // GLB wedge (3.2 m long, .8 m rise) climbs toward -Z, the launch end.
   group.add(art.glbAsset("prop_ramp"));
@@ -832,5 +836,5 @@ export function buildDeliveryWorld(scene: THREE.Scene, brand: DeliveryBrand, cha
   const bicycle = art.bicycle(brand, makeBrandPanelTexture(brand), texturedMaterial(brand.productImage, brand, brand.productName, .32 / .53));
   root.add(bicycle.group);
 
-  return { root, movers, boosters, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon, road, art } satisfies DeliveryWorld;
+  return { root, movers, boosters, bicycle, worldObjects, movingBuses, obstacles, deliveryStops, destination, horizon, road, art, outdoorResources } satisfies DeliveryWorld;
 }

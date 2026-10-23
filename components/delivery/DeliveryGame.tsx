@@ -8,6 +8,7 @@ import { DELIVERY_STOPS, getDetourOffset, ROAD_CLOSURE, setRouteProvider, type D
 import { DeliveryScene3D } from "./DeliveryScene3D";
 import { DeliveryBrandQuiz, DeliveryBrandStart, DeliveryChallengeOver, DeliveryPurchaseAd } from "./DeliveryCampaign";
 import { createChunkedRoute } from "@/data/challenge-route";
+import { startChallengeCourse } from "./delivery-challenge-course";
 import { CHALLENGE, challengeSpeedFactor, heartsLeft, readBest, saveBest, type GameMode } from "./delivery-challenge";
 import { DeliveryPauseMenu } from "./DeliveryPauseMenu";
 import { getDeliveryNavigation } from "./delivery-navigation";
@@ -132,8 +133,8 @@ export function DeliveryGame() {
     setSelectedBrand(brand);
     // Every ride gets its own obstacle layout (rules in delivery-random-course.ts).
     const seed = Math.floor(Math.random() * 2 ** 31);
-    // shortcut: challenge runs with no obstacles yet; per-chunk obstacles come in phase 4.
-    applyCourse(modeRef.current === "challenge" ? { obstacles: [], movers: [], ramps: [], boosters: [], sections: [] } : generateCourse(seed));
+    // Challenge obstacles are made chunk by chunk as the road is built (delivery-challenge-course.ts).
+    if (modeRef.current === "challenge") startChallengeCourse(seed); else applyCourse(generateCourse(seed));
     // Challenge rides a seeded chunked road; brand mode keeps its fixed road.
     setRouteProvider(modeRef.current === "challenge" ? createChunkedRoute(seed) : null);
     setCourseSeed(seed);

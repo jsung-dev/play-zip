@@ -116,7 +116,7 @@ export function DeliveryScene3D({
     scene.add(hemisphere, sun);
 
     const world = buildDeliveryWorld(scene, deliveryBrand, challenge);
-    const street = challenge ? createChallengeStreet(world.root, world.art, world.road) : null;
+    const street = challenge ? createChallengeStreet(world) : null;
     const originShift = new THREE.Vector3();
     // Upload every block once now (behind the start screen), so driving into a
     // new street section never pays a first-draw GPU upload mid-ride.
@@ -354,7 +354,7 @@ export function DeliveryScene3D({
         const relative = pose.distance - current.position;
         mover.group.visible = !pose.done && relative > -38 && relative < 180;
         if (!mover.group.visible) continue;
-        const frame = getRouteFrame(Math.min(DELIVERY_GAME_CONFIG.totalDistance, Math.max(0, pose.distance)), mover.placement.branch ?? "main");
+        const frame = getRouteFrame(Math.max(0, pose.distance), mover.placement.branch ?? "main");
         const at = frame.position.addScaledVector(frame.lateral, pose.x);
         mover.group.position.set(at.x, 0, at.z);
         mover.group.rotation.y = frame.yaw;

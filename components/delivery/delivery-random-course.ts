@@ -13,9 +13,9 @@ import { BOOSTERS, GAPS, GAP_LENGTH, RAMPS, type Booster, type Ramp } from "./de
 
 export type Lane = 0 | 1 | 2;
 export type Course = { seed: number; obstacles: ObstaclePlacement[]; movers: MoverPlacement[]; ramps: Ramp[]; boosters: Booster[]; sections: CourseSection[]; cost: number };
-type Piece = { obstacles: ObstaclePlacement[]; movers: MoverPlacement[]; ramps: Ramp[]; name?: string };
+export type Piece = { obstacles: ObstaclePlacement[]; movers: MoverPlacement[]; ramps: Ramp[]; name?: string };
 // weight: how often a filler is picked (easy one-step patterns less often).
-type Pattern = { key: string; cost: number; length: number; weight?: number; build: (at: number, rng: () => number) => Piece };
+export type Pattern = { key: string; cost: number; length: number; weight?: number; build: (at: number, rng: () => number) => Piece };
 
 export const MIN_GAP = 20;
 // Open main-road stretches [from, to]; the last one only takes moving hazards (no fixed obstacles near the finish).
@@ -27,7 +27,7 @@ export const STRETCHES = [
   { from: 960, to: 975, moversOnly: true },
 ] as const;
 // Ramp spots: each one 40 m+ past its alley exit (stop + 38 m); nothing for 32 m after (longest flight 22.4 m + 8 m).
-const LANDING = 32;
+export const LANDING = 32;
 const RAMP_WINDOWS = [[264, 300], [894, 905]] as const;
 // Difficulty the random main-road patterns add up to (ramps count 2 each); a ride lands within +-6.
 export const TARGET_COST = 33;
@@ -38,11 +38,11 @@ export function rng32(seed: number) {
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 const pick = <T,>(rng: () => number, items: readonly T[]) => items[Math.floor(rng() * items.length)];
-const pickWeighted = (rng: () => number, items: readonly Pattern[]) => {
+export const pickWeighted = (rng: () => number, items: readonly Pattern[]) => {
   let r = rng() * items.reduce((sum, p) => sum + (p.weight ?? 1), 0);
   return items.find(p => (r -= p.weight ?? 1) < 0) ?? items[items.length - 1];
 };
-const lane = (rng: () => number) => pick(rng, [0, 1, 2] as const);
+export const lane = (rng: () => number) => pick(rng, [0, 1, 2] as const);
 const others = (open: Lane) => ([0, 1, 2] as const).filter(l => l !== open);
 const o = (id: string, distance: number, kind: ObstaclePlacement["kind"], laneIndex: Lane, span?: 1 | 2 | 3, branch?: "left" | "right"): ObstaclePlacement =>
   ({ id, distance, lane: laneIndex, kind, ...(span ? { span } : {}), ...(branch ? { branch } : {}) });
@@ -78,7 +78,7 @@ export const PATTERNS: Pattern[] = [
   { key: "rhythm", cost: 4, length: 24, build: (d, r) => piece({ obstacles: [o(`rhythm-plank-${d}`, d, "plank", 0, 3), o(`rhythm-crates-${d + 12}`, d + 12, "crates", pick(r, [0, 1] as const), 2), ...funnel("rhythm", d + 24, lane(r))], name: "점프 리듬" }) },
 ];
 // A ramp over a collapsed road: cones on the other two lanes funnel the rider onto the ramp lane.
-const rampPattern = (d: number, rampLane: Lane): Piece => piece({ obstacles: funnel("ramp", d, rampLane), ramps: [{ distance: d + 11, lane: rampLane }], name: "무너진 도로 · 점프대로!" });
+export const rampPattern = (d: number, rampLane: Lane): Piece => piece({ obstacles: funnel("ramp", d, rampLane), ramps: [{ distance: d + 11, lane: rampLane }], name: "무너진 도로 · 점프대로!" });
 const byKey = (key: string) => PATTERNS.find(p => p.key === key)!;
 
 // The three detour roads (straight part 570-635 m for fixed obstacles; detour ramps at 590 m, landing clear to 621 m).
@@ -118,7 +118,7 @@ type Slot = { key: string; length: number; cost: number; build: (at: number) => 
 // slackAtEnd: unused room goes after the last piece (segments that start at a ramp landing), else before the first.
 type Segment = { from: number; to: number; moversOnly?: boolean; slackAtEnd?: boolean };
 // Patterns whose main hazard moves; every ride gets at least MIN_MOVERS different ones.
-const MOVING = ["slider", "boom", "melon", "cat", "ducks", "geysers", "gates"];
+export const MOVING = ["slider", "boom", "melon", "cat", "ducks", "geysers", "gates"];
 export const MAX_GAP = 30, MIN_MOVERS = 5;
 const asSlot = (p: Pattern, rng: () => number): Slot => ({ key: p.key, length: p.length, cost: p.cost, build: at => p.build(at, rng) });
 const span = (slots: Slot[]) => slots.reduce((sum, s) => sum + s.length, 0) + MIN_GAP * Math.max(0, slots.length - 1);
