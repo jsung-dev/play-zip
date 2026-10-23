@@ -15,7 +15,8 @@ export const CHALLENGE_COURSE = {
   rampSpacing: 200, // never two ramps close together
   rampGuardFrom: 3_000, // before this the ramp stands alone; after it, crates and barriers sit in the other lanes
   fullDifficultyAt: 6_000,
-  adEvery: 3, // an ad every 3rd chunk (300 m), alternating an over-the-road banner and a roadside board
+  // Ads stay in view: a roadside board every chunk (sides alternate), an over-the-road banner every 2nd chunk.
+  overheadEvery: 2,
   boostersPerChunk: 2, // milk boosters keep the run fast
   boosterSpacing: 25,
 } as const;
@@ -98,11 +99,8 @@ export function challengeChunk(index: number): ChallengeChunk {
       if (!inGap && !crowded && at <= s.cursor - 8 && hazards.every(h => Math.abs(h - at) >= 8)) chunk.boosters.push({ distance: at, lane: lane(rng) });
     }
     chunk.boosters.sort((x, y) => x.distance - y.distance);
-    if (i % CHALLENGE_COURSE.adEvery === CHALLENGE_COURSE.adEvery - 1) {
-      const slot = i / CHALLENGE_COURSE.adEvery | 0;
-      if (slot % 2 === 0) chunk.overheads.push({ id: `challenge-overhead-${i}`, format: "banner", image: null, distance: start + 50, width: 12, height: 9, supportSpan: 18.5 });
-      else chunk.ads.push({ ...MAIN_ADS[(slot >> 1) % MAIN_ADS.length], id: `challenge-ad-${i}`, distance: start + 50, route: "main" });
-    }
+    if (i % CHALLENGE_COURSE.overheadEvery === 0) chunk.overheads.push({ id: `challenge-overhead-${i}`, format: "banner", image: null, distance: start + 20, width: 12, height: 9, supportSpan: 18.5 });
+    chunk.ads.push({ ...MAIN_ADS[i % MAIN_ADS.length], id: `challenge-ad-${i}`, distance: start + 65, route: "main", side: i % 2 ? "left" : "right" });
     OBSTACLE_PLACEMENTS.push(...chunk.obstacles); MOVER_PLACEMENTS.push(...chunk.movers);
     RAMPS.push(...chunk.ramps); BOOSTERS.push(...chunk.boosters);
     s.chunks.push(chunk);

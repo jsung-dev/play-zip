@@ -34,7 +34,10 @@ for (let seed = 1; seed <= 200; seed++) {
     assert(hazards.every(h => Math.abs(h - b.distance) >= 8), "Boosters sit clear of hazards");
     assert(!GAPS.some(g => b.distance > g.start - 3 && b.distance < g.end + 2), "No booster over a collapsed road");
   }
-  chunks.forEach((c, i) => assert.equal(c.ads.length + c.overheads.length, i % 3 === 2 ? 1 : 0, "An ad every 300 m"));
+  chunks.forEach((c, i) => {
+    assert.equal(c.ads.length, 1, "A roadside board every 100 m");
+    assert.equal(c.overheads.length, i % 2 === 0 ? 1 : 0, "A road banner every 200 m");
+  });
   assert(BOOSTERS.length >= 120, `Plenty of milk boosters (${BOOSTERS.length} in 10 km)`);
   const spots = BOOSTERS.map(b => b.distance);
   assert(spots.every((d, n) => n === 0 || d - spots[n - 1] >= 25), "Boosters stay 25 m apart");
