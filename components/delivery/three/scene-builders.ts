@@ -530,7 +530,7 @@ function createBoosterField(root: THREE.Group, art: SceneArt): BoosterField {
 
 // Collapsed road: a dark pit across every lane and both kerbs, ragged asphalt
 // at the edges, and a warning sign ahead pointing riders to the centre ramp.
-export function createGap(gap: Gap, art: SceneArt) {
+export function createGap(gap: Gap, art: SceneArt, hint = "가운데 점프대로 건너세요") {
   const objects: THREE.Object3D[] = [];
   const width = DELIVERY_GAME_CONFIG.roadWidth + 3.6, length = gap.end - gap.start, slices = Math.ceil(length / 2.5);
   for (let n = 0; n < slices; n++) {
@@ -553,7 +553,7 @@ export function createGap(gap: Gap, art: SceneArt) {
   }
   const sign = markDistance(new THREE.Group(), gap.start - 32);
   const board = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.7), new THREE.MeshBasicMaterial({
-    map: makeTextTexture({ title: "도로 붕괴!", subtitle: "가운데 점프대로 건너세요", background: "#ffe08a", foreground: "#7a3d1c", width: 640, height: 300 }), toneMapped: false,
+    map: makeTextTexture({ title: "도로 붕괴!", subtitle: hint, background: "#ffe08a", foreground: "#7a3d1c", width: 640, height: 300 }), toneMapped: false,
   }));
   board.scale.set(3.5 / 3.6, 1.6 / 1.7, 1); board.position.set(0, 1.83, .12); sign.add(board); // on the GLB's blank front panel
   sign.add(art.glbAsset("prop_road_closed_sign"));

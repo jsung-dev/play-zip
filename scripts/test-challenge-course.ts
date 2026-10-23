@@ -23,6 +23,13 @@ for (let seed = 1; seed <= 200; seed++) {
   assert(ramps.every(r => r.distance >= CHALLENGE_COURSE.rampFrom), "No ramps before 1 km");
   assert(![...obstacles, ...movers].some(x => x.distance < 1_000 && HARD.test(x.id)), "Only singles in the first km");
   for (const r of ramps) assert(!hazards.some(h => h > r.distance && h < r.distance + 32), "Landing after a ramp stays clear");
+  ramps.forEach((r, n) => assert(n === 0 || r.distance - ramps[n - 1].distance >= CHALLENGE_COURSE.rampSpacing, "Ramps stay 200 m apart"));
+  for (const r of ramps) {
+    const guards = obstacles.filter(o => o.distance >= r.distance - 11 && o.distance < r.distance);
+    assert(guards.every(o => o.kind !== "cones"), "No cone funnel points at the ramp");
+    if (r.distance - 11 < CHALLENGE_COURSE.rampGuardFrom) assert.equal(guards.length, 0, "Before 3 km the ramp stands alone");
+    else assert.deepEqual(guards.map(o => o.lane).sort(), ([0, 1, 2] as const).filter(l => l !== r.lane), "After 3 km the other lanes are guarded");
+  }
   for (const b of BOOSTERS) {
     assert(hazards.every(h => Math.abs(h - b.distance) >= 8), "Boosters sit clear of hazards");
     assert(!GAPS.some(g => b.distance > g.start - 3 && b.distance < g.end + 2), "No booster over a collapsed road");

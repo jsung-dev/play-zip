@@ -4,7 +4,7 @@ import { OUTDOOR_ADS, type OutdoorAdPlacement, type OverheadAdPlacement } from "
 import { SECTIONS } from "./delivery-course";
 import { MOVER_PLACEMENTS } from "./delivery-movers";
 import { BOOSTERS, GAPS, GAP_LENGTH, RAMPS, type Booster } from "./delivery-pickups";
-import { LANDING, MAX_GAP, MIN_GAP, PATTERNS, applyCourse, lane, pickWeighted, rampPattern, rng32, type Piece } from "./delivery-random-course";
+import { LANDING, MAX_GAP, MIN_GAP, PATTERNS, applyCourse, lane, pickWeighted, rng32, type Lane, type Piece } from "./delivery-random-course";
 
 // Challenge obstacles, made one 100 m chunk at a time from the random-course patterns.
 // Difficulty grows with distance: harder patterns, tighter spacing, ramps from 1 km.
@@ -12,6 +12,8 @@ export const CHALLENGE_COURSE = {
   warmUp: 80, // nothing before this
   rampFrom: 1_000,
   rampChance: .3,
+  rampSpacing: 200, // never two ramps close together
+  rampGuardFrom: 3_000, // before this the ramp stands alone; after it, crates and barriers sit in the other lanes
   fullDifficultyAt: 6_000,
   adEvery: 3, // an ad every 3rd chunk (300 m), alternating an over-the-road banner and a roadside board
   boostersPerChunk: 2, // milk boosters keep the run fast
@@ -37,12 +39,22 @@ export const maxCostAt = (distance: number) => distance < 1_000 ? 2 : distance <
 const MAIN_ADS = OUTDOOR_ADS.filter(ad => ad.route === "main");
 
 // hazards: recent hazard spots (pieces reach across chunk borders), for booster spacing.
-let state: { rng: () => number; cursor: number; chunks: ChallengeChunk[]; hazards: number[] } | null = null;
+let state: { rng: () => number; cursor: number; chunks: ChallengeChunk[]; hazards: number[]; lastRamp: number } | null = null;
+
+// A ramp over a collapsed road. No cone funnel pointing at it: early on the rider spots the ramp alone,
+// later the other two lanes hold mixed, staggered crates/barriers to dodge on the way.
+function challengeRamp(at: number, rampLane: Lane, rng: () => number): Piece {
+  const guards = at < CHALLENGE_COURSE.rampGuardFrom ? [] : ([0, 1, 2] as const).filter(l => l !== rampLane).map((l, n) => {
+    const kind = rng() < .5 ? "crates" as const : "barrier" as const, d = at + (n === 0 ? 0 : 5);
+    return { id: `ramp-${kind}-${d}-${l}`, distance: d, lane: l, kind };
+  });
+  return { obstacles: guards, movers: [], ramps: [{ distance: at + 11, lane: rampLane }], name: "무너진 도로 · 점프대를 찾아요!" };
+}
 
 /** Starts a fresh endless course and clears the live course arrays. */
 export function startChallengeCourse(seed: number) {
   applyCourse({ obstacles: [], movers: [], ramps: [], boosters: [], sections: [] });
-  state = { rng: rng32(seed), cursor: CHALLENGE_COURSE.warmUp, chunks: [], hazards: [] };
+  state = { rng: rng32(seed), cursor: CHALLENGE_COURSE.warmUp, chunks: [], hazards: [], lastRamp: -Infinity };
 }
 
 /**
@@ -61,8 +73,8 @@ export function challengeChunk(index: number): ChallengeChunk {
     while (s.cursor < end) {
       const at = Math.round(s.cursor), t = difficultyAt(at);
       let piece: Piece, length: number;
-      if (at >= CHALLENGE_COURSE.rampFrom && rng() < CHALLENGE_COURSE.rampChance) {
-        piece = rampPattern(at, lane(rng)); length = 11 + LANDING;
+      if (at >= CHALLENGE_COURSE.rampFrom && at - s.lastRamp >= CHALLENGE_COURSE.rampSpacing && rng() < CHALLENGE_COURSE.rampChance) {
+        piece = challengeRamp(at, lane(rng), rng); length = 11 + LANDING; s.lastRamp = at;
         GAPS.push({ start: at + 12, end: at + 12 + GAP_LENGTH });
         hazards.push(at + 12, at + 12 + GAP_LENGTH);
       } else {

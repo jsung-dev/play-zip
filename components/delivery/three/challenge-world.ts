@@ -96,7 +96,7 @@ export function createChallengeStreet(world: DeliveryWorld) {
     }
     for (const ramp of course.ramps) {
       hazards.push(createRamp(ramp, art));
-      hazards.push(...createGap({ start: ramp.distance + 1, end: ramp.distance + 1 + GAP_LENGTH }, art));
+      hazards.push(...createGap({ start: ramp.distance + 1, end: ramp.distance + 1 + GAP_LENGTH }, art, "점프대를 찾아 건너세요"));
     }
     for (const object of hazards) { chunk.add(object); world.worldObjects.push(object); }
     chunk.userData.hazards = hazards;

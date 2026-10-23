@@ -1,7 +1,7 @@
 // Challenge mode: no deliveries or quiz, just ride as far as possible. Each bump or fall costs a heart.
 export type GameMode = "brand" | "challenge";
 export const CHALLENGE = {
-  hearts: 5,
+  hearts: 4,
   // Each kilometre is a little faster (x1.06 per km, capped at x1.5).
   kmSpeedStep: .06,
   maxSpeedFactor: 1.5,
