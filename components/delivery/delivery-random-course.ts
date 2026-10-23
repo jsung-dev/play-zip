@@ -27,8 +27,8 @@ export const STRETCHES = [
 // Ramp spots: each one 40 m+ past its alley exit (stop + 38 m); nothing for 32 m after (longest flight 22.4 m + 8 m).
 const LANDING = 32;
 const RAMP_WINDOWS = [[264, 300], [894, 905]] as const;
-// Difficulty the random patterns add up to (ramps count 2 each); a ride lands within +-4.
-export const TARGET_COST = 23;
+// Difficulty the random patterns add up to (ramps count 2 each); a ride lands within +-6.
+export const TARGET_COST = 27;
 
 // Seeded so a ride can be replayed and tests can sweep thousands of rides.
 export function rng32(seed: number) {
@@ -71,37 +71,37 @@ const rampPattern = (d: number, rampLane: Lane): Piece => piece({
 });
 const byKey = (key: string) => PATTERNS.find(p => p.key === key)!;
 
-type Slot = { length: number; cost: number; build: (at: number) => Piece };
-type Segment = { from: number; to: number; budget: number; moversOnly?: boolean };
-const MOVING = new Set(["slider", "boom", "melon", "cat", "ducks", "geysers", "gates"]);
-function fill(stretch: Segment, required: Slot[], rng: () => number): { pieces: Piece[]; cost: number } | null {
-  const room = stretch.to - stretch.from;
+type Slot = { key: string; length: number; cost: number; build: (at: number) => Piece };
+// slackAtEnd: unused room goes after the last piece (segments that start at a ramp landing), else before the first.
+type Segment = { from: number; to: number; moversOnly?: boolean; slackAtEnd?: boolean };
+// Patterns whose main hazard moves; every ride gets at least MIN_MOVERS different ones.
+const MOVING = ["slider", "boom", "melon", "cat", "ducks", "geysers", "gates", "bus"];
+export const MAX_GAP = 30, MIN_MOVERS = 5;
+const asSlot = (p: Pattern, rng: () => number): Slot => ({ key: p.key, length: p.length, cost: p.cost, build: at => p.build(at, rng) });
+const span = (slots: Slot[]) => slots.reduce((sum, s) => sum + s.length, 0) + MIN_GAP * Math.max(0, slots.length - 1);
+// Packs a segment: required patterns plus fillers (patterns not used yet in this ride first) until no
+// more fit at MIN_GAP, then spaces them MIN_GAP..MAX_GAP apart.
+function fill(segment: Segment, required: Slot[], rng: () => number, used: Set<string>): { pieces: Piece[]; cost: number } | null {
+  const room = segment.to - segment.from;
   if (room < 0) return required.length ? null : { pieces: [], cost: 0 };
-  const choices = PATTERNS.filter(p => !stretch.moversOnly || MOVING.has(p.key));
-  for (let attempt = 0; attempt < 200; attempt++) {
+  const choices = PATTERNS.filter(p => (!segment.moversOnly || (MOVING.includes(p.key) && p.key !== "bus")) && p.key !== "jumpslam" && p.key !== "duck");
+  for (let attempt = 0; attempt < 100; attempt++) {
     const slots = [...required];
-    let cost = slots.reduce((sum, s) => sum + s.cost, 0);
-    while (cost < stretch.budget) {
-      const p = pick(rng, choices.filter(q => q.cost <= stretch.budget - cost));
-      if (!p) break;
-      slots.push({ length: p.length, cost: p.cost, build: at => p.build(at, rng) }); cost += p.cost;
+    if (span(slots) > room) return null;
+    for (let tries = 0; tries < 30; tries++) {
+      const fresh = choices.filter(p => !used.has(p.key) && !slots.some(s => s.key === p.key));
+      const p = pick(rng, fresh.length ? fresh : choices);
+      if (span([...slots, asSlot(p, rng)]) <= room) slots.push(asSlot(p, rng));
     }
-    const used = slots.reduce((sum, s) => sum + s.length, 0) + MIN_GAP * (slots.length - 1);
-    if (cost > stretch.budget + 1 || used > room) { if (attempt > 150) stretch = { ...stretch, budget: Math.max(0, stretch.budget - 1) }; continue; }
-    // Shuffle, then share the spare room out at random between the pieces.
     for (let i = slots.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [slots[i], slots[j]] = [slots[j], slots[i]]; }
-    const cuts = slots.map(() => rng()), total = cuts.reduce((a, b) => a + b, 0) + rng();
-    let at: number = stretch.from;
-    const spare = room - used, pieces: Piece[] = [];
-    slots.forEach((slot, i) => {
-      at += spare * cuts[i] / total;
-      pieces.push(slot.build(Math.round(at)));
-      at += slot.length + MIN_GAP;
-    });
-    // Equal patterns back to back read as one; ask again.
-    const names = pieces.map(p => p.obstacles[0]?.kind + (p.movers[0]?.kind ?? ""));
-    if (names.some((n, i) => i > 0 && n === names[i - 1])) continue;
-    return { pieces, cost };
+    if (slots.some((s, i) => i > 0 && s.key === slots[i - 1].key)) continue; // equal patterns back to back read as one
+    // Extra spacing 0..10 m per gap, shrunk if it would overrun; the rest sits at the end away from a ramp.
+    const extras = slots.slice(1).map(() => rng() * (MAX_GAP - MIN_GAP)), slack = room - span(slots), sum = extras.reduce((a, b) => a + b, 0);
+    const scale = sum > slack ? slack / sum : 1;
+    let at = segment.from + (segment.slackAtEnd ? 0 : slack - sum * scale);
+    const pieces = slots.map((s, i) => { if (i) at += MIN_GAP + extras[i - 1] * scale; const p = s.build(Math.round(at)); at += s.length; return p; });
+    slots.forEach(s => used.add(s.key));
+    return { pieces, cost: slots.reduce((t, s) => t + s.cost, 0) };
   }
   return null;
 }
@@ -117,24 +117,26 @@ export function generateCourse(seed: number): Course {
     const [rampB, rampE] = RAMP_WINDOWS.map(([lo, hi]) => between(lo, hi));
     const rampPieces = [rampB, rampE].map(r => rampPattern(r - 11, lane(rng)));
     const [b, d, e, f] = STRETCHES;
-    const before = rampB - 11 - MIN_GAP - b.from, after = b.to - (rampB + LANDING), split = Math.round(6 * Math.max(0, before) / Math.max(1, before + after));
     const segments: Segment[] = [
-      { from: b.from, to: rampB - 11 - MIN_GAP, budget: split },
-      { from: rampB + LANDING, to: b.to, budget: 6 - split },
-      { from: d.from, to: d.to, budget: 8 },
-      { from: rampE + LANDING, to: e.to, budget: 2 },
-      { from: f.from, to: f.to, budget: 3, moversOnly: true },
+      { from: b.from, to: rampB - 11 - MIN_GAP },
+      { from: rampB + LANDING, to: b.to, slackAtEnd: true },
+      { from: d.from, to: d.to },
+      { from: e.from, to: rampE - 11 - MIN_GAP },
+      { from: rampE + LANDING, to: e.to, slackAtEnd: true },
+      { from: f.from, to: f.to, moversOnly: true },
     ];
     // Mandatory sets go to random segments that can hold them.
     const required = segments.map(() => [] as Slot[]);
-    const slot = (key: string): Slot => { const p = byKey(key); return { length: p.length, cost: p.cost, build: at => p.build(at, rng) }; };
-    const fits = (len: number) => segments.map((sg, i) => [sg, i] as const).filter(([sg]) => !sg.moversOnly && sg.to - sg.from >= len).map(([, i]) => i);
-    if (fits(9).length === 0) continue;
-    required[pick(rng, fits(9))].push(slot("jumpslam"));
-    required[pick(rng, fits(9))].push(slot("jumpslam"));
-    required[pick(rng, fits(0))].push(slot("duck"));
-    const filled = segments.map((sg, i) => fill(sg, required[i], rng));
+    // Room left in a segment for one more slot, given what is already required there.
+    const fits = (s: Slot, moving = false) => segments.map((sg, i) => i).filter(i => (!segments[i].moversOnly || (moving && s.key !== "bus")) && span([...required[i], s]) <= segments[i].to - segments[i].from);
+    const place = (s: Slot, moving = false) => { const options = fits(s, moving); if (!options.length) return false; required[pick(rng, options)].push(s); return true; };
+    const pool = [...MOVING], movers5 = Array.from({ length: MIN_MOVERS }, () => asSlot(byKey(pool.splice(Math.floor(rng() * pool.length), 1)[0]), rng));
+    if (![asSlot(byKey("jumpslam"), rng), asSlot(byKey("jumpslam"), rng), asSlot(byKey("duck"), rng)].every(s => place(s)) || !movers5.every(s => place(s, true))) continue;
+    const used = new Set(required.flat().map(s => s.key));
+    const filled = segments.map((sg, i) => fill(sg, required[i], rng, used));
     if (filled.some(x => !x)) continue;
+    const cost = 4 + filled.reduce((sum, x) => sum + x!.cost, 0);
+    if (Math.abs(cost - TARGET_COST) > 6) continue; // keep every ride near the same difficulty
     const pieces = [...rampPieces, ...filled.flatMap(x => x!.pieces)];
     const obstacles = [...DEFAULT.obstacles.filter(KEEP), ...pieces.flatMap(p => p.obstacles)];
     const movers = [...DEFAULT.movers.filter(KEEP), ...pieces.flatMap(p => p.movers)];
@@ -154,7 +156,7 @@ export function generateCourse(seed: number): Course {
       ...DEFAULT.sections.filter(sc => sc.from === 70 || sc.from === 505), // warm-up and detour banners stay
       ...pieces.filter(p => p.name).map(p => ({ from: Math.max(0, Math.min(...[...p.obstacles.map(x => x.distance), ...p.movers.map(x => x.distance), ...p.ramps.map(x => x.distance)]) - 18), name: p.name! })),
     ].sort((x, y) => x.from - y.from);
-    return { seed, obstacles, movers, ramps, boosters, sections, cost: 4 + filled.reduce((sum, x) => sum + x!.cost, 0) };
+    return { seed, obstacles, movers, ramps, boosters, sections, cost };
   }
   return { seed, ...DEFAULT, cost: 0 };
 }

@@ -111,10 +111,10 @@ export function moverPose(mover: MoverPlacement, clock: number, started?: number
       return { ...base, distance: mover.distance - travel, x: laneX(mover.lane ?? 0), live: woke };
     }
     case "bus": {
-      // 2 s indicator, 3 s merge into lane 2, cruise at 8 m/s, back to the bus lane at 785–800 m.
+      // 2 s indicator, 3 s merge into lane 2, cruise at 8 m/s, back to the bus lane 59–74 m on (785–800 m for the bus at 726 m).
       const distance = mover.distance + 8 * Math.max(0, t - 2);
-      const inLane = smooth((t - 2) / 3) * (1 - smooth((distance - 785) / 15));
-      return { ...base, distance, x: DELIVERY_GAME_CONFIG.busLaneOffset + (laneX(2) - DELIVERY_GAME_CONFIG.busLaneOffset) * inLane, done: distance > 960 };
+      const inLane = smooth((t - 2) / 3) * (1 - smooth((distance - mover.distance - 59) / 15));
+      return { ...base, distance, x: DELIVERY_GAME_CONFIG.busLaneOffset + (laneX(2) - DELIVERY_GAME_CONFIG.busLaneOffset) * inLane, done: distance > mover.distance + 234 };
     }
   }
 }

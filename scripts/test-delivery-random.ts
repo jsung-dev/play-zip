@@ -5,7 +5,7 @@ import { OBSTACLE_PLACEMENTS } from "../data/delivery-game";
 import { SECTIONS } from "../components/delivery/delivery-course";
 import { GAP_LENGTH, RAMPS, RAMP_MAX_SPEED, rampFlight } from "../components/delivery/delivery-pickups";
 import { moverCollides } from "../components/delivery/delivery-movers";
-import { STRETCHES, TARGET_COST, applyCourse, generateCourse, restoreDefaultCourse } from "../components/delivery/delivery-random-course";
+import { MAX_GAP, MIN_MOVERS, STRETCHES, TARGET_COST, applyCourse, generateCourse, restoreDefaultCourse } from "../components/delivery/delivery-random-course";
 
 // Every generated ride must keep the course rules. Sweep many seeds.
 const SEEDS = 3000, budget = TARGET_COST;
@@ -15,7 +15,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   const c = generateCourse(seed);
   assert.deepEqual(generateCourse(seed), c, `seed ${seed}: deterministic`);
   assert(c.cost > 0, `seed ${seed}: generated, not the fallback`);
-  assert(c.cost >= budget - 4 && c.cost <= budget + 4, `seed ${seed}: difficulty ${c.cost} near ${budget}`);
+  assert(c.cost >= budget - 6 && c.cost <= budget + 6, `seed ${seed}: difficulty ${c.cost} near ${budget}`);
   const obs = c.obstacles.filter(o => !o.branch), movers = c.movers.filter(m => !m.branch), ramps = c.ramps.filter(r => !r.branch);
   const hazards = [...obs.map(o => ({ d: o.distance, what: o.kind, lane: o.lane, span: o.span ?? 1 })), ...movers.map(m => ({ d: m.distance, what: m.kind, lane: m.lane ?? -1, span: m.lane === undefined ? 3 : 1 }))];
   // Kept clear (same zones as the jump/movers/pickups tests): delivery zones, fork approach, merge, finish.
@@ -30,6 +30,17 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   // As busy as the authored ride (the course test asks for >= 20 main-road hazards).
   const busy = obs.filter(o => o.kind !== "signbeam").length + movers.filter(m => moverCollides(m.kind) && m.kind !== "drum").length + ramps.length;
   assert(busy >= 20, `seed ${seed}: busy enough (${busy})`);
+  // Variety: at least MIN_MOVERS kinds of moving hazard in the random stretches.
+  const movingKinds = new Set(movers.filter(m => inStretch(m.distance)).map(m => m.kind));
+  assert(movingKinds.size >= MIN_MOVERS, `seed ${seed}: ${movingKinds.size} moving kinds`);
+  // Dense: inside a stretch, no run longer than MAX_GAP without a hazard (a ramp's flight and landing excepted).
+  for (const st of STRETCHES) {
+    const inside = [...new Set([...hazards.map(h => h.d), ...ramps.map(r => r.distance)])].filter(x => x >= st.from && x <= st.to).sort((a, b) => a - b);
+    for (let i = 1; i < inside.length; i++) {
+      const afterRamp = ramps.some(r => inside[i - 1] >= r.distance - 11 && inside[i - 1] <= r.distance);
+      assert(inside[i] - inside[i - 1] <= MAX_GAP + (afterRamp ? 32 + 10 : 0), `seed ${seed}: empty run ${inside[i - 1]} -> ${inside[i]}`);
+    }
+  }
   // Mandatory sets.
   const slams = obs.filter(o => o.kind === "plank" && o.span === 3 && obs.some(b => b.kind === "signbeam" && b.distance - o.distance === 9));
   assert(slams.length >= 2, `seed ${seed}: >= 2 jump-then-slam sets`);
